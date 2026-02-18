@@ -8,11 +8,6 @@ import { UnassignedList } from './components/UnassignedList';
 import { ClassroomManager } from './components/ClassroomManager';
 import { DisplaySettings } from './components/DisplaySettings';
 import { runAutoAllocation } from './utils/optimizer';
-// Icons
-import {
-  RefreshCw, Download, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks
-} from 'lucide-react';
 import { SubjectManager } from './components/SubjectManager';
 import { SubjectEditModal } from './components/SubjectEditModal';
 import { ClassroomEditModal } from './components/ClassroomEditModal';
@@ -20,9 +15,26 @@ import { AllocationRuleSettings } from './components/AllocationRuleSettings';
 import { DEFAULT_ALLOCATION_RULES, DEFAULT_ORDER_BONUSES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST } from './types';
 import type { AllocationOptions } from './types';
 
+// Cloud Sync
+import { CloudConnectionModal } from './components/CloudConnectionModal';
+import { useCloudSync } from './utils/useCloudSync';
+import type { CloudData } from './types_cloud';
+
+// Icons
+import {
+  RefreshCw, Download, Settings, BookOpen, Eye, Calendar,
+  AlertTriangle, ListChecks, Cloud, CloudOff
+} from 'lucide-react';
+
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 function App() {
+  // Cloud Sync Hook
+  const { currentProject, isConnecting, connectToProject, saveData, refreshData } = useCloudSync();
+
+  const [showCloudModal, setShowCloudModal] = useState(false);
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
+
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     const saved = localStorage.getItem('classrooms');
     return saved ? JSON.parse(saved) : mockClassrooms;
@@ -115,12 +127,63 @@ function App() {
     });
   }, []); // 初回マウント時のみ実行
 
-  // 永続化
+  // 永続化（ローカルストレージ）
+  // クラウド接続中もローカルバックアップとして機能させるが、
+  // クラウドからのロード直後は上書きしないよう注意が必要（現状は単純に保存）
   useEffect(() => { localStorage.setItem('classrooms', JSON.stringify(classrooms)); }, [classrooms]);
   useEffect(() => { localStorage.setItem('subjects', JSON.stringify(subjects)); }, [subjects]);
   useEffect(() => { localStorage.setItem('allocations', JSON.stringify(allocations)); }, [allocations]);
   useEffect(() => { localStorage.setItem('allocationSettings', JSON.stringify(allocationSettings)); }, [allocationSettings]);
   useEffect(() => { localStorage.setItem('equipmentSettings', JSON.stringify(equipmentSettings)); }, [equipmentSettings]);
+
+  // クラウド保存（変更検知）
+  // パフォーマンス考慮: デバウンス（遅延保存）を入れたほうが良いが、
+  // 今回はシンプルにEffectで保存（頻繁な更新は少ない想定）
+  useEffect(() => {
+    if (currentProject && !isCloudLoading) {
+      const data: CloudData = {
+        subjects,
+        classrooms,
+        allocations,
+        settings: allocationSettings,
+        equipmentSettings,
+        orderBonuses
+      };
+
+      // 保存処理（console.log等で確認しつつ）
+      const timeoutId = setTimeout(() => {
+        saveData(data).catch(console.error);
+      }, 2000); // 2秒変更がなければ保存
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [currentProject, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, orderBonuses, saveData]);
+
+
+  const handleCloudConnect = async (projectId: string, passcode: string, mode: 'connect' | 'create') => {
+    try {
+      setIsCloudLoading(true);
+      const data = await connectToProject(projectId, passcode, mode);
+
+      if (mode === 'connect' && data) {
+        // データロード
+        if (data.classrooms) setClassrooms(data.classrooms);
+        if (data.subjects) setSubjects(data.subjects);
+        if (data.allocations) setAllocations(data.allocations);
+        if (data.settings) setAllocationSettings(data.settings);
+        if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
+        if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
+      } else if (mode === 'create') {
+        // 新規作成時は現在のデータを初期値として保存するために一度発火させる
+        // (useEffectが反応して保存されるはず)
+      }
+      setShowCloudModal(false);
+    } catch (e) {
+      throw e; // Modalでエラー表示させるために再スロー
+    } finally {
+      setIsCloudLoading(false);
+    }
+  };
 
   const draggingSubject = useMemo(() => {
     if (!draggingSubjectId) return null;
@@ -378,6 +441,57 @@ function App() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setShowCloudModal(true)}
+            style={{
+              display: 'flex', gap: '6px', alignItems: 'center',
+              background: currentProject ? '#e8eaf6' : '#fff',
+              color: currentProject ? '#3f51b5' : '#666',
+              border: currentProject ? '1px solid #c5cae9' : '1px solid #ccc',
+              padding: '6px 14px', borderRadius: '4px', cursor: 'pointer'
+            }}
+          >
+            {currentProject ? <Cloud size={16} /> : <CloudOff size={16} />}
+            {currentProject ? `接続中: ${currentProject.id}` : 'クラウド接続'}
+          </button>
+
+          {currentProject && (
+            <button
+              onClick={async () => {
+                if (!isCloudLoading) {
+                  setIsCloudLoading(true);
+                  try {
+                    const data = await refreshData();
+                    if (data) {
+                      if (data.classrooms) setClassrooms(data.classrooms);
+                      if (data.subjects) setSubjects(data.subjects);
+                      if (data.allocations) setAllocations(data.allocations);
+                      if (data.settings) setAllocationSettings(data.settings);
+                      if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
+                      if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
+                      alert('最新のデータを取得しました');
+                    }
+                  } catch (e) {
+                    console.error(e);
+                    alert('データの取得に失敗しました');
+                  } finally {
+                    setIsCloudLoading(false);
+                  }
+                }
+              }}
+              style={{
+                display: 'flex', gap: '6px', alignItems: 'center',
+                background: '#fff', color: '#666',
+                border: '1px solid #ccc',
+                padding: '6px 14px', borderRadius: '4px', cursor: 'pointer'
+              }}
+              title="データを更新"
+            >
+              <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
+            </button>
+          )}
+
+          <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
             <ListChecks size={16} /> 自動配当設定
           </button>
@@ -639,6 +753,14 @@ function App() {
               handleAutoAllocate(options);
             }}
             onClose={() => setShowRuleSettings(false)}
+          />
+        )}
+
+        {showCloudModal && (
+          <CloudConnectionModal
+            onClose={() => setShowCloudModal(false)}
+            onConnect={handleCloudConnect}
+            isConnecting={isConnecting}
           />
         )}
       </div>
