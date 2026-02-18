@@ -17,20 +17,27 @@ import type { AllocationOptions } from './types';
 
 // Cloud Sync
 import { CloudConnectionModal } from './components/CloudConnectionModal';
+import { useAuth } from './utils/useAuth';
 import { useCloudSync } from './utils/useCloudSync';
 import type { CloudData } from './types_cloud';
 
 // Icons
 import {
   RefreshCw, Download, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, Cloud, CloudOff
+  AlertTriangle, ListChecks, Cloud, CloudOff, LogIn
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const CAMPUSES = [
+  { id: 'hakkei', name: '八景' },
+  { id: 'kannnai', name: '関内' },
+  { id: 'muronoki', name: '室の木' }
+];
 
 function App() {
-  // Cloud Sync Hook
-  const { currentProject, isConnecting, connectToProject, saveData, refreshData } = useCloudSync();
+  // Auth & Cloud Sync
+  const { user, loginByCampus, logout: authLogout } = useAuth();
+  const { saveData, refreshData } = useCloudSync(user);
 
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
@@ -136,11 +143,9 @@ function App() {
   useEffect(() => { localStorage.setItem('allocationSettings', JSON.stringify(allocationSettings)); }, [allocationSettings]);
   useEffect(() => { localStorage.setItem('equipmentSettings', JSON.stringify(equipmentSettings)); }, [equipmentSettings]);
 
-  // クラウド保存（変更検知）
-  // パフォーマンス考慮: デバウンス（遅延保存）を入れたほうが良いが、
-  // 今回はシンプルにEffectで保存（頻繁な更新は少ない想定）
+  // 自動保存の仕組み: ローカルの状態が変わった際、ログイン中ならクラウドにも保存
   useEffect(() => {
-    if (currentProject && !isCloudLoading) {
+    if (user && !isCloudLoading) {
       const data: CloudData = {
         subjects,
         classrooms,
@@ -150,32 +155,43 @@ function App() {
         orderBonuses
       };
 
-      // 保存処理（console.log等で確認しつつ）
       const timeoutId = setTimeout(() => {
         saveData(data).catch(console.error);
       }, 2000); // 2秒変更がなければ保存
 
       return () => clearTimeout(timeoutId);
     }
-  }, [currentProject, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, orderBonuses, saveData]);
+  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, orderBonuses, saveData]);
 
 
-  const handleCloudConnect = async (projectId: string, passcode: string, mode: 'connect' | 'create') => {
+  const handleCloudConnect = async (email: string) => {
     try {
       setIsCloudLoading(true);
-      const data = await connectToProject(projectId, passcode, mode);
+      // 単一のキャンパスログインに統合
+      await loginByCampus(email); // emailにはcampusIdが入る
 
-      if (mode === 'connect' && data) {
-        // データロード
-        if (data.classrooms) setClassrooms(data.classrooms);
-        if (data.subjects) setSubjects(data.subjects);
-        if (data.allocations) setAllocations(data.allocations);
-        if (data.settings) setAllocationSettings(data.settings);
-        if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
-        if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
-      } else if (mode === 'create') {
-        // 新規作成時は現在のデータを初期値として保存するために一度発火させる
-        // (useEffectが反応して保存されるはず)
+      // ログイン直後にデータをロード
+      const cloudData = await refreshData();
+      if (cloudData) {
+        if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
+          setClassrooms(cloudData.classrooms);
+          setSubjects(cloudData.subjects);
+          setAllocations(cloudData.allocations);
+          setAllocationSettings(cloudData.settings || []);
+          setOrderBonuses(cloudData.orderBonuses || []);
+          setEquipmentSettings(cloudData.equipmentSettings || { items: {}, strictLevel5: false });
+        }
+        // クラウドにデータがない場合は現在のローカルデータをアップロード
+        const currentData: CloudData = {
+          subjects,
+          classrooms,
+          allocations,
+          settings: allocationSettings,
+          equipmentSettings,
+          orderBonuses
+        };
+        await saveData(currentData);
+        alert('アカウント作成・ログインに成功しました。現在のデータをクラウドに保存しました。');
       }
       setShowCloudModal(false);
     } catch (e) {
@@ -440,22 +456,32 @@ function App() {
           <h1 style={{ fontSize: '1.2rem', margin: 0, letterSpacing: '0.5px' }}>教室自動調整</h1>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {user && (
+            <div className={`sync-badge ${isCloudLoading ? 'saving' : 'synced'}`}>
+              <Cloud size={14} className={isCloudLoading ? 'animate-pulse' : ''} />
+              <span>{isCloudLoading ? 'クラウド同期中...' : 'クラウド同期済み'}</span>
+            </div>
+          )}
+
           <button
             onClick={() => setShowCloudModal(true)}
             style={{
-              display: 'flex', gap: '6px', alignItems: 'center',
-              background: currentProject ? '#e8eaf6' : '#fff',
-              color: currentProject ? '#3f51b5' : '#666',
-              border: currentProject ? '1px solid #c5cae9' : '1px solid #ccc',
-              padding: '6px 14px', borderRadius: '4px', cursor: 'pointer'
+              display: 'flex', gap: '8px', alignItems: 'center',
+              background: user ? 'rgba(100, 108, 255, 0.1)' : '#fff',
+              color: user ? '#646cff' : '#666',
+              border: user ? '1px solid rgba(100, 108, 255, 0.2)' : '1px solid #ccc',
+              padding: '6px 16px', borderRadius: '12px', cursor: 'pointer',
+              fontWeight: 'bold', transition: 'all 0.2s',
+              boxShadow: user ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
             }}
+            className="hover:scale-105 active:scale-95"
           >
-            {currentProject ? <Cloud size={16} /> : <CloudOff size={16} />}
-            {currentProject ? `接続中: ${currentProject.id}` : 'クラウド接続'}
+            {user ? <LogIn size={16} /> : <CloudOff size={16} />}
+            {user ? `${(CAMPUSES.find(c => `${c.id}@campus.local` === user.email)?.name) || user.email?.split('@')[0]}` : 'ログイン'}
           </button>
 
-          {currentProject && (
+          {user && (
             <button
               onClick={async () => {
                 if (!isCloudLoading) {
@@ -470,6 +496,8 @@ function App() {
                       if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
                       if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
                       alert('最新のデータを取得しました');
+                    } else {
+                      alert('保存されたデータが見つかりませんでした');
                     }
                   } catch (e) {
                     console.error(e);
@@ -483,11 +511,15 @@ function App() {
                 display: 'flex', gap: '6px', alignItems: 'center',
                 background: '#fff', color: '#666',
                 border: '1px solid #ccc',
-                padding: '6px 14px', borderRadius: '4px', cursor: 'pointer'
+                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                opacity: isCloudLoading ? 0.5 : 1,
+                fontSize: '0.9rem', fontWeight: '500'
               }}
+              disabled={isCloudLoading}
               title="データを更新"
             >
               <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
+              手動更新
             </button>
           )}
 
@@ -759,8 +791,10 @@ function App() {
         {showCloudModal && (
           <CloudConnectionModal
             onClose={() => setShowCloudModal(false)}
-            onConnect={handleCloudConnect}
-            isConnecting={isConnecting}
+            onLogin={(campusId) => handleCloudConnect(campusId)}
+            onLogout={authLogout}
+            isConnecting={isCloudLoading}
+            user={user}
           />
         )}
       </div>

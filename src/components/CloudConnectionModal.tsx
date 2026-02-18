@@ -1,133 +1,126 @@
 import React, { useState } from 'react';
-import { X, Cloud, LogIn, PlusCircle } from 'lucide-react';
-
-
+import { X, Cloud, LogIn, LogOut } from 'lucide-react';
+import type { User } from 'firebase/auth';
 
 interface CloudConnectionModalProps {
     onClose: () => void;
-    onConnect: (projectId: string, passcode: string, mode: 'connect' | 'create') => Promise<void>;
+    onLogin: (email: string, pass: string) => Promise<void>;
+    onLogout: () => void;
     isConnecting: boolean;
+    user: User | null;
 }
 
-export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({ onClose, onConnect, isConnecting }) => {
-    const [mode, setMode] = useState<'connect' | 'create'>('connect');
-    const [projectId, setProjectId] = useState('');
-    const [passcode, setPasscode] = useState('');
+const CAMPUSES = [
+    { id: 'hakkei', name: '八景' },
+    { id: 'kannnai', name: '関内' },
+    { id: 'muronoki', name: '室の木' }
+];
+
+export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
+    onClose,
+    onLogin,
+    onLogout,
+    isConnecting,
+    user
+}) => {
     const [error, setError] = useState<string | null>(null);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleCampusSelect = async (campusId: string) => {
         setError(null);
-
-        if (!projectId.trim() || !passcode.trim()) {
-            setError('プロジェクトIDとパスコードを入力してください');
-            return;
-        }
-
         try {
-            await onConnect(projectId.trim(), passcode.trim(), mode);
+            await onLogin(campusId, ''); // pass is ignored in useAuth
+            onClose();
         } catch (err: any) {
             console.error(err);
-            if (mode === 'create') {
-                setError('プロジェクトの作成に失敗しました。このIDは既に使用されている可能性があります。');
-            } else {
-                setError('接続に失敗しました。IDまたはパスコードが間違っているか、プロジェクトが存在しません。');
-            }
+            setError('接続に失敗しました。');
         }
     };
 
+    if (user) {
+        const campusName = CAMPUSES.find(c => `${c.id}@campus.local` === user.email)?.name || user.email?.split('@')[0];
+
+        return (
+            <div className="modal-overlay">
+                <div className="modal-card">
+                    <div className="modal-header">
+                        <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <LogIn size={20} color="#646cff" />
+                            接続情報
+                        </h2>
+                        <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ccc' }}>
+                            <X size={20} />
+                        </button>
+                    </div>
+                    <div className="modal-body" style={{ textAlign: 'center' }}>
+                        <div className="user-avatar-circle">
+                            <LogIn size={40} color="#646cff" />
+                            <div className="online-dot"></div>
+                        </div>
+                        <div style={{ marginBottom: '32px' }}>
+                            <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#999', textTransform: 'uppercase', marginBottom: '8px' }}>現在のキャンパス</p>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0 0 12px' }}>{campusName}</h3>
+                            <div className="sync-badge synced" style={{ margin: '0 auto', width: 'fit-content' }}>
+                                <div className="animate-pulse" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2e7d32' }}></div>
+                                クラウド同期中
+                            </div>
+                        </div>
+                        <button onClick={() => { onLogout(); onClose(); }} className="logout-button">
+                            <LogOut size={20} />
+                            接続解除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
-                <div className="flex justify-between items-center p-4 border-b bg-indigo-50">
-                    <h2 className="text-lg font-semibold text-indigo-900 flex items-center gap-2">
-                        <Cloud size={20} />
-                        {mode === 'connect' ? 'クラウドプロジェクトに接続' : '新規プロジェクト作成'}
+        <div className="modal-overlay">
+            <div className="modal-card">
+                <div className="modal-header">
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Cloud size={20} color="#646cff" />
+                        キャンパスを選択
                     </h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                    <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ccc' }}>
                         <X size={20} />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
-                        <button
-                            type="button"
-                            onClick={() => { setMode('connect'); setError(null); }}
-                            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2 ${mode === 'connect' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                        >
-                            <LogIn size={16} /> 接続する
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => { setMode('create'); setError(null); }}
-                            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2 ${mode === 'create' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                        >
-                            <PlusCircle size={16} /> 新規作成
-                        </button>
+                <div className="modal-body">
+                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                        <p style={{ fontSize: '0.9rem', color: '#666', margin: 0 }}>
+                            同期するキャンパスを選択してください。
+                        </p>
                     </div>
 
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm mb-4">
-                            {error}
-                        </div>
-                    )}
+                    {error && <div className="error-message">{error}</div>}
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            プロジェクトID (合言葉)
-                        </label>
-                        <input
-                            type="text"
-                            value={projectId}
-                            onChange={(e) => setProjectId(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder="例: univ-2024-spring"
-                            pattern="^[a-zA-Z0-9-_]+$"
-                            title="半角英数字、ハイフン、アンダースコアのみ使用可能です"
-                            required
-                        />
-                        {mode === 'create' && (
-                            <p className="text-xs text-gray-500 mt-1">※半角英数字、ハイフン(-)、アンダースコア(_)のみ</p>
-                        )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                        {CAMPUSES.map(campus => (
+                            <button
+                                key={campus.id}
+                                disabled={isConnecting}
+                                onClick={() => handleCampusSelect(campus.id)}
+                                className="primary-button"
+                                style={{
+                                    background: '#fff',
+                                    color: '#333',
+                                    border: '2px solid #eee',
+                                    boxShadow: 'none',
+                                    height: '64px',
+                                    fontSize: '1.1rem'
+                                }}
+                            >
+                                {campus.name}
+                            </button>
+                        ))}
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            パスコード
-                        </label>
-                        <input
-                            type="password"
-                            value={passcode}
-                            onChange={(e) => setPasscode(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder="接続のための秘密のコード"
-                            required
-                        />
-                        {mode === 'create' && (
-                            <p className="text-xs text-gray-500 mt-1">※このパスコードを知っている人だけが接続できます</p>
-                        )}
-                    </div>
-
-                    <div className="pt-4">
-                        <button
-                            type="submit"
-                            disabled={isConnecting}
-                            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            {isConnecting ? (
-                                <>
-                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                                    処理中...
-                                </>
-                            ) : (
-                                mode === 'connect' ? '接続する' : 'プロジェクトを作成'
-                            )}
-                        </button>
-                    </div>
-                </form>
+                    <button type="button" onClick={onClose} className="secondary-button" style={{ marginTop: '24px' }}>
+                        キャンセル
+                    </button>
+                </div>
             </div>
         </div>
     );
