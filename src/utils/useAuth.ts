@@ -27,11 +27,18 @@ export const useAuth = () => {
         try {
             return await signInWithEmailAndPassword(auth, email, pass);
         } catch (err: any) {
-            // アカウントが存在しない場合は自動作成
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+            console.log("Login error code:", err.code);
+            // アカウントが存在しない、またはクレデンシャルが無効（新規）な場合は自動作成
+            if (
+                err.code === 'auth/user-not-found' ||
+                err.code === 'auth/invalid-credential' ||
+                err.code === 'auth/wrong-password' ||
+                err.code === 'auth/invalid-email'
+            ) {
                 try {
                     return await createUserWithEmailAndPassword(auth, email, pass);
-                } catch (signupErr) {
+                } catch (signupErr: any) {
+                    console.error("Signup error after login fail:", signupErr);
                     throw signupErr;
                 }
             }

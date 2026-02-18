@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { Classroom } from '../types';
 import { ROOM_TYPE_LABELS, BUILDINGS } from '../types';
-import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download } from 'lucide-react';
+import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { parseClassroomCSV, exportToCSV } from '../utils/csvParser';
 import { getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
 
@@ -17,6 +17,47 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [isAdding, setIsAdding] = useState(false);
     const [newEquipment, setNewEquipment] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: keyof Classroom | 'order'; direction: 'asc' | 'desc' } | null>(null);
+
+    const handleSort = (key: keyof Classroom | 'order') => {
+        setSortConfig(current => {
+            if (current?.key === key) {
+                return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: 'asc' };
+        });
+    };
+
+    const sortedClassrooms = useMemo(() => {
+        if (!sortConfig) return classrooms;
+        return [...classrooms].sort((a, b) => {
+            const { key, direction } = sortConfig;
+            if (key === 'order') return 0; // 手動並び替え時はソート無効
+
+            const aVal = a[key] ?? '';
+            const bVal = b[key] ?? '';
+
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [classrooms, sortConfig]);
+
+    const handleMove = (index: number, direction: 'up' | 'down') => {
+        const newClassrooms = [...classrooms];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= newClassrooms.length) return;
+
+        const temp = newClassrooms[index];
+        newClassrooms[index] = newClassrooms[targetIndex];
+        newClassrooms[targetIndex] = temp;
+        onUpdate(newClassrooms);
+        setSortConfig(null); // 並び替え時はソートを解除
+    };
+
+    const toggleExclusion = (id: string) => {
+        onUpdate(classrooms.map(r => r.id === id ? { ...r, isExcluded: !r.isExcluded } : r));
+    };
 
     const handleEdit = (room: Classroom) => {
         setEditingId(room.id);
@@ -59,7 +100,8 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
             examCapacity: 25,
             type: 'normal',
             isMovable: false,
-            equipment: []
+            equipment: [],
+            isExcluded: false
         });
     };
 
@@ -100,7 +142,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <Settings size={22} />
-                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>教室マスタ管理</h2>
+                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>教室管理</h2>
                 </div>
                 <button onClick={onClose} style={{
                     background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.5rem'
@@ -133,21 +175,29 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                         </div>
                     </div>
 
+                    <div style={{ marginBottom: '20px', padding: '12px 15px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                        <strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。
+                    </div>
+
                     <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.9em' }}>
                         <thead>
                             <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px' }}>ID</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '120px' }}>教室名</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px' }}>建物</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px' }}>収容人数 (試験)</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px' }}>タイプ</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer' }} onClick={() => handleSort('order')}>順</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px', cursor: 'pointer' }} onClick={() => handleSort('id')}>ID</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '120px', cursor: 'pointer' }} onClick={() => handleSort('name')}>教室名</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer' }} onClick={() => handleSort('building')}>建物</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer' }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('type')}>タイプ</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd' }}>機材・設備</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px' }}>操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             {(isAdding || editingId) && (
                                 <tr style={{ background: '#f0f4ff' }}>
+                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}></td>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <input disabled={!isAdding} value={editForm.id} onChange={e => setEditForm({ ...editForm, id: e.target.value })} style={{ width: '100%' }} placeholder="A101" />
                                     </td>
@@ -193,6 +243,13 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                             <button onClick={addEq} style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>+</button>
                                         </div>
                                     </td>
+                                    <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!editForm.isExcluded}
+                                            onChange={e => setEditForm({ ...editForm, isExcluded: e.target.checked })}
+                                        />
+                                    </td>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <div style={{ display: 'flex', gap: '6px' }}>
                                             <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
@@ -201,9 +258,27 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                     </td>
                                 </tr>
                             )}
-                            {classrooms.map(room => (
+                            {sortedClassrooms.map((room, index) => (
                                 room.id !== editingId && (
-                                    <tr key={room.id} style={{ borderBottom: '1px solid #eee' }}>
+                                    <tr key={room.id} style={{ borderBottom: '1px solid #eee', background: room.isExcluded ? '#fff8f8' : 'transparent' }}>
+                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                                <button
+                                                    onClick={() => handleMove(index, 'up')}
+                                                    disabled={index === 0}
+                                                    style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', color: index === 0 ? '#eee' : '#666', padding: 0 }}
+                                                >
+                                                    <ArrowUp size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleMove(index, 'down')}
+                                                    disabled={index === classrooms.length - 1}
+                                                    style={{ background: 'none', border: 'none', cursor: index === classrooms.length - 1 ? 'default' : 'pointer', color: index === classrooms.length - 1 ? '#eee' : '#666', padding: 0 }}
+                                                >
+                                                    <ArrowDown size={14} />
+                                                </button>
+                                            </div>
+                                        </td>
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.id}</td>
                                         <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{room.name}</td>
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.building}</td>
@@ -233,6 +308,15 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                     );
                                                 })}
                                             </div>
+                                        </td>
+                                        <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!room.isExcluded}
+                                                onChange={() => toggleExclusion(room.id)}
+                                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                title="自動配当の対象から外す"
+                                            />
                                         </td>
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', gap: '10px' }}>

@@ -32,7 +32,7 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
             onClose();
         } catch (err: any) {
             console.error(err);
-            setError('接続に失敗しました。');
+            setError(`接続に失敗しました (${err.code || err.message || 'unknown error'})`);
         }
     };
 
@@ -66,7 +66,7 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
                         </div>
                         <button onClick={() => { onLogout(); onClose(); }} className="logout-button">
                             <LogOut size={20} />
-                            接続解除
+                            ログアウト
                         </button>
                     </div>
                 </div>

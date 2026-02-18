@@ -7,21 +7,40 @@ import type { CloudData } from '../types_cloud';
 export const useCloudSync = (user: User | null) => {
     const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
+    // Firestoreはundefinedを許容しないため、再帰的に除去する関数
+    const sanitizeData = (obj: any): any => {
+        if (Array.isArray(obj)) {
+            return obj.map(v => sanitizeData(v));
+        }
+        if (obj !== null && typeof obj === 'object') {
+            const newObj: any = {};
+            Object.keys(obj).forEach(key => {
+                const val = obj[key];
+                if (val !== undefined) {
+                    newObj[key] = sanitizeData(val);
+                }
+            });
+            return newObj;
+        }
+        return obj;
+    };
+
     const saveData = useCallback(async (data: CloudData) => {
         if (!user) return;
 
         try {
+            const sanitized = sanitizeData(data);
             const docRef = doc(db, 'user_data', user.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
                 await updateDoc(docRef, {
-                    data: data,
+                    data: sanitized,
                     lastUpdated: Date.now()
                 });
             } else {
                 await setDoc(docRef, {
-                    data: data,
+                    data: sanitized,
                     lastUpdated: Date.now(),
                     createdAt: Date.now(),
                     email: user.email
@@ -46,7 +65,7 @@ export const useCloudSync = (user: User | null) => {
                 return data.data as CloudData;
             }
             return null;
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to refresh data:', error);
             throw error;
         }

@@ -11,6 +11,7 @@ export interface Classroom {
     type: 'normal' | 'pc' | 'seminar' | 'other'; // 教室タイプ
     isMovable: boolean; // 可動式（机・椅子）
     equipment: string[]; // その他設備 (例: ["AppleTV", "マイク"])
+    isExcluded?: boolean; // 自動配当の対象外とするか
 }
 
 export interface Subject {

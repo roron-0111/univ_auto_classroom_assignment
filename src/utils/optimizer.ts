@@ -68,6 +68,9 @@ export const runAutoAllocation = (
             let bestScore = -1;
 
             for (const room of classrooms) {
+                // 教室が配当対象外に設定されている場合はスキップ
+                if (room.isExcluded) continue;
+
                 // --- Hard Constraints (無視できない制約) ---
 
                 // 1. 同一科目が同一教室に重なるのを防止

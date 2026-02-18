@@ -215,38 +215,6 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
         });
     }, [filteredSubjects, sortConfig]);
 
-    // ソート順の保存
-    const handleSaveOrder = () => {
-        const hasFilters = Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v !== '');
-
-        if (hasFilters) {
-            if (!confirm('フィルタが適用されています。表示されている項目のみで並び替えを行い、非表示の項目は末尾などに配置されますがよろしいですか？\n（推奨：フィルタを解除してから保存してください）')) {
-                return;
-            }
-        }
-
-        if (sortConfig) {
-            const newAllSubjects = [...subjects].sort((a, b) => {
-                const { key, direction } = sortConfig;
-                const getValue = (obj: any, k: string) => {
-                    if (k === 'period') return Number(obj[k]);
-                    if (k === 'term') return obj[k] === 'spring' ? 1 : obj[k] === 'autumn' ? 2 : 3;
-                    if (k === 'day') return Object.keys(DAY_LABELS).indexOf(obj[k]);
-                    if (k === 'requiredEquipment' || k === 'previousRooms') return (obj[k] || []).join(',');
-                    return obj[k] ?? '';
-                };
-                const aVal = getValue(a, key);
-                const bVal = getValue(b, key);
-                if (aVal < bVal) return direction === 'asc' ? -1 : 1;
-                if (aVal > bVal) return direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-            onUpdate(newAllSubjects);
-            alert('現在の並び順を保存しました。');
-        } else {
-            alert('ソートが適用されていません。');
-        }
-    };
 
     const handleSort = (key: string) => {
         setSortConfig(current => {
@@ -280,6 +248,12 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
     const handleDelete = (id: string) => {
         if (confirm('本当にこの授業を削除しますか？割り当ても解除されます。')) {
             onUpdate(subjects.filter(s => s.id !== id));
+        }
+    };
+
+    const handleDeleteAll = () => {
+        if (confirm('全ての授業データを削除しますか？この操作は取り消せません。')) {
+            onUpdate([]);
         }
     };
 
@@ -337,7 +311,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <BookOpen size={22} />
-                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>授業マスタ管理</h2>
+                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>授業管理</h2>
                 </div>
                 <button onClick={onClose} style={{
                     background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.5rem'
@@ -373,11 +347,6 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                             <div style={{ fontSize: '0.9rem', color: '#666' }}>
                                 表示: {sortedSubjects.length} / {subjects.length} 件
                             </div>
-                            <button onClick={handleSaveOrder} style={{
-                                display: 'flex', gap: '8px', alignItems: 'center', background: '#ff9800', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em', fontWeight: 'bold'
-                            }}>
-                                <Check size={18} /> 現在の並び順を保存
-                            </button>
                         </div>
                     </div>
 
@@ -410,7 +379,20 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             </div>
                                         </th>
                                     ))}
-                                    <th style={{ ...thStyle, width: '70px', cursor: 'default' }}>操作</th>
+                                    <th style={{ ...thStyle, width: '70px', cursor: 'default' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                            <span>操作</span>
+                                            <button
+                                                onClick={handleDeleteAll}
+                                                style={{
+                                                    fontSize: '0.7rem', padding: '2px 4px', background: '#d32f2f', color: '#fff',
+                                                    border: 'none', borderRadius: '4px', cursor: 'pointer'
+                                                }}
+                                            >
+                                                全削除
+                                            </button>
+                                        </div>
+                                    </th>
                                 </tr>
                                 <tr style={{ background: '#fafafa' }}>
                                     {[

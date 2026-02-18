@@ -151,6 +151,11 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
             {/* Content */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '30px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
 
+                <div style={{ marginBottom: '20px', padding: '12px 15px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                    <strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。
+                </div>
+
                 <p style={{ color: '#666', marginBottom: '25px', fontSize: '0.95rem' }}>
                     優先順位を変更するには ↑ ↓ ボタンを使用してください。チェックを外すとそのルールを無効化できます。
                 </p>
