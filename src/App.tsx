@@ -377,6 +377,21 @@ function App() {
     const targetSubjects = subjects.filter(s => {
       // 優先度フィルタ
       if (!priorities.includes(s.priority)) return false;
+
+      // 配当期フィルタ
+      if (!options.terms.includes(s.term)) return false;
+
+      // 曜日フィルタ
+      if (!options.days.includes(s.day)) return false;
+
+      // 講時フィルタ
+      // 連続講時の場合は、全ての関わる時限が選択されている必要がある
+      const start = s.period;
+      const end = s.endPeriod || s.period;
+      for (let p = start; p <= end; p++) {
+        if (!options.periods.includes(p as Period)) return false;
+      }
+
       // 配当状況フィルタ
       const isAllocated = allocatedSubjectIds.has(s.id);
       if (isAllocated && !includeAllocated) return false;
@@ -506,117 +521,117 @@ function App() {
             </button>
           )}
 
-        {user && (
-          <button
-            onClick={async () => {
-              if (!isCloudLoading) {
-                setIsCloudLoading(true);
-                try {
-                  const data = await refreshData();
-                  if (data) {
-                    if (data.classrooms) setClassrooms(data.classrooms);
-                    if (data.subjects) setSubjects(data.subjects);
-                    if (data.allocations) setAllocations(data.allocations);
-                    if (data.settings) setAllocationSettings(data.settings);
-                    if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
-                    if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
-                    alert('最新のデータを取得しました');
-                  } else {
-                    alert('保存されたデータが見つかりませんでした');
+          {user && (
+            <button
+              onClick={async () => {
+                if (!isCloudLoading) {
+                  setIsCloudLoading(true);
+                  try {
+                    const data = await refreshData();
+                    if (data) {
+                      if (data.classrooms) setClassrooms(data.classrooms);
+                      if (data.subjects) setSubjects(data.subjects);
+                      if (data.allocations) setAllocations(data.allocations);
+                      if (data.settings) setAllocationSettings(data.settings);
+                      if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
+                      if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
+                      alert('最新のデータを取得しました');
+                    } else {
+                      alert('保存されたデータが見つかりませんでした');
+                    }
+                  } catch (e: any) {
+                    console.error('Refresh Error:', e);
+                    alert('データの取得に失敗しました');
+                  } finally {
+                    setIsCloudLoading(false);
                   }
-                } catch (e: any) {
-                  console.error('Refresh Error:', e);
-                  alert('データの取得に失敗しました');
-                } finally {
-                  setIsCloudLoading(false);
                 }
-              }
-            }}
-            style={{
-              display: 'flex', gap: '6px', alignItems: 'center',
-              background: '#fff', color: '#666',
-              border: '1px solid #ccc',
-              padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-              opacity: isCloudLoading ? 0.5 : 1,
-              fontSize: '0.9rem', fontWeight: '500'
-            }}
-            disabled={isCloudLoading}
-            title="データを更新"
-          >
-            <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
-            手動更新
-          </button>
-        )}
+              }}
+              style={{
+                display: 'flex', gap: '6px', alignItems: 'center',
+                background: '#fff', color: '#666',
+                border: '1px solid #ccc',
+                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                opacity: isCloudLoading ? 0.5 : 1,
+                fontSize: '0.9rem', fontWeight: '500'
+              }}
+              disabled={isCloudLoading}
+              title="データを更新"
+            >
+              <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
+              手動更新
+            </button>
+          )}
 
-        <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-        <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-          <ListChecks size={16} /> 配当ルール設定
-        </button>
-        <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#d32f2f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          <RefreshCw size={16} /> クリア
-        </button>
-        <button onClick={handleExport} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#1976d2', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          <Download size={16} /> 結果出力
-        </button>
-        <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-        <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          <Settings size={16} /> 教室管理
-        </button>
-        <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          <BookOpen size={16} /> 授業管理
-        </button>
-        <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-          <Eye size={16} /> 表示設定
-        </button>
-    </div>
+          <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
+          <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            <ListChecks size={16} /> 配当ルール設定
+          </button>
+          <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#d32f2f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <RefreshCw size={16} /> クリア
+          </button>
+          <button onClick={handleExport} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#1976d2', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <Download size={16} /> 結果出力
+          </button>
+          <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
+          <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <Settings size={16} /> 教室管理
+          </button>
+          <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <BookOpen size={16} /> 授業管理
+          </button>
+          <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <Eye size={16} /> 表示設定
+          </button>
+        </div>
       </header>
 
-    {/* Main Content */}
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
-  {/* Sidebar */ }
-  <div style={{ width: '250px', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#f8f9fa' }}>
-    <UnassignedList
-      subjects={unassignedSubjectsAll}
-      allocations={allocations}
-      onReorder={handleReorderSubjects}
-      onDragStart={setDraggingSubjectId}
-      onDragEnd={() => setDraggingSubjectId(null)}
-      onEdit={setEditingSubjectId}
-      onRemoveAllocation={handleRemove}
-    />
+      {/* Main Content */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
+        {/* Sidebar */}
+        <div style={{ width: '250px', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#f8f9fa' }}>
+          <UnassignedList
+            subjects={unassignedSubjectsAll}
+            allocations={allocations}
+            onReorder={handleReorderSubjects}
+            onDragStart={setDraggingSubjectId}
+            onDragEnd={() => setDraggingSubjectId(null)}
+            onEdit={setEditingSubjectId}
+            onRemoveAllocation={handleRemove}
+          />
         </div>
 
-  {/* Grid Area Container */ }
-  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-    {/* Grid Control Bar (Day & Building) */ }
-    <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
-      {/* Day Tabs */ }
-      <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
-      {
-        DAYS.map(d => (
-          <button
-            key={d}
-            onClick={() => setCurrentDay(d)}
-            style={{
-              padding: '12px 25px', border: 'none',
-              background: currentDay === d ? '#fff' : 'transparent',
-              borderBottom: currentDay === d ? '3px solid #646cff' : 'none',
-              color: currentDay === d ? '#646cff' : '#666',
-              fontWeight: currentDay === d ? 'bold' : 'normal',
-              cursor: 'pointer', fontSize: '0.95em'
-            }}
-          >
-            {(() => {
-              const count = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
-              return `${DAY_LABELS[d]}曜日${count > 0 ? ` (${count})` : ''}`;
-            })()}
-          </button>
-        ))
-      }
+        {/* Grid Area Container */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Grid Control Bar (Day & Building) */}
+          <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
+            {/* Day Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
+              {
+                DAYS.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setCurrentDay(d)}
+                    style={{
+                      padding: '12px 25px', border: 'none',
+                      background: currentDay === d ? '#fff' : 'transparent',
+                      borderBottom: currentDay === d ? '3px solid #646cff' : 'none',
+                      color: currentDay === d ? '#646cff' : '#666',
+                      fontWeight: currentDay === d ? 'bold' : 'normal',
+                      cursor: 'pointer', fontSize: '0.95em'
+                    }}
+                  >
+                    {(() => {
+                      const count = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
+                      return `${DAY_LABELS[d]}曜日${count > 0 ? ` (${count})` : ''}`;
+                    })()}
+                  </button>
+                ))
+              }
             </div>
 
-  {/* Building Selection & Extra Options */ }
-  < div style = {{ display: 'flex', gap: '20px', padding: '10px 20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {/* Building Selection & Extra Options */}
+            < div style={{ display: 'flex', gap: '20px', padding: '10px 20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.85em', color: '#666', fontWeight: 'bold' }}>建物：</span>
                 {buildings.map(b => (
@@ -653,193 +668,193 @@ function App() {
             </div>
           </div>
 
-  {/* Grid Area - Use full remaining height */ }
-  < div style = {{ flex: 1, overflow: 'hidden' }}>
-    <TimeTableGrid
-      day={currentDay}
-      classrooms={filteredClassrooms}
-      allocations={allocations}
-      subjects={subjects}
-      onDrop={handleDrop}
-      onRemove={handleRemove}
-      onCellClick={handleCellClick}
-      onClassClick={(id) => setEditingClassroomId(id)}
-      displayMode={displayMode}
-      showExtraPeriods={showExtraPeriods}
-      displayConfig={displayConfig}
-      draggingSubject={draggingSubject}
-      onDragStart={setDraggingSubjectId}
-      onDragEnd={() => setDraggingSubjectId(null)}
-      onEdit={setEditingSubjectId}
-    />
+          {/* Grid Area - Use full remaining height */}
+          < div style={{ flex: 1, overflow: 'hidden' }}>
+            <TimeTableGrid
+              day={currentDay}
+              classrooms={filteredClassrooms}
+              allocations={allocations}
+              subjects={subjects}
+              onDrop={handleDrop}
+              onRemove={handleRemove}
+              onCellClick={handleCellClick}
+              onClassClick={(id) => setEditingClassroomId(id)}
+              displayMode={displayMode}
+              showExtraPeriods={showExtraPeriods}
+              displayConfig={displayConfig}
+              draggingSubject={draggingSubject}
+              onDragStart={setDraggingSubjectId}
+              onDragEnd={() => setDraggingSubjectId(null)}
+              onEdit={setEditingSubjectId}
+            />
 
-{/* Legend */ }
-<div style={{
-  padding: '10px 20px', background: '#fff', borderTop: '1px solid #ddd',
-  display: 'flex', gap: '30px', fontSize: '0.8rem', color: '#666', alignItems: 'center'
-}}>
-  <div style={{ fontWeight: 'bold' }}>凡例:</div>
-  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', fontSize: '0.75rem', color: '#666' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <div style={{ width: '12px', height: '12px', border: '1px solid #ddd', background: '#fff' }}></div>
-      <span>通常配当</span>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <div style={{ width: '12px', height: '12px', background: '#fff9c4', border: '1px solid #ddd' }}></div>
-      <span>重複（1室に複数）</span>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <div style={{ width: '12px', height: '12px', border: '2px solid #2196f3', background: '#fff' }}></div>
-      <span>連続講時</span>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <AlertTriangle size={14} color="#d32f2f" />
-      <span>制約違反（定員・機材不足等）</span>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <div style={{ padding: '0 4px', background: '#fff3e0', border: '1px solid #ff9800', color: '#ff9800', borderRadius: '4px', fontSize: '0.9em', fontWeight: 'bold' }}>条件×</div>
-      <span>不一致（建物・タイプ希望等）</span>
-    </div>
-  </div>
-</div>
+            {/* Legend */}
+            <div style={{
+              padding: '10px 20px', background: '#fff', borderTop: '1px solid #ddd',
+              display: 'flex', gap: '30px', fontSize: '0.8rem', color: '#666', alignItems: 'center'
+            }}>
+              <div style={{ fontWeight: 'bold' }}>凡例:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', fontSize: '0.75rem', color: '#666' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ width: '12px', height: '12px', border: '1px solid #ddd', background: '#fff' }}></div>
+                  <span>通常配当</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ width: '12px', height: '12px', background: '#fff9c4', border: '1px solid #ddd' }}></div>
+                  <span>重複（1室に複数）</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ width: '12px', height: '12px', border: '2px solid #2196f3', background: '#fff' }}></div>
+                  <span>連続講時</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <AlertTriangle size={14} color="#d32f2f" />
+                  <span>制約違反（定員・機材不足等）</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ padding: '0 4px', background: '#fff3e0', border: '1px solid #ff9800', color: '#ff9800', borderRadius: '4px', fontSize: '0.9em', fontWeight: 'bold' }}>条件×</div>
+                  <span>不一致（建物・タイプ希望等）</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-  {/* Quick Selection Modal */ }
-{
-  pickingCell && (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', maxWidth: '500px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>授業を選択</h3>
-          <button onClick={() => setPickingCell(null)} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>✕</button>
-        </div>
-        <div style={{ marginBottom: '10px', color: '#666', fontSize: '0.9em' }}>
-          {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}限 ({pickingCell.term === 'spring' ? '春' : '秋'})
-        </div>
-        {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未割り当て授業はありません。</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').map(s => (
-              <button
-                key={s.id}
-                onClick={() => handleQuickAssign(s.id)}
-                style={{
-                  padding: '12px', textAlign: 'left', cursor: 'pointer', border: '1px solid #eee', borderRadius: '6px', background: '#fafafa',
-                  transition: 'background 0.2s'
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-                onMouseOut={(e) => (e.currentTarget.style.background = '#fafafa')}
-              >
-                <div style={{ fontWeight: 'bold', color: '#333' }}>{s.name}</div>
-                <div style={{ fontSize: '0.85em', color: '#666' }}>{s.teacher} / 定員: {s.requiredCapacity}</div>
-              </button>
-            ))}
-          </div>
-        )}
-        <button onClick={() => setPickingCell(null)} style={{ marginTop: '20px', width: '100%', padding: '10px', cursor: 'pointer', background: '#eee', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>閉じる</button>
-      </div>
-    </div>
-  )
-}
+        {/* Quick Selection Modal */}
+        {
+          pickingCell && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', maxWidth: '500px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0 }}>授業を選択</h3>
+                  <button onClick={() => setPickingCell(null)} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>✕</button>
+                </div>
+                <div style={{ marginBottom: '10px', color: '#666', fontSize: '0.9em' }}>
+                  {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}限 ({pickingCell.term === 'spring' ? '春' : '秋'})
+                </div>
+                {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未割り当て授業はありません。</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleQuickAssign(s.id)}
+                        style={{
+                          padding: '12px', textAlign: 'left', cursor: 'pointer', border: '1px solid #eee', borderRadius: '6px', background: '#fafafa',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseOver={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+                        onMouseOut={(e) => (e.currentTarget.style.background = '#fafafa')}
+                      >
+                        <div style={{ fontWeight: 'bold', color: '#333' }}>{s.name}</div>
+                        <div style={{ fontSize: '0.85em', color: '#666' }}>{s.teacher} / 定員: {s.requiredCapacity}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setPickingCell(null)} style={{ marginTop: '20px', width: '100%', padding: '10px', cursor: 'pointer', background: '#eee', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>閉じる</button>
+              </div>
+            </div>
+          )
+        }
 
-{/* Classroom Manager Overlay */ }
-{
-  showManager && (
-    <ClassroomManager
-      classrooms={classrooms}
-      onUpdate={handleClassroomUpdate}
-      onClose={() => setShowManager(false)}
-    />
-  )
-}
+        {/* Classroom Manager Overlay */}
+        {
+          showManager && (
+            <ClassroomManager
+              classrooms={classrooms}
+              onUpdate={handleClassroomUpdate}
+              onClose={() => setShowManager(false)}
+            />
+          )
+        }
 
-{/* Subject Manager Overlay */ }
-{
-  showSubjectManager && (
-    <SubjectManager
-      subjects={subjects}
-      onUpdate={handleSubjectUpdate}
-      onClose={() => setShowSubjectManager(false)}
-    />
-  )
-}
+        {/* Subject Manager Overlay */}
+        {
+          showSubjectManager && (
+            <SubjectManager
+              subjects={subjects}
+              onUpdate={handleSubjectUpdate}
+              onClose={() => setShowSubjectManager(false)}
+            />
+          )
+        }
 
-{/* Subject Individual Edit Modal */ }
-{
-  editingSubject && (
-    <SubjectEditModal
-      subject={editingSubject}
-      availableEquipment={allEquipment}
-      onSave={(updated) => {
-        setSubjects(prev => {
-          const next = prev.map(s => s.id === updated.id ? updated : s);
-          return next;
-        });
-        setEditingSubjectId(null);
-      }}
-      onClose={() => setEditingSubjectId(null)}
-    />
-  )
-}
+        {/* Subject Individual Edit Modal */}
+        {
+          editingSubject && (
+            <SubjectEditModal
+              subject={editingSubject}
+              availableEquipment={allEquipment}
+              onSave={(updated) => {
+                setSubjects(prev => {
+                  const next = prev.map(s => s.id === updated.id ? updated : s);
+                  return next;
+                });
+                setEditingSubjectId(null);
+              }}
+              onClose={() => setEditingSubjectId(null)}
+            />
+          )
+        }
 
-{/* Classroom Individual Edit Modal */ }
-{
-  editingClassroom && (
-    <ClassroomEditModal
-      classroom={editingClassroom}
-      onSave={(updated) => {
-        setClassrooms(prev => prev.map(r => r.id === updated.id ? updated : r));
-        setEditingClassroomId(null);
-      }}
-      onClose={() => setEditingClassroomId(null)}
-    />
-  )
-}
+        {/* Classroom Individual Edit Modal */}
+        {
+          editingClassroom && (
+            <ClassroomEditModal
+              classroom={editingClassroom}
+              onSave={(updated) => {
+                setClassrooms(prev => prev.map(r => r.id === updated.id ? updated : r));
+                setEditingClassroomId(null);
+              }}
+              onClose={() => setEditingClassroomId(null)}
+            />
+          )
+        }
 
-{/* Display Settings Overlay */ }
-{
-  showDisplaySettings && (
-    <DisplaySettings
-      config={displayConfig}
-      availableEquipment={allEquipment}
-      onUpdate={setDisplayConfig}
-      onClose={() => setShowDisplaySettings(false)}
-    />
-  )
-}
-{/* Allocation Rule Settings Overlay */ }
-{
-  showRuleSettings && (
-    <AllocationRuleSettings
-      settings={allocationSettings}
-      orderBonuses={orderBonuses}
-      equipmentSettings={equipmentSettings}
-      onSave={(options) => {
-        setAllocationSettings(options.rules);
-        setOrderBonuses(options.orderBonuses);
-        setEquipmentSettings(options.equipmentSettings);
-        localStorage.setItem('orderBonuses', JSON.stringify(options.orderBonuses));
-        localStorage.setItem('equipmentSettings', JSON.stringify(options.equipmentSettings)); // 念のため即時保存
-        handleAutoAllocate(options);
-      }}
-      onClose={() => setShowRuleSettings(false)}
-    />
-  )
-}
+        {/* Display Settings Overlay */}
+        {
+          showDisplaySettings && (
+            <DisplaySettings
+              config={displayConfig}
+              availableEquipment={allEquipment}
+              onUpdate={setDisplayConfig}
+              onClose={() => setShowDisplaySettings(false)}
+            />
+          )
+        }
+        {/* Allocation Rule Settings Overlay */}
+        {
+          showRuleSettings && (
+            <AllocationRuleSettings
+              settings={allocationSettings}
+              orderBonuses={orderBonuses}
+              equipmentSettings={equipmentSettings}
+              onSave={(options) => {
+                setAllocationSettings(options.rules);
+                setOrderBonuses(options.orderBonuses);
+                setEquipmentSettings(options.equipmentSettings);
+                localStorage.setItem('orderBonuses', JSON.stringify(options.orderBonuses));
+                localStorage.setItem('equipmentSettings', JSON.stringify(options.equipmentSettings)); // 念のため即時保存
+                handleAutoAllocate(options);
+              }}
+              onClose={() => setShowRuleSettings(false)}
+            />
+          )
+        }
 
-{
-  showCloudModal && (
-    <CloudConnectionModal
-      onClose={() => setShowCloudModal(false)}
-      onLogin={(campusId) => handleCloudConnect(campusId)}
-      onLogout={authLogout}
-      isConnecting={isCloudLoading}
-      user={user}
-    />
-  )
-}
+        {
+          showCloudModal && (
+            <CloudConnectionModal
+              onClose={() => setShowCloudModal(false)}
+              onLogin={(campusId) => handleCloudConnect(campusId)}
+              onLogout={authLogout}
+              isConnecting={isCloudLoading}
+              user={user}
+            />
+          )
+        }
       </div>
     </div>
   );

@@ -246,9 +246,12 @@ export interface OptimizerResult {
 export interface AllocationOptions {
     rules: AllocationRule[];
     orderBonuses: number[];
-    priorities: number[];       // 選択された優先度
-    includeAllocated: boolean;  // 配当済みを含む
-    includeUnassigned: boolean; // 未配当を含む
+    priorities: number[];           // 選択された優先度
+    terms: Term[];                  // 配当期
+    days: DayOfWeek[];              // 曜日
+    periods: Period[];              // 講時
+    includeAllocated: boolean;      // 配当済みを含む
+    includeUnassigned: boolean;     // 未配当を含む
     equipmentSettings: {
         items: { [key: string]: { enabled: boolean; importance: number } };
         strictLevel5: boolean;

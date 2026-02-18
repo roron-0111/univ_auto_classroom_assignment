@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AllocationRule, AllocationOptions } from '../types';
+import type { AllocationRule, AllocationOptions, Term, DayOfWeek, Period } from '../types';
 import { DEFAULT_ORDER_BONUSES, EQUIPMENT_LIST, DEFAULT_EQUIPMENT_SETTINGS } from '../types';
 import { ChevronUp, ChevronDown, ArrowLeft, Save } from 'lucide-react';
 
@@ -18,6 +18,9 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
     const [rules, setRules] = useState<AllocationRule[]>([...settings].sort((a, b) => a.order - b.order));
     const [bonuses, setBonuses] = useState<number[]>(initialBonuses || [...DEFAULT_ORDER_BONUSES]);
     const [priorities, setPriorities] = useState<number[]>([1, 2, 3, 4, 5]);
+    const [terms, setTerms] = useState<Term[]>(['spring', 'autumn', 'full_year']);
+    const [days, setDays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+    const [periods, setPeriods] = useState<Period[]>([1, 2, 3, 4, 5, 6, 7]);
     const [includeAllocated, setIncludeAllocated] = useState(false);
     const [includeUnassigned, setIncludeUnassigned] = useState(true);
     const [equipmentSettings, setEquipmentSettings] = useState(initialEquipment || DEFAULT_EQUIPMENT_SETTINGS);
@@ -131,7 +134,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                         ※ 科目の優先度が高い順に配当されます
                     </span>
                     <button
-                        onClick={() => onSave({ rules, orderBonuses: bonuses, priorities, includeAllocated, includeUnassigned, equipmentSettings })}
+                        onClick={() => onSave({ rules, orderBonuses: bonuses, priorities, terms, days, periods, includeAllocated, includeUnassigned, equipmentSettings })}
                         style={{
                             padding: '6px 14px', borderRadius: '4px', border: 'none',
                             background: '#2e7d32', color: '#fff', cursor: 'pointer',
@@ -154,6 +157,94 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                 <div style={{ marginBottom: '20px', padding: '12px 15px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '1.1rem' }}>⚠️</span>
                     <strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。
+                </div>
+
+                {/* フィルターセクション */}
+                <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e9ecef' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '15px', fontSize: '0.95rem', color: '#333', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🎯 配当対象の絞り込み
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {/* 配当期フィルター */}
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当期:</span>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                {[
+                                    { id: 'spring', label: '春' },
+                                    { id: 'autumn', label: '秋' },
+                                    { id: 'full_year', label: '通年' }
+                                ].map(t => (
+                                    <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={terms.includes(t.id as Term)}
+                                            onChange={() => setTerms(prev =>
+                                                prev.includes(t.id as Term) ? prev.filter(x => x !== t.id) : [...prev, t.id as Term]
+                                            )}
+                                        />
+                                        <span style={{ fontSize: '0.85rem' }}>{t.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setTerms(terms.length === 3 ? [] : ['spring', 'autumn', 'full_year'])}
+                                style={{ fontSize: '0.75rem', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
+                                {terms.length === 3 ? '全解除' : '全選択'}
+                            </button>
+                        </div>
+
+                        {/* 曜日フィルター */}
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>曜日:</span>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const).map(d => (
+                                    <label key={d} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={days.includes(d)}
+                                            onChange={() => setDays(prev =>
+                                                prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+                                            )}
+                                        />
+                                        <span style={{ fontSize: '0.85rem' }}>{({ mon: '月', tue: '火', wed: '水', thu: '木', fri: '金', sat: '土' }[d])}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setDays(days.length === 6 ? [] : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'])}
+                                style={{ fontSize: '0.75rem', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
+                                {days.length === 6 ? '全解除' : '全選択'}
+                            </button>
+                        </div>
+
+                        {/* 講時フィルター */}
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>講時:</span>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {([1, 2, 3, 4, 5, 6, 7] as const).map(p => (
+                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={periods.includes(p)}
+                                            onChange={() => setPeriods(prev =>
+                                                prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+                                            )}
+                                        />
+                                        <span style={{ fontSize: '0.85rem' }}>{p}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setPeriods(periods.length === 7 ? [] : [1, 2, 3, 4, 5, 6, 7])}
+                                style={{ fontSize: '0.75rem', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                            >
+                                {periods.length === 7 ? '全解除' : '全選択'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <p style={{ color: '#666', marginBottom: '25px', fontSize: '0.95rem' }}>
