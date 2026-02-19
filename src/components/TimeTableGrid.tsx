@@ -13,7 +13,6 @@ interface Props {
     onRemove: (subjectId: string, classroomId: string) => void;
     onCellClick: (classroomId: string, period: Period, term: Term) => void;
     onClassClick?: (classroomId: string) => void;
-    displayMode: 'name' | 'teacher' | 'department';
     showExtraPeriods: boolean;
     displayConfig: DisplayConfig;
     draggingSubject?: Subject | null;
@@ -25,7 +24,7 @@ interface Props {
 const PERIODS: Period[] = [1, 2, 3, 4, 5, 6, 7];
 
 export const TimeTableGrid = ({
-    day, classrooms, allocations, subjects, onDrop, onRemove, onCellClick, onClassClick, displayMode, showExtraPeriods, displayConfig,
+    day, classrooms, allocations, subjects, onDrop, onRemove, onCellClick, onClassClick, showExtraPeriods, displayConfig,
     draggingSubject, onDragStart, onDragEnd, onEdit
 }: Props) => {
 
@@ -87,8 +86,11 @@ export const TimeTableGrid = ({
                     cursor: 'grab',
                     display: 'flex',
                     flexDirection: 'column',
-                    border: subject.endPeriod && subject.endPeriod > subject.period
-                        ? '2px solid #2196f3'
+                    border: displayConfig.showContinuityHighlight && (
+                        (subject.endPeriod && subject.endPeriod > subject.period) ||
+                        subject.term === 'full_year'
+                    )
+                        ? '4px solid #2196f3'
                         : '1px solid #bbdefb',
                     position: 'relative',
                     minHeight: '65px'
@@ -107,10 +109,10 @@ export const TimeTableGrid = ({
                         onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
                         onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}
                     >
-                        {displayMode === 'name' ? subject.name :
-                            displayMode === 'teacher' ? subject.teacher : subject.department}
+                        {displayConfig.subjectMainDisplay === 'name' ? subject.name :
+                            displayConfig.subjectMainDisplay === 'teacher' ? subject.teacher : subject.department}
                     </span>
-                    {topViolation && (
+                    {displayConfig.showViolationAlerts && topViolation && (
                         <div
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, cursor: 'help',
@@ -127,56 +129,62 @@ export const TimeTableGrid = ({
                         </div>
                     )}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: '#666', overflow: 'hidden', overflowWrap: 'anywhere', marginTop: '2px', paddingBottom: '6px' }}>
-                    {displayMode === 'name' ? `${subject.teacher} (${subject.faculty})` : subject.name}
-                </div>
+                {displayConfig.showSubInfo && (
+                    <div style={{ fontSize: '0.7rem', color: '#666', overflow: 'hidden', overflowWrap: 'anywhere', marginTop: '2px', paddingBottom: '6px' }}>
+                        {displayConfig.subjectMainDisplay === 'name' ? `${subject.teacher} (${subject.faculty})` : subject.name}
+                    </div>
+                )}
 
-                {/* タグ一覧 (希望タイプ・機材) をここに移動 */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '12px', marginBottom: '4px' }}>
-                    {subject.preferredRoomType && (
-                        <span style={{
-                            fontSize: '0.65em', padding: '1px 4px',
-                            background: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
-                            color: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
-                            border: `1px solid ${subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
-                            borderRadius: '3px', fontWeight: 'bold'
-                        }}>
-                            {ROOM_TYPE_LABELS[subject.preferredRoomType]}
-                        </span>
-                    )}
-                    {!!subject.requiresMovable && (
-                        <span style={{
-                            background: IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
-                            color: IMPORTANT_EQUIPMENT_COLORS['可動'].text,
-                            border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
-                            padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
-                        }}>
-                            可動
-                        </span>
-                    )}
-                    {(subject.requiredEquipment || []).map(eq => {
-                        const style = getEquipmentStyle(eq);
-                        return (
-                            <span key={eq} style={{
-                                background: style.bg, color: style.text, border: `1px solid ${style.border}`,
+                {/* タグ一覧 (希望タイプ・機材) */}
+                {displayConfig.showRequirementTags && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '12px', marginBottom: '4px' }}>
+                        {subject.preferredRoomType && (
+                            <span style={{
+                                fontSize: '0.65em', padding: '1px 4px',
+                                background: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
+                                color: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
+                                border: `1px solid ${subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
+                                borderRadius: '3px', fontWeight: 'bold'
+                            }}>
+                                {ROOM_TYPE_LABELS[subject.preferredRoomType]}
+                            </span>
+                        )}
+                        {!!subject.requiresMovable && (
+                            <span style={{
+                                background: IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
+                                color: IMPORTANT_EQUIPMENT_COLORS['可動'].text,
+                                border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
                                 padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
                             }}>
-                                {eq}
+                                可動
                             </span>
-                        );
-                    })}
-                </div>
+                        )}
+                        {(subject.requiredEquipment || []).map(eq => {
+                            const style = getEquipmentStyle(eq);
+                            return (
+                                <span key={eq} style={{
+                                    background: style.bg, color: style.text, border: `1px solid ${style.border}`,
+                                    padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                }}>
+                                    {eq}
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
 
-                <div style={{ fontSize: '0.65em', color: '#999', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    参考: {subject.previousRooms && subject.previousRooms.length > 0 ? subject.previousRooms.join(',') : 'なし'}
-                </div>
+                {displayConfig.showPreviousRooms && (
+                    <div style={{ fontSize: '0.65em', color: '#999', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                        参考: {subject.previousRooms && subject.previousRooms.length > 0 ? subject.previousRooms.join(',') : 'なし'}
+                    </div>
+                )}
 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
                         <span style={{ fontSize: '0.85em', fontWeight: 'bold', color: '#666', whiteSpace: 'nowrap' }}>{subject.department}</span>
                         {/* 複数教室配当の進捗表示 */}
-                        {(() => {
+                        {displayConfig.showAllocationProgress && (() => {
                             const requiredCount = subject.requiredRoomCount || 1;
                             const currentCount = allocations.filter(a => a.subjectId === subject.id).length;
                             return (

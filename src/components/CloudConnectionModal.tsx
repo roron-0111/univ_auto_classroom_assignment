@@ -82,9 +82,11 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
                         <Cloud size={20} color="#646cff" />
                         キャンパスを選択
                     </h2>
-                    <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ccc' }}>
-                        <X size={20} />
-                    </button>
+                    {user && (
+                        <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#ccc' }}>
+                            <X size={20} />
+                        </button>
+                    )}
                 </div>
 
                 <div className="modal-body">
@@ -117,9 +119,11 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
                         ))}
                     </div>
 
-                    <button type="button" onClick={onClose} className="secondary-button" style={{ marginTop: '24px' }}>
-                        キャンセル
-                    </button>
+                    {user && (
+                        <button type="button" onClick={onClose} className="secondary-button" style={{ marginTop: '24px' }}>
+                            キャンセル
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

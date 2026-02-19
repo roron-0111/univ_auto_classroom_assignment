@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS } from '../types';
-import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download } from 'lucide-react';
+import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 
 interface Props {
@@ -49,68 +49,79 @@ const MultiSelectFilter = ({
             : `${selected.length}項目選択`;
 
     return (
-        <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+        <div ref={dropdownRef} style={{ position: 'relative', width: '100%', userSelect: 'none' }}>
             <div
-                onClick={() => setIsOpen(!isOpen)}
+                onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(!isOpen);
+                }}
                 style={{
-                    padding: '4px 8px',
+                    padding: '4px 6px',
                     borderRadius: '4px',
                     border: '1px solid #ccc',
-                    fontSize: '0.8rem',
+                    fontSize: '0.75rem',
                     cursor: 'pointer',
                     background: '#fff',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    minHeight: '26px'
+                    minHeight: '26px',
+                    gap: '4px'
                 }}
+                className="hover:border-blue-400"
             >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayText}</span>
-                <span style={{ fontSize: '0.6rem', color: '#888' }}>▼</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{displayText}</span>
+                <span style={{ fontSize: '0.6rem', color: '#888', flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
             </div>
             {isOpen && (
-                <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    width: '100%', // 親と同じ幅
-                    minWidth: '120px', // ただし最低幅は確保
-                    maxHeight: '200px',
-                    overflowY: 'auto',
-                    background: '#fff',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-                    zIndex: 1000,
-                    marginTop: '2px'
-                }}>
+                <div
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        width: 'auto',
+                        minWidth: 'max(140px, 100%)',
+                        maxHeight: '350px',
+                        overflowY: 'auto',
+                        background: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: '6px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+                        zIndex: 5000,
+                        marginTop: '4px'
+                    }}
+                >
                     <div
-                        onClick={() => onChange([])}
-                        style={{ padding: '6px 8px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '0.8rem', color: '#666' }}
+                        onClick={() => { onChange([]); }}
+                        style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '0.8rem', color: '#666', background: '#f9f9f9', fontWeight: 'bold' }}
                     >
                         (選択解除)
                     </div>
                     {options.map(opt => (
                         <div
                             key={opt.value}
-                            onClick={() => toggleOption(opt.value)}
+                            onClick={(e) => { e.stopPropagation(); toggleOption(opt.value); }}
                             style={{
-                                padding: '6px 8px',
+                                padding: '8px 12px',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '6px',
+                                gap: '10px',
                                 fontSize: '0.8rem',
-                                background: selected.includes(opt.value) ? '#f0f4ff' : 'transparent'
+                                background: selected.includes(opt.value) ? '#f0f4ff' : 'transparent',
+                                transition: 'background 0.1s'
                             }}
+                            className="hover:bg-gray-100"
                         >
                             <input
                                 type="checkbox"
                                 checked={selected.includes(opt.value)}
                                 readOnly
-                                style={{ margin: 0 }}
+                                style={{ margin: 0, cursor: 'pointer', pointerEvents: 'none' }}
                             />
-                            {opt.label}
+                            <span style={{ flex: 1 }}>{opt.label}</span>
                         </div>
                     ))}
                 </div>
@@ -134,11 +145,11 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
         department: [] as string[],
         term: [] as Term[],
         day: [] as DayOfWeek[],
-        period: [] as number[],
+        period: [] as string[],
         campus: '',
         requiredCapacity: '',
         priority: [] as number[],
-        requiredRoomCount: '',
+        requiredRoomCount: [] as number[],
         buildingPreference: [] as string[],
         preferredRoomType: [] as string[],
         previousRooms: '',
@@ -146,6 +157,24 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
     });
 
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+    // 講時フィルタ用：実データから存在する単/複数講時パターンを抽出し、
+    // かつ「2-4」「3-5」などの標準的なパターンを確実に追加する
+    const periodOptions = useMemo(() => {
+        const found = subjects.map(s =>
+            s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`
+        );
+        const patterns = Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
+            const aIsMulti = a.includes('-');
+            const bIsMulti = b.includes('-');
+            if (aIsMulti !== bIsMulti) return aIsMulti ? 1 : -1;
+            const [aStart, aEnd] = a.split('-').map(Number);
+            const [bStart, bEnd] = b.split('-').map(Number);
+            if (aStart !== bStart) return aStart - bStart;
+            return (aEnd || 0) - (bEnd || 0);
+        });
+        return patterns.map(p => ({ value: p, label: `${p}講時` }));
+    }, [subjects]);
 
     const handleEdit = (subject: Subject) => {
         setEditingId(subject.id);
@@ -157,12 +186,12 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
     const filteredSubjects = useMemo(() => {
         return subjects.filter(s => {
             // テキスト系：スペース区切りOR検索
-            const checkText = (text: string, query: string) => {
+            const checkText = (text: any, query: string) => {
                 if (!query) return true;
-                const keywords = query.toLowerCase().split(/\s+/).filter(k => k);
+                const keywords = query.toLowerCase().split(/\s+/).filter(k => !!k);
                 if (keywords.length === 0) return true;
-                const target = text.toLowerCase();
-                return keywords.some(k => target.includes(k));
+                const target = String(text || '').toLowerCase();
+                return keywords.every(k => target.includes(k));
             };
 
             if (!checkText(s.code, filters.code)) return false;
@@ -174,14 +203,18 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
             if (filters.department.length > 0 && !filters.department.includes(s.department)) return false;
             if (filters.term.length > 0 && !filters.term.includes(s.term)) return false;
             if (filters.day.length > 0 && !filters.day.includes(s.day)) return false;
-            if (filters.period.length > 0 && !filters.period.includes(s.period)) return false;
+            // 講時フィルタ: 「1-2」形式の文字列で比較
+            if (filters.period.length > 0) {
+                const pattern = s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
+                if (!filters.period.includes(pattern)) return false;
+            }
             if (filters.priority.length > 0 && !filters.priority.includes(s.priority)) return false;
             if (filters.buildingPreference.length > 0 && (!s.buildingPreference || !filters.buildingPreference.some(b => s.buildingPreference?.includes(b)))) return false;
             if (filters.preferredRoomType.length > 0 && (!s.preferredRoomType || !filters.preferredRoomType.includes(s.preferredRoomType))) return false;
 
             // 数値系
             if (filters.requiredCapacity && s.requiredCapacity < Number(filters.requiredCapacity)) return false;
-            if (filters.requiredRoomCount && (s.requiredRoomCount || 1) !== Number(filters.requiredRoomCount)) return false;
+            if (filters.requiredRoomCount.length > 0 && !filters.requiredRoomCount.includes(s.requiredRoomCount || 1)) return false;
 
             // テキスト系（配列など）
             if (filters.campus && !checkText(s.campus || '', filters.campus)) return false;
@@ -199,11 +232,15 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
             const { key, direction } = sortConfig;
 
             const getValue = (obj: any, k: string) => {
-                if (k === 'period') return Number(obj[k]);
-                if (k === 'term') return obj[k] === 'spring' ? 1 : obj[k] === 'autumn' ? 2 : 3;
-                if (k === 'day') return Object.keys(DAY_LABELS).indexOf(obj[k]);
-                if (k === 'requiredEquipment' || k === 'previousRooms') return (obj[k] || []).join(',');
-                return obj[k] ?? '';
+                if (!obj) return '';
+                const val = obj[k];
+                if (k === 'period' || k === 'requiredRoomCount' || k === 'requiredCapacity' || k === 'priority') {
+                    return Number(val || 0);
+                }
+                if (k === 'term') return val === 'spring' ? 1 : val === 'autumn' ? 2 : 3;
+                if (k === 'day') return Object.keys(DAY_LABELS).indexOf(val || 'mon');
+                if (Array.isArray(val)) return val.join(',');
+                return String(val || '').toLowerCase();
             };
 
             const aVal = getValue(a, key);
@@ -350,7 +387,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                         </div>
                     </div>
 
-                    <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: '4px' }}>
+                    <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: '4px', minHeight: '500px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
                             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
@@ -365,8 +402,8 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         { key: 'period', label: '講時', width: '70px' },
                                         { key: 'campus', label: 'キャンパス', width: '70px' },
                                         { key: 'requiredCapacity', label: '定員', width: '50px' },
-                                        { key: 'priority', label: '優先', width: '45px' },
-                                        { key: 'requiredRoomCount', label: '数', width: '35px' },
+                                        { key: 'priority', label: '優先', width: '60px' },
+                                        { key: 'requiredRoomCount', label: '数', width: '55px' },
                                         { key: 'buildingPreference', label: '希望建物', width: '60px' },
                                         { key: 'preferredRoomType', label: 'タイプ', width: '60px' },
                                         { key: 'requiredEquipment', label: '機材', width: '100px' },
@@ -380,17 +417,8 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         </th>
                                     ))}
                                     <th style={{ ...thStyle, width: '70px', cursor: 'default' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             <span>操作</span>
-                                            <button
-                                                onClick={handleDeleteAll}
-                                                style={{
-                                                    fontSize: '0.7rem', padding: '2px 4px', background: '#d32f2f', color: '#fff',
-                                                    border: 'none', borderRadius: '4px', cursor: 'pointer'
-                                                }}
-                                            >
-                                                全削除
-                                            </button>
                                         </div>
                                     </th>
                                 </tr>
@@ -405,15 +433,15 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             key: 'term', type: 'select', options: [
                                                 { value: 'spring', label: '春' },
                                                 { value: 'autumn', label: '秋' },
-                                                { value: 'full_year', label: '通' }
+                                                { value: 'full_year', label: '通年' }
                                             ]
                                         },
                                         { key: 'day', type: 'select', options: Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v, label: l })) },
-                                        { key: 'period', type: 'select', options: [1, 2, 3, 4, 5, 6, 7].map(v => ({ value: v, label: String(v) })) },
+                                        { key: 'period', type: 'select', options: periodOptions },
                                         { key: 'campus', type: 'text' },
                                         { key: 'requiredCapacity', type: 'number' },
                                         { key: 'priority', type: 'select', options: [1, 2, 3].map(v => ({ value: v, label: String(v) })) },
-                                        { key: 'requiredRoomCount', type: 'number' },
+                                        { key: 'requiredRoomCount', type: 'select', options: [1, 2, 3, 4, 5].map(v => ({ value: v, label: String(v) })) },
                                         { key: 'buildingPreference', type: 'select', options: BUILDINGS.map(v => ({ value: v, label: v })) },
                                         {
                                             key: 'preferredRoomType', type: 'select', options: [
@@ -452,7 +480,17 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             )}
                                         </td>
                                     ))}
-                                    <td style={{ padding: '4px', border: '1px solid #ddd' }}></td>
+                                    <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <button
+                                            onClick={handleDeleteAll}
+                                            style={{
+                                                fontSize: '0.7rem', padding: '2px 6px', background: '#d32f2f', color: '#fff',
+                                                border: 'none', borderRadius: '4px', cursor: 'pointer'
+                                            }}
+                                        >
+                                            全削除
+                                        </button>
+                                    </td>
                                 </tr>
                             </thead>
                             <tbody>
@@ -586,6 +624,24 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         </tr>
                                     )
                                 ))}
+                                {sortedSubjects.length === 0 && !isAdding && !editingId && (
+                                    <tr>
+                                        <td colSpan={17} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                                <Search size={40} strokeWidth={1} />
+                                                <span>該当する授業が見つかりません</span>
+                                                <button
+                                                    onClick={() => setFilters({
+                                                        code: '', name: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: ''
+                                                    })}
+                                                    style={{ background: 'none', border: '1px solid #ccc', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', marginTop: '10px' }}
+                                                >
+                                                    フィルタをすべて解除
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

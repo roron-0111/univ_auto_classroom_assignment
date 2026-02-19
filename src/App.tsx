@@ -24,7 +24,7 @@ import type { CloudData } from './types_cloud';
 // Icons
 import {
   RefreshCw, Download, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, Cloud, CloudOff, LogIn, LogOut
+  AlertTriangle, ListChecks, Cloud, CloudOff, LogIn
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -36,11 +36,18 @@ const CAMPUSES = [
 
 function App() {
   // Auth & Cloud Sync
-  const { user, loginByCampus, logout: authLogout } = useAuth();
+  const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
   const { saveData, refreshData } = useCloudSync(user);
 
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
+
+  // ログイン強制ロジック
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setShowCloudModal(true);
+    }
+  }, [authLoading, user]);
 
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     const saved = localStorage.getItem('classrooms');
@@ -56,7 +63,6 @@ function App() {
   });
 
   const [currentDay, setCurrentDay] = useState<DayOfWeek>('mon');
-  const [displayMode] = useState<'name' | 'teacher' | 'department'>('name');
   const [selectedBuilding, setSelectedBuilding] = useState<string>('all');
   const [showManager, setShowManager] = useState(false);
   const [showSubjectManager, setShowSubjectManager] = useState(false);
@@ -98,11 +104,22 @@ function App() {
     }
   });
 
-  const [displayConfig, setDisplayConfig] = useState<DisplayConfig>({
-    showCapacity: true,
-    showExamCapacity: true,
-    showRoomType: true,
-    highlightedEquipment: [] // Initially empty, we will handle "all" logic or populate in useEffect
+  const [displayConfig, setDisplayConfig] = useState<DisplayConfig>(() => {
+    const saved = localStorage.getItem('displayConfig');
+    if (saved) return JSON.parse(saved);
+    return {
+      showCapacity: true,
+      showExamCapacity: true,
+      showRoomType: true,
+      subjectMainDisplay: 'name',
+      showSubInfo: true,
+      showPreviousRooms: true,
+      showRequirementTags: true,
+      showAllocationProgress: true,
+      showContinuityHighlight: true,
+      showViolationAlerts: true,
+      highlightedEquipment: []
+    };
   });
 
   const [pickingCell, setPickingCell] = useState<{ room: string; period: Period; term: Term } | null>(null);
@@ -142,6 +159,7 @@ function App() {
   useEffect(() => { localStorage.setItem('allocations', JSON.stringify(allocations)); }, [allocations]);
   useEffect(() => { localStorage.setItem('allocationSettings', JSON.stringify(allocationSettings)); }, [allocationSettings]);
   useEffect(() => { localStorage.setItem('equipmentSettings', JSON.stringify(equipmentSettings)); }, [equipmentSettings]);
+  useEffect(() => { localStorage.setItem('displayConfig', JSON.stringify(displayConfig)); }, [displayConfig]);
 
   // 自動保存の仕組み: ローカルの状態が変わった際、ログイン中ならクラウドにも保存
   useEffect(() => {
@@ -463,6 +481,16 @@ function App() {
     setSubjects(newSubjects);
   };
 
+  // Auth初期化中はローディング表示
+  if (authLoading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f7fa', color: '#666', flexDirection: 'column', gap: '16px' }}>
+        <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid #ddd', borderTopColor: '#646cff', borderRadius: '50%' }}></div>
+        <p>読み込み中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="app-layout">
       {/* Header */}
@@ -498,28 +526,9 @@ function App() {
             className="hover:scale-105 active:scale-95"
           >
             {user ? <LogIn size={16} /> : <CloudOff size={16} />}
-            {user ? `${(CAMPUSES.find(c => `${c.id}@campus.local` === user.email)?.name) || user.email?.split('@')[0]}` : 'ログイン'}
+            {user ? `ログイン中(${(CAMPUSES.find(c => `${c.id}@campus.local` === user.email)?.name) || user.email?.split('@')[0]})` : 'ログイン'}
           </button>
 
-          {user && (
-            <button
-              onClick={() => {
-                if (confirm('ログアウトしますか？')) {
-                  authLogout();
-                }
-              }}
-              title="ログアウト"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(248, 113, 113, 0.1)', color: '#f87171',
-                border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              className="hover:scale-110 active:scale-90"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
 
           {user && (
             <button
@@ -556,10 +565,10 @@ function App() {
                 fontSize: '0.9rem', fontWeight: '500'
               }}
               disabled={isCloudLoading}
-              title="データを更新"
+              title="共有データを取得して更新"
             >
               <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
-              手動更新
+              更新(共有)
             </button>
           )}
 
@@ -679,7 +688,6 @@ function App() {
               onRemove={handleRemove}
               onCellClick={handleCellClick}
               onClassClick={(id) => setEditingClassroomId(id)}
-              displayMode={displayMode}
               showExtraPeriods={showExtraPeriods}
               displayConfig={displayConfig}
               draggingSubject={draggingSubject}
@@ -733,7 +741,7 @@ function App() {
                   {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}限 ({pickingCell.term === 'spring' ? '春' : '秋'})
                 </div>
                 {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未割り当て授業はありません。</p>
+                  <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未配当授業はありません。</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').map(s => (
@@ -847,7 +855,10 @@ function App() {
         {
           showCloudModal && (
             <CloudConnectionModal
-              onClose={() => setShowCloudModal(false)}
+              onClose={() => {
+                // ユーザーがログインしている場合のみ閉じることができる
+                if (user) setShowCloudModal(false);
+              }}
               onLogin={(campusId) => handleCloudConnect(campusId)}
               onLogout={authLogout}
               isConnecting={isCloudLoading}

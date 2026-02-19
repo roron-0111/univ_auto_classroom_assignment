@@ -89,6 +89,15 @@ export interface DisplayConfig {
     showCapacity: boolean;
     showExamCapacity: boolean;
     showRoomType: boolean;
+    // 授業カード表示
+    subjectMainDisplay: 'name' | 'teacher' | 'department';
+    showSubInfo: boolean;            // 教員(部局) などのサブ情報
+    showPreviousRooms: boolean;      // 過年度教室
+    showRequirementTags: boolean;    // 希望タイプ・機材タグ
+    showAllocationProgress: boolean; // 1/2室 などの進捗
+    // グリッド・全体表示
+    showContinuityHighlight: boolean; // 連続講時の青枠
+    showViolationAlerts: boolean;    // 制約違反アイコン
     highlightedEquipment: string[]; // ここに含まれるタグは優先的に表示
 }
 

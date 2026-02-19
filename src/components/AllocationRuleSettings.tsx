@@ -21,8 +21,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
     const [terms, setTerms] = useState<Term[]>(['spring', 'autumn', 'full_year']);
     const [days, setDays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
     const [periods, setPeriods] = useState<Period[]>([1, 2, 3, 4, 5, 6, 7]);
-    const [includeAllocated, setIncludeAllocated] = useState(false);
-    const [includeUnassigned, setIncludeUnassigned] = useState(true);
+    const [allocationMode, setAllocationMode] = useState<'incremental' | 'shuffle'>('incremental');
     const [equipmentSettings, setEquipmentSettings] = useState(initialEquipment || DEFAULT_EQUIPMENT_SETTINGS);
 
     const handleStrictToggle = () => {
@@ -56,8 +55,6 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
             r.id === id ? { ...r, weight } : r
         ));
     };
-
-
 
     const handleBonusChange = (index: number, value: number) => {
         setBonuses(prev => {
@@ -102,39 +99,19 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                     <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#333' }}>配当ルール設定</h2>
                 </div>
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* 優先度フィルター */}
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#666' }}>科目の優先度:</span>
-                        {[5, 4, 3, 2, 1].map(p => (
-                            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={priorities.includes(p)}
-                                    onChange={() => setPriorities(prev =>
-                                        prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
-                                    )}
-                                />
-                                <span style={{ fontSize: '0.85rem' }}>{p}</span>
-                            </label>
-                        ))}
-                    </div>
-                    {/* 配当状況フィルター */}
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={includeUnassigned} onChange={() => setIncludeUnassigned(!includeUnassigned)} />
-                            <span style={{ fontSize: '0.85rem' }}>未配当</span>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={includeAllocated} onChange={() => setIncludeAllocated(!includeAllocated)} />
-                            <span style={{ fontSize: '0.85rem' }}>配当済み</span>
-                        </label>
-                    </div>
-                    {/* 注記 */}
-                    <span style={{ fontSize: '0.75rem', color: '#666', background: '#f5f5f5', padding: '3px 8px', borderRadius: '4px' }}>
-                        ※ 科目の優先度が高い順に配当されます
-                    </span>
+                    {/* Header Controls Removed (Moved to Filter Section) */}
                     <button
-                        onClick={() => onSave({ rules, orderBonuses: bonuses, priorities, terms, days, periods, includeAllocated, includeUnassigned, equipmentSettings })}
+                        onClick={() => onSave({
+                            rules,
+                            orderBonuses: bonuses,
+                            priorities,
+                            terms,
+                            days,
+                            periods,
+                            includeAllocated: allocationMode === 'shuffle',
+                            includeUnassigned: true, // どちらのモードでも未配当は対象とする
+                            equipmentSettings
+                        })}
                         style={{
                             padding: '6px 14px', borderRadius: '4px', border: 'none',
                             background: '#2e7d32', color: '#fff', cursor: 'pointer',
@@ -154,15 +131,10 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
             {/* Content */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '30px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
 
-                <div style={{ marginBottom: '20px', padding: '12px 15px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.1rem' }}>⚠️</span>
-                    <strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。
-                </div>
-
                 {/* フィルターセクション */}
                 <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e9ecef' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '15px', fontSize: '0.95rem', color: '#333', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        🎯 配当対象の絞り込み
+                        🛠️ 配当基本設定
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -244,6 +216,64 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                                 {periods.length === 7 ? '全解除' : '全選択'}
                             </button>
                         </div>
+
+                        {/* 優先度フィルター (移動分) */}
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>科目の優先度:</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                {[5, 4, 3, 2, 1].map(p => (
+                                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={priorities.includes(p)}
+                                            onChange={() => setPriorities(prev =>
+                                                prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+                                            )}
+                                        />
+                                        <span style={{ fontSize: '0.85rem' }}>{p}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#666', background: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>
+                                ※ 優先度が高い順に配当されます
+                            </span>
+                        </div>
+
+                        {/* 配当モード選択 (移動分) */}
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当モード:</span>
+                            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', background: '#e3f2fd', padding: '5px 12px', borderRadius: '20px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: allocationMode === 'incremental' ? 'bold' : 'normal', color: allocationMode === 'incremental' ? '#1565c0' : '#666' }}>
+                                    <input
+                                        type="radio"
+                                        name="allocationMode"
+                                        value="incremental"
+                                        checked={allocationMode === 'incremental'}
+                                        onChange={() => setAllocationMode('incremental')}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    <span style={{ fontSize: '0.85rem' }}>未配当のみ配当</span>
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: allocationMode === 'shuffle' ? 'bold' : 'normal', color: allocationMode === 'shuffle' ? '#d32f2f' : '#666' }}>
+                                    <input
+                                        type="radio"
+                                        name="allocationMode"
+                                        value="shuffle"
+                                        checked={allocationMode === 'shuffle'}
+                                        onChange={() => setAllocationMode('shuffle')}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    <span style={{ fontSize: '0.85rem' }}>すべて再配当 (シャッフル)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* 注意書き (移動分) */}
+                        <div style={{ marginTop: '10px', padding: '10px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.rem' }}>⚠️</span>
+                            <span><strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。</span>
+                        </div>
+
                     </div>
                 </div>
 
@@ -472,6 +502,6 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                     to { opacity: 1; transform: translateX(0); }
                 }
             `}</style>
-        </div >
+        </div>
     );
 };
