@@ -93,20 +93,36 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     teacher: row.Teacher || row['教員'] || row['代表教員'],
                     department: row.Department || row['管轄学科'] || row['学科'],
                     faculty: row.Faculty || row['開講学部'],
-                    term: (row.Term || row['開講期']) as Term,
-                    day: (row.Day || row['曜日']) as DayOfWeek,
+                    term: (() => {
+                        const t = row.Term || row['開講期'] || row['学期'];
+                        if (t === '春' || t === '春学期') return 'spring';
+                        if (t === '秋' || t === '秋学期') return 'autumn';
+                        if (t === '通年') return 'full_year';
+                        return t as Term;
+                    })(),
+                    day: (() => {
+                        const d = row.Day || row['曜日'];
+                        const map: Record<string, DayOfWeek> = { '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu', '金': 'fri', '土': 'sat' };
+                        return map[d] || d as DayOfWeek;
+                    })(),
                     period: parseInt(row.Period || row['講時'], 10) as Period,
                     endPeriod: (parseInt(row.EndPeriod || row['終了講時'], 10) || undefined) as Period | undefined,
                     requiredCapacity: parseInt(row.RequiredCapacity || row['履修想定人数'] || row['定員'], 10) || 0,
                     campus: row.Campus || row['キャンパス'],
-                    previousRooms: row.PreviousRooms || row['教室'] ? (row.PreviousRooms || row['教室']).split(';').map((s: string) => s.trim()).filter(Boolean) : [],
-                    preferredRoomType: row.PreferredRoomType ? row.PreferredRoomType as any : undefined,
-                    requiresProjector: row.RequiresProjector === 'true' || row.RequiresProjector === '1' || row['PJ'] === '○',
+                    previousRooms: row.PreviousRooms || row['教室'] || row['過去教室'] ? (row.PreviousRooms || row['教室'] || row['過去教室']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    preferredRoomType: (() => {
+                        const t = row.PreferredRoomType || row['教室タイプ'];
+                        if (t === 'PC' || t === 'PC室') return 'pc';
+                        if (t === 'ゼミ' || t === 'ゼミ室') return 'seminar';
+                        if (t === '一般') return 'normal';
+                        return t ? t as any : undefined;
+                    })(),
+                    requiresProjector: row.RequiresProjector === 'true' || row.RequiresProjector === '1' || row['PJ'] === '○' || row['プロジェクター'] === '○',
                     requiresMovable: row.RequiresMovable === 'true' || row.RequiresMovable === '1' || row['可動式'] === '○',
                     priority: parseInt(row.Priority || row['優先度'], 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
                     buildingPreference: row.BuildingPreference || row['棟希望'],
-                    requiredEquipment: row.RequiredEquipment ? row.RequiredEquipment.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
+                    requiredEquipment: (row.RequiredEquipment || row['必須設備']) ? (row.RequiredEquipment || row['必須設備']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
                 }));
 
                 // グルーピングして必要教室数を算出
@@ -133,7 +149,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
 
 export const exportToCSV = (data: any[], filename: string) => {
     const csv = Papa.unparse(data);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);

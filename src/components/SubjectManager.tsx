@@ -369,12 +369,36 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                 <button onClick={() => fileInputRef.current?.click()} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
-                                    <Upload size={18} /> CSV
+                                    <Upload size={18} /> CSVインポート
                                 </button>
-                                <button onClick={() => exportToCSV(subjects, 'subjects_export.csv')} style={{
+                                <button onClick={() => {
+                                    // エクスポート用にデータを整形（日本語キー、日本語値）
+                                    const exportData = subjects.map(s => ({
+                                        '時間割コード': s.code,
+                                        '授業名': s.name,
+                                        '教員': s.teacher,
+                                        '学部': s.faculty,
+                                        '学科': s.department,
+                                        '学期': s.term === 'spring' ? '春' : s.term === 'autumn' ? '秋' : '通年',
+                                        '曜日': DAY_LABELS[s.day],
+                                        '講時': s.period,
+                                        '終了講時': s.endPeriod || s.period,
+                                        'キャンパス': s.campus,
+                                        '定員': s.requiredCapacity,
+                                        '優先度': s.priority,
+                                        '必要教室数': s.requiredRoomCount,
+                                        '棟希望': s.buildingPreference,
+                                        '教室タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
+                                        '必須設備': s.requiredEquipment?.join(' ') || '',
+                                        '過去教室': s.previousRooms?.join(' ') || '',
+                                        '可動席': s.requiresMovable ? '○' : '',
+                                        'プロジェクター': s.requiresProjector ? '○' : ''
+                                    }));
+                                    exportToCSV(exportData, 'subjects_export.csv');
+                                }} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#1976d2', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
-                                    <Download size={18} /> CSV
+                                    <Download size={18} /> CSVエクスポート
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
                             </div>
