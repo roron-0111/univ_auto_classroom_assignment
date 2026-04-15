@@ -1,11 +1,34 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { Subject, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST } from '../types';
+import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
+import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST, ROOM_TYPE_LABELS } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 
+function equipValue(
+    eq: string,
+    requiresMovable?: boolean,
+    requiresProjector?: boolean,
+    mandatory?: string[],
+    preferred?: string[]
+): string {
+    const man = mandatory ?? [];
+    const pref = preferred ?? [];
+    const isPJ = eq === 'PJ(中)' || eq === 'PJ(横)';
+    const hasManPJ = man.some(e => e.includes('PJ'));
+    if (eq === '可動') {
+        if (requiresMovable) return '◎';
+    } else if (isPJ) {
+        if (requiresProjector && !hasManPJ && eq === 'PJ(中)') return '◎';
+    }
+    if (man.includes(eq)) return '◎';
+    if (pref.includes(eq)) return '○';
+    return '';
+}
+
 interface Props {
     subjects: Subject[];
+    allocations: Allocation[];
+    classrooms: Classroom[];
     onUpdate: (updated: Subject[]) => void;
     onClose: () => void;
 }
@@ -130,7 +153,7 @@ const MultiSelectFilter = ({
     );
 };
 
-export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
+export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, onClose }: Props) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Partial<Subject>>({});
     const [isAdding, setIsAdding] = useState(false);
@@ -377,6 +400,8 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
                                     const exportData = subjects.map(s => {
+                                        const subjectAllocations = allocations.filter(a => a.subjectId === s.id);
+                                        const allocatedRooms = subjectAllocations.map(a => classrooms.find(r => r.id === a.classroomId));
                                         const base: Record<string, any> = {
                                             '時間割コード': s.code,
                                             '時間割名称': s.name,
@@ -396,16 +421,22 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             '過去教室': s.previousRooms?.join(' ') || '',
                                         };
                                         // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
-                                        // 可動・PJ は requiresMovable/requiresProjector も反映
                                         EQUIPMENT_LIST.forEach(eq => {
-                                            const man = s.mandatoryEquipment || [];
-                                            const pref = s.requiredEquipment || [];
-                                            const isPJ = eq === 'PJ(中)' || eq === 'PJ(横)';
-                                            const hasManPJ = man.some(e => e.includes('PJ'));
-                                            if (eq === '可動' && s.requiresMovable) { base[eq] = '◎'; return; }
-                                            if (isPJ && s.requiresProjector && !hasManPJ && eq === 'PJ(中)') { base[eq] = '◎'; return; }
-                                            base[eq] = man.includes(eq) ? '◎' : pref.includes(eq) ? '○' : '';
+                                            base[eq] = equipValue(eq, s.requiresMovable, s.requiresProjector, s.mandatoryEquipment, s.requiredEquipment);
                                         });
+                                        // 配当教室情報
+                                        base['教室ID'] = allocatedRooms.map(r => r?.id ?? '').join(' / ');
+                                        base['教室名'] = allocatedRooms.map(r => r?.name ?? '').join(' / ');
+                                        base['建物'] = allocatedRooms.map(r => r?.building ?? '').join(' / ');
+                                        base['教室定員'] = allocatedRooms.map(r => r?.capacity ?? '').join(' / ');
+                                        base['教室試験定員'] = allocatedRooms.map(r => r?.examCapacity ?? '').join(' / ');
+                                        base['教室タイプ'] = allocatedRooms.map(r => r ? (ROOM_TYPE_LABELS[r.type] ?? r.type) : '').join(' / ');
+                                        base['教室設備'] = allocatedRooms.map(r => {
+                                            if (!r) return '';
+                                            const eqList = [...(r.equipment ?? [])];
+                                            if (r.isMovable) eqList.unshift('可動');
+                                            return eqList.join('/');
+                                        }).join(' | ');
                                         return base;
                                     });
                                     exportToCSV(exportData, 'subjects_export.csv');
@@ -446,6 +477,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         { key: 'preferredRoomType', label: 'タイプ', width: '60px' },
                                         { key: 'requiredEquipment', label: '機材', width: '100px' },
                                         { key: 'previousRooms', label: '過去教室', width: '80px' },
+                                        { key: 'allocatedRoom', label: '配当教室', width: '100px' },
                                     ].map(col => (
                                         <th key={col.key} style={{ ...thStyle, width: col.width }} onClick={() => handleSort(col.key)}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
@@ -494,6 +526,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         },
                                         { key: 'requiredEquipment', type: 'text' },
                                         { key: 'previousRooms', type: 'text' },
+                                        { key: 'allocatedRoom', type: 'text' },
                                     ].map((field, idx) => (
                                         <td key={idx} style={{ padding: '4px', border: '1px solid #ddd' }}>
                                             {field.type === 'text' && (
@@ -661,6 +694,16 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em', color: '#666' }}>
                                                 {subject.previousRooms?.join(', ')}
                                             </td>
+                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
+                                                {(() => {
+                                                    const rooms = allocations
+                                                        .filter(a => a.subjectId === subject.id)
+                                                        .map(a => classrooms.find(r => r.id === a.classroomId)?.name ?? a.classroomId);
+                                                    return rooms.length > 0
+                                                        ? <span style={{ color: '#1976d2', fontWeight: 'bold' }}>{rooms.join(' / ')}</span>
+                                                        : <span style={{ color: '#bbb' }}>未配当</span>;
+                                                })()}
+                                            </td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                                 <div style={{ display: 'flex', gap: '10px' }}>
                                                     <button onClick={() => handleEdit(subject)} style={{ background: 'none', border: 'none', color: '#1976d2', cursor: 'pointer' }} title="編集"><Edit2 size={16} /></button>
@@ -672,7 +715,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                 ))}
                                 {sortedSubjects.length === 0 && !isAdding && !editingId && (
                                     <tr>
-                                        <td colSpan={17} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
+                                        <td colSpan={18} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                                 <Search size={40} strokeWidth={1} />
                                                 <span>該当する授業が見つかりません</span>
