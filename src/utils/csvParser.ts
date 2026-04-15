@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { Classroom, Subject, Term, DayOfWeek, Period } from '../types';
+import { EQUIPMENT_LIST } from '../types';
 
 // Header definitions
 // Header definitions
@@ -89,16 +90,20 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                 const rawSubjects = results.data.map((row: any) => ({
                     id: row.ID || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
                     code: row['時間割コード'] || row.Code || row.ID,
-                    name: row.Name || row['授業名'],
+                    name: row.Name || row['時間割名称'] || row['授業名'],
                     teacher: row.Teacher || row['教員'] || row['代表教員'],
                     department: row.Department || row['管轄学科'] || row['学科'],
                     faculty: row.Faculty || row['開講学部'],
                     term: (() => {
-                        const t = row.Term || row['開講期'] || row['学期'];
+                        const t = row.Term || row['開講期'] || row['配当期'] || row['学期'];
                         if (t === '春' || t === '春学期') return 'spring';
+                        if (t === '春学期前半' || t === '春前半') return 'spring_first';
+                        if (t === '春学期後半' || t === '春後半') return 'spring_second';
                         if (t === '秋' || t === '秋学期') return 'autumn';
+                        if (t === '秋学期前半' || t === '秋前半') return 'autumn_first';
+                        if (t === '秋学期後半' || t === '秋後半') return 'autumn_second';
                         if (t === '通年') return 'full_year';
-                        return t as Term;
+                        return (t as Term) || 'spring';
                     })(),
                     day: (() => {
                         const d = row.Day || row['曜日'];
@@ -107,22 +112,46 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     })(),
                     period: parseInt(row.Period || row['講時'], 10) as Period,
                     endPeriod: (parseInt(row.EndPeriod || row['終了講時'], 10) || undefined) as Period | undefined,
-                    requiredCapacity: parseInt(row.RequiredCapacity || row['履修想定人数'] || row['定員'], 10) || 0,
+                    requiredCapacity: parseInt(row.RequiredCapacity || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
                     campus: row.Campus || row['キャンパス'],
                     previousRooms: row.PreviousRooms || row['教室'] || row['過去教室'] ? (row.PreviousRooms || row['教室'] || row['過去教室']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
                     preferredRoomType: (() => {
-                        const t = row.PreferredRoomType || row['教室タイプ'];
+                        const t = row.PreferredRoomType || row['希望教室タイプ'] || row['教室タイプ'];
                         if (t === 'PC' || t === 'PC室') return 'pc';
                         if (t === 'ゼミ' || t === 'ゼミ室') return 'seminar';
                         if (t === '一般') return 'normal';
                         return t ? t as any : undefined;
                     })(),
-                    requiresProjector: row.RequiresProjector === 'true' || row.RequiresProjector === '1' || row['PJ'] === '○' || row['プロジェクター'] === '○',
-                    requiresMovable: row.RequiresMovable === 'true' || row.RequiresMovable === '1' || row['可動式'] === '○',
+                    // 新形式: PJ(中) or PJ(横) = ◎ → requiresProjector
+                    // 旧形式: 専用列も引き続き受け付ける
+                    requiresProjector: row['PJ(中)'] === '◎' || row['PJ(横)'] === '◎' ||
+                        row.RequiresProjector === 'true' || row.RequiresProjector === '1' ||
+                        row['PJ必須'] === '○' || row['PJ'] === '○' || row['プロジェクター'] === '○',
+                    // 新形式: 可動 = ◎ → requiresMovable
+                    requiresMovable: row['可動'] === '◎' ||
+                        row.RequiresMovable === 'true' || row.RequiresMovable === '1' ||
+                        row['可動席'] === '○' || row['可動式'] === '○',
                     priority: parseInt(row.Priority || row['優先度'], 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
                     buildingPreference: row.BuildingPreference || row['棟希望'],
-                    requiredEquipment: (row.RequiredEquipment || row['必須設備']) ? (row.RequiredEquipment || row['必須設備']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    // 必須設備: 設備列の値が◎のもの（新形式）、または旧形式の必須_X列
+                    mandatoryEquipment: (() => {
+                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '◎');
+                        if (fromNew.length > 0) return fromNew;
+                        // 旧形式後方互換: 必須_X列
+                        return EQUIPMENT_LIST.filter(eq => row[`必須_${eq}`] === '○');
+                    })(),
+                    // 希望設備: 設備列の値が○のもの（新形式）、または旧形式
+                    requiredEquipment: (() => {
+                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '○');
+                        if (fromNew.length > 0) return fromNew;
+                        // 旧形式後方互換: 希望_X列
+                        const fromOldCols = EQUIPMENT_LIST.filter(eq => row[`希望_${eq}`] === '○');
+                        if (fromOldCols.length > 0) return fromOldCols;
+                        // さらに旧形式: 必須設備セル（スペース/セミコロン区切り）
+                        const legacy = row.RequiredEquipment || row['必須設備'];
+                        return legacy ? legacy.split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [];
+                    })(),
                 }));
 
                 // グルーピングして必要教室数を算出

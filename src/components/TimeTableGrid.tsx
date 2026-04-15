@@ -2,7 +2,7 @@ import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
 import { ROOM_TYPE_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
 import { checkConstraints } from '../utils/validation';
-import { AlertTriangle, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 interface Props {
     day: DayOfWeek;
@@ -30,17 +30,15 @@ export const TimeTableGrid = ({
 
     const displayedPeriods = showExtraPeriods ? PERIODS : PERIODS.filter(p => p <= 5);
 
-    const getSubjects = (classroomId: string, period: Period, term: 'spring' | 'autumn') => {
+    const getSubjects = (classroomId: string, period: Period, season: 'spring' | 'autumn') => {
+        const springTerms = new Set(['spring', 'spring_first', 'spring_second', 'full_year']);
+        const autumnTerms = new Set(['autumn', 'autumn_first', 'autumn_second', 'full_year']);
+        const validTerms = season === 'spring' ? springTerms : autumnTerms;
         const matchingAllocations = allocations.filter(a => {
             const subject = subjects.find(s => s.id === a.subjectId);
             if (!subject) return false;
-
             const isInPeriodRange = period >= subject.period && period <= (subject.endPeriod || subject.period);
-
-            return a.classroomId === classroomId &&
-                isInPeriodRange &&
-                subject.day === day &&
-                (subject.term === term || subject.term === 'full_year');
+            return a.classroomId === classroomId && isInPeriodRange && subject.day === day && validTerms.has(subject.term);
         });
         return matchingAllocations.map(a => subjects.find(s => s.id === a.subjectId)!).filter(Boolean);
     };
@@ -61,10 +59,6 @@ export const TimeTableGrid = ({
     };
 
     const renderSubjectCard = (subject: Subject, room?: Classroom) => {
-        const violations = room ? checkConstraints(subject, room) : [];
-        const topViolation = violations.find(v => v.type === 'error') || violations[0];
-
-
         return (
             <div
                 key={subject.id}
@@ -112,22 +106,6 @@ export const TimeTableGrid = ({
                         {displayConfig.subjectMainDisplay === 'name' ? subject.name :
                             displayConfig.subjectMainDisplay === 'teacher' ? subject.teacher : subject.department}
                     </span>
-                    {displayConfig.showViolationAlerts && topViolation && (
-                        <div
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, cursor: 'help',
-                                padding: '1px 4px', borderRadius: '4px', background: topViolation.type === 'error' ? '#ffeeee' : '#fff3e0'
-                            }}
-                            title={`【${topViolation.type === 'error' ? '制約違反' : '条件×'}】\n${violations.map(v => '・' + v.message).join('\n')}`}
-                        >
-                            <span style={{ fontSize: '0.6rem', color: topViolation.type === 'error' ? '#d32f2f' : '#ff9800', fontWeight: 'bold' }}>
-                                {topViolation.type === 'error' ? topViolation.message.split(' ')[0] : (topViolation.message.includes('タイプ') ? 'タイプ×' : '建物×')}
-                            </span>
-                            {topViolation.type === 'error' && (
-                                <AlertTriangle size={10} color="#d32f2f" />
-                            )}
-                        </div>
-                    )}
                 </div>
                 {displayConfig.showSubInfo && (
                     <div style={{ fontSize: '0.7rem', color: '#666', overflow: 'hidden', overflowWrap: 'anywhere', marginTop: '2px', paddingBottom: '6px' }}>
@@ -136,42 +114,97 @@ export const TimeTableGrid = ({
                 )}
 
                 {/* タグ一覧 (希望タイプ・機材) */}
-                {displayConfig.showRequirementTags && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '12px', marginBottom: '4px' }}>
-                        {subject.preferredRoomType && (
-                            <span style={{
-                                fontSize: '0.65em', padding: '1px 4px',
-                                background: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
-                                color: subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
-                                border: `1px solid ${subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
-                                borderRadius: '3px', fontWeight: 'bold'
-                            }}>
-                                {ROOM_TYPE_LABELS[subject.preferredRoomType]}
-                            </span>
-                        )}
-                        {!!subject.requiresMovable && (
-                            <span style={{
-                                background: IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
-                                color: IMPORTANT_EQUIPMENT_COLORS['可動'].text,
-                                border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
-                                padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
-                            }}>
-                                可動
-                            </span>
-                        )}
-                        {(subject.requiredEquipment || []).map(eq => {
-                            const style = getEquipmentStyle(eq);
-                            return (
-                                <span key={eq} style={{
-                                    background: style.bg, color: style.text, border: `1px solid ${style.border}`,
+                {displayConfig.showRequirementTags && (() => {
+                    // 配当済みの場合、条件チェック用の判定値を事前計算
+                    const typeOk = !room || !subject.preferredRoomType || subject.preferredRoomType === room.type;
+                    const pjOk = !room || !subject.requiresProjector || room.equipment.some(eq => eq.includes('PJ'));
+                    const movOk = !room || !subject.requiresMovable || room.isMovable;
+                    const eqMatch = (req: string) => !room || (() => {
+                        if (req === 'PJ(横)' || req === 'PJ(中)') return room.equipment.some(e => e === 'PJ(横)' || e === 'PJ(中)');
+                        return room.equipment.some(e => e === req || e.includes(req) || req.includes(e));
+                    })();
+                    const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
+
+                    return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '12px', marginBottom: '4px' }}>
+                            {/* 希望教室タイプ（不一致: 橙ベタ） */}
+                            {subject.preferredRoomType && (
+                                <span style={{
+                                    fontSize: '0.65em', padding: '1px 4px',
+                                    background: (room && !typeOk) ? '#d32f2f' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
+                                    color: (room && !typeOk) ? '#fff' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
+                                    border: `1px solid ${(room && !typeOk) ? '#b71c1c' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
+                                    borderRadius: '3px', fontWeight: 'bold'
+                                }}>
+                                    {ROOM_TYPE_LABELS[subject.preferredRoomType]}{room && !typeOk ? '×' : ''}
+                                </span>
+                            )}
+                            {/* PJ必須（不足: 赤ベタ） */}
+                            {!!subject.requiresProjector && (
+                                <span style={{
+                                    background: (room && !pjOk) ? '#d32f2f' : '#e3f2fd',
+                                    color: (room && !pjOk) ? '#fff' : '#1565c0',
+                                    border: `1px solid ${(room && !pjOk) ? '#b71c1c' : '#bbdefb'}`,
                                     padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
                                 }}>
-                                    {eq}
+                                    PJ必須{room && !pjOk ? '×' : ''}
                                 </span>
-                            );
-                        })}
-                    </div>
-                )}
+                            )}
+                            {/* 可動必須（不足: 赤ベタ） */}
+                            {!!subject.requiresMovable && (
+                                <span style={{
+                                    background: (room && !movOk) ? '#d32f2f' : IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
+                                    color: (room && !movOk) ? '#fff' : IMPORTANT_EQUIPMENT_COLORS['可動'].text,
+                                    border: `1px solid ${(room && !movOk) ? '#b71c1c' : IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
+                                    padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                }}>
+                                    可動{room && !movOk ? '×' : ''}
+                                </span>
+                            )}
+                            {/* 必須設備（不足: 赤ベタ） */}
+                            {(subject.mandatoryEquipment || []).map(eq => {
+                                const ok = eqMatch(eq);
+                                const style = getEquipmentStyle(eq);
+                                return (
+                                    <span key={`m-${eq}`} style={{
+                                        background: (room && !ok) ? '#d32f2f' : style.bg,
+                                        color: (room && !ok) ? '#fff' : style.text,
+                                        border: `1px solid ${(room && !ok) ? '#b71c1c' : style.border}`,
+                                        padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                    }}>
+                                        {eq}{room && !ok ? '×' : ''}
+                                    </span>
+                                );
+                            })}
+                            {/* 希望設備（不足: 橙ベタ） */}
+                            {(subject.requiredEquipment || []).map(eq => {
+                                const ok = eqMatch(eq);
+                                const style = getEquipmentStyle(eq);
+                                return (
+                                    <span key={`r-${eq}`} style={{
+                                        background: (room && !ok) ? '#d32f2f' : style.bg,
+                                        color: (room && !ok) ? '#fff' : style.text,
+                                        border: `1px solid ${(room && !ok) ? '#b71c1c' : style.border}`,
+                                        padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                    }}>
+                                        {eq}{room && !ok ? '×' : ''}
+                                    </span>
+                                );
+                            })}
+                            {/* 希望学舎（不一致: 橙ベタ） */}
+                            {subject.buildingPreference && (
+                                <span style={{
+                                    background: (room && !bldOk) ? '#d32f2f' : '#f5f5f5',
+                                    color: (room && !bldOk) ? '#fff' : '#666',
+                                    border: `1px solid ${(room && !bldOk) ? '#b71c1c' : '#ddd'}`,
+                                    padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                }}>
+                                    {subject.buildingPreference}棟{room && !bldOk ? '×' : ''}
+                                </span>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {displayConfig.showPreviousRooms && (
                     <div style={{ fontSize: '0.65em', color: '#999', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -199,15 +232,23 @@ export const TimeTableGrid = ({
                                 </span>
                             );
                         })()}
-                        <div style={{
-                            display: 'flex', alignItems: 'center', gap: '2px',
-                            background: '#f5f5f5', padding: '1px 4px', borderRadius: '3px',
-                            fontSize: '0.65rem', color: '#444', border: '1px solid #ddd',
-                            flexShrink: 0
-                        }}>
-                            <Users size={10} color="#666" />
-                            <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}</span>
-                        </div>
+                        {(() => {
+                            const capOk = !room || room.capacity >= subject.requiredCapacity;
+                            return (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: '2px',
+                                    background: (room && !capOk) ? '#d32f2f' : '#f5f5f5',
+                                    padding: '1px 4px', borderRadius: '3px',
+                                    fontSize: '0.65rem',
+                                    color: (room && !capOk) ? '#fff' : '#444',
+                                    border: `1px solid ${(room && !capOk) ? '#b71c1c' : '#ddd'}`,
+                                    flexShrink: 0
+                                }}>
+                                    <Users size={10} color={(room && !capOk) ? '#fff' : '#666'} />
+                                    <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}{room && !capOk ? '×' : ''}</span>
+                                </div>
+                            );
+                        })()}
                     </div>
                     <button
                         onClick={(e) => { e.stopPropagation(); if (room) onRemove(subject.id, room.id); }}
@@ -318,7 +359,7 @@ export const TimeTableGrid = ({
                                     const cellSubjects = getSubjects(room.id, p, 'spring');
                                     const isInRange = draggingSubject && p >= draggingSubject.period && p <= (draggingSubject.endPeriod || draggingSubject.period);
                                     const isScheduleMismatch = draggingSubject && (
-                                        (draggingSubject.term !== 'spring' && draggingSubject.term !== 'full_year') ||
+                                        (!['spring', 'spring_first', 'spring_second', 'full_year'].includes(draggingSubject.term)) ||
                                         (draggingSubject.day !== day || !isInRange)
                                     );
 
@@ -367,7 +408,7 @@ export const TimeTableGrid = ({
                                         const cellSubjects = getSubjects(room.id, p, 'autumn');
                                         const isInRange = draggingSubject && p >= draggingSubject.period && p <= (draggingSubject.endPeriod || draggingSubject.period);
                                         const isScheduleMismatch = draggingSubject && (
-                                            (draggingSubject.term !== 'autumn' && draggingSubject.term !== 'full_year') ||
+                                            (!['autumn', 'autumn_first', 'autumn_second', 'full_year'].includes(draggingSubject.term)) ||
                                             (draggingSubject.day !== day || !isInRange)
                                         );
 

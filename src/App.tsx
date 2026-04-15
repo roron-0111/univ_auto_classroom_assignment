@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule } from './types';
-import { BUILDINGS, DAY_LABELS } from './types';
+import { BUILDINGS, DAY_LABELS, TERM_LABELS, ROOM_TYPE_LABELS } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList } from './components/UnassignedList';
@@ -28,6 +28,35 @@ import {
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/**
+ * 設備列の値を返す共通ロジック
+ * ◎=必須 / ○=希望 / ''=不要
+ * 可動・PJ は boolean フラグも考慮
+ */
+function equipValue(
+  eq: string,
+  requiresMovable?: boolean,
+  requiresProjector?: boolean,
+  mandatory?: string[],
+  preferred?: string[]
+): string {
+  const man = mandatory ?? [];
+  const pref = preferred ?? [];
+  const isPJ = eq === 'PJ(中)' || eq === 'PJ(横)';
+  const hasManPJ = man.some(e => e.includes('PJ'));
+
+  if (eq === '可動') {
+    // requiresMovable=true なら必須扱い
+    if (requiresMovable) return '◎';
+  } else if (isPJ) {
+    // requiresProjector=true かつ mandatoryEquipment に PJ 指定がない → PJ(中) を代表として◎
+    if (requiresProjector && !hasManPJ && eq === 'PJ(中)') return '◎';
+  }
+  if (man.includes(eq)) return '◎';
+  if (pref.includes(eq)) return '○';
+  return '';
+}
 const CAMPUSES = [
   { id: 'hakkei', name: '八景' },
   { id: 'kannnai', name: '関内' },
@@ -447,11 +476,43 @@ function App() {
     const data = allocations.map(a => {
       const s = subjects.find(sub => sub.id === a.subjectId);
       const r = classrooms.find(room => room.id === a.classroomId);
-      return {
-        SubjectID: s?.id, SubjectName: s?.name, Teacher: s?.teacher,
-        Term: s?.term, Day: s?.day, Period: s?.period,
-        ClassroomId: r?.id, ClassroomName: r?.name
+
+      const row: Record<string, any> = {
+        // --- 科目情報 ---
+        '時間割コード': s?.code ?? '',
+        '時間割名称': s?.name ?? '',
+        '教員': s?.teacher ?? '',
+        '学部': s?.faculty ?? '',
+        '学科': s?.department ?? '',
+        '配当期': s?.term ? TERM_LABELS[s.term] : '',
+        '曜日': s?.day ? DAY_LABELS[s.day] : '',
+        '講時': s?.period ?? '',
+        '終了講時': s?.endPeriod ?? s?.period ?? '',
+        'キャンパス': s?.campus ?? '',
+        '履修予定人数': s?.requiredCapacity ?? '',
+        '優先度': s?.priority ?? '',
+        '必要教室数': s?.requiredRoomCount ?? '',
+        '棟希望': s?.buildingPreference ?? '',
+        '希望教室タイプ': s?.preferredRoomType ? ROOM_TYPE_LABELS[s.preferredRoomType as keyof typeof ROOM_TYPE_LABELS] ?? s.preferredRoomType : '',
+        '過去教室': s?.previousRooms?.join(' ') ?? '',
+        // --- 設備要件（◎=必須 ○=希望  ※可動・PJもここで表現） ---
       };
+      EQUIPMENT_LIST.forEach(eq => {
+        row[eq] = equipValue(eq, s?.requiresMovable, s?.requiresProjector, s?.mandatoryEquipment, s?.requiredEquipment);
+      });
+      // --- 配当教室情報 ---
+      row['教室ID'] = r?.id ?? '';
+      row['教室名'] = r?.name ?? '';
+      row['建物'] = r?.building ?? '';
+      row['教室定員'] = r?.capacity ?? '';
+      row['教室試験定員'] = r?.examCapacity ?? '';
+      row['教室タイプ'] = r ? ROOM_TYPE_LABELS[r.type] : '';
+      // 可動式を教室設備に統合、/区切り
+      const equipList = [...(r?.equipment ?? [])];
+      if (r?.isMovable) equipList.unshift('可動');
+      row['教室設備'] = equipList.join('/');
+
+      return row;
     });
     import('./utils/csvParser').then(mod => mod.exportToCSV(data, 'matching_result.csv'));
   };

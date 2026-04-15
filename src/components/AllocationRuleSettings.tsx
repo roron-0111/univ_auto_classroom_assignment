@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AllocationRule, AllocationOptions, Term, DayOfWeek, Period } from '../types';
-import { DEFAULT_ORDER_BONUSES, EQUIPMENT_LIST, DEFAULT_EQUIPMENT_SETTINGS } from '../types';
+import { DEFAULT_ORDER_BONUSES, EQUIPMENT_LIST, DEFAULT_EQUIPMENT_SETTINGS, TERM_LABELS } from '../types';
 import { ChevronUp, ChevronDown, ArrowLeft, Save } from 'lucide-react';
 
 interface Props {
@@ -18,7 +18,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
     const [rules, setRules] = useState<AllocationRule[]>([...settings].sort((a, b) => a.order - b.order));
     const [bonuses, setBonuses] = useState<number[]>(initialBonuses || [...DEFAULT_ORDER_BONUSES]);
     const [priorities, setPriorities] = useState<number[]>([1, 2, 3, 4, 5]);
-    const [terms, setTerms] = useState<Term[]>(['spring', 'autumn', 'full_year']);
+    const [terms, setTerms] = useState<Term[]>(['spring', 'spring_first', 'spring_second', 'autumn', 'autumn_first', 'autumn_second', 'full_year']);
     const [days, setDays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
     const [periods, setPeriods] = useState<Period[]>([1, 2, 3, 4, 5, 6, 7]);
     const [allocationMode, setAllocationMode] = useState<'incremental' | 'shuffle'>('incremental');
@@ -141,21 +141,17 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                         {/* 配当期フィルター */}
                         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当期:</span>
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                {[
-                                    { id: 'spring', label: '春' },
-                                    { id: 'autumn', label: '秋' },
-                                    { id: 'full_year', label: '通年' }
-                                ].map(t => (
-                                    <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                {(Object.keys(TERM_LABELS) as Term[]).map(id => (
+                                    <label key={id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                                         <input
                                             type="checkbox"
-                                            checked={terms.includes(t.id as Term)}
+                                            checked={terms.includes(id)}
                                             onChange={() => setTerms(prev =>
-                                                prev.includes(t.id as Term) ? prev.filter(x => x !== t.id) : [...prev, t.id as Term]
+                                                prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
                                             )}
                                         />
-                                        <span style={{ fontSize: '0.85rem' }}>{t.label}</span>
+                                        <span style={{ fontSize: '0.85rem' }}>{TERM_LABELS[id]}</span>
                                     </label>
                                 ))}
                             </div>

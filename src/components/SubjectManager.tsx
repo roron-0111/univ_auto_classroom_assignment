@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, BUILDINGS } from '../types';
+import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 
@@ -237,7 +237,10 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                 if (k === 'period' || k === 'requiredRoomCount' || k === 'requiredCapacity' || k === 'priority') {
                     return Number(val || 0);
                 }
-                if (k === 'term') return val === 'spring' ? 1 : val === 'autumn' ? 2 : 3;
+                if (k === 'term') {
+                    const order: Record<string, number> = { spring: 1, spring_first: 2, spring_second: 3, autumn: 4, autumn_first: 5, autumn_second: 6, full_year: 7 };
+                    return order[val] ?? 8;
+                }
                 if (k === 'day') return Object.keys(DAY_LABELS).indexOf(val || 'mon');
                 if (Array.isArray(val)) return val.join(',');
                 return String(val || '').toLowerCase();
@@ -264,7 +267,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
 
     const handleSave = () => {
         if (!editForm.id || !editForm.name || !editForm.code) {
-            alert('授業名、時間割コードを入力してください。');
+            alert('時間割名称、時間割コードを入力してください。');
             return;
         }
 
@@ -373,27 +376,38 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                 </button>
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
-                                    const exportData = subjects.map(s => ({
-                                        '時間割コード': s.code,
-                                        '授業名': s.name,
-                                        '教員': s.teacher,
-                                        '学部': s.faculty,
-                                        '学科': s.department,
-                                        '学期': s.term === 'spring' ? '春' : s.term === 'autumn' ? '秋' : '通年',
-                                        '曜日': DAY_LABELS[s.day],
-                                        '講時': s.period,
-                                        '終了講時': s.endPeriod || s.period,
-                                        'キャンパス': s.campus,
-                                        '定員': s.requiredCapacity,
-                                        '優先度': s.priority,
-                                        '必要教室数': s.requiredRoomCount,
-                                        '棟希望': s.buildingPreference,
-                                        '教室タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
-                                        '必須設備': s.requiredEquipment?.join(' ') || '',
-                                        '過去教室': s.previousRooms?.join(' ') || '',
-                                        '可動席': s.requiresMovable ? '○' : '',
-                                        'プロジェクター': s.requiresProjector ? '○' : ''
-                                    }));
+                                    const exportData = subjects.map(s => {
+                                        const base: Record<string, any> = {
+                                            '時間割コード': s.code,
+                                            '時間割名称': s.name,
+                                            '教員': s.teacher,
+                                            '学部': s.faculty,
+                                            '学科': s.department,
+                                            '配当期': TERM_LABELS[s.term] || s.term,
+                                            '曜日': DAY_LABELS[s.day],
+                                            '講時': s.period,
+                                            '終了講時': s.endPeriod || s.period,
+                                            'キャンパス': s.campus,
+                                            '履修予定人数': s.requiredCapacity,
+                                            '優先度': s.priority,
+                                            '必要教室数': s.requiredRoomCount,
+                                            '棟希望': s.buildingPreference || '',
+                                            '希望教室タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
+                                            '過去教室': s.previousRooms?.join(' ') || '',
+                                        };
+                                        // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
+                                        // 可動・PJ は requiresMovable/requiresProjector も反映
+                                        EQUIPMENT_LIST.forEach(eq => {
+                                            const man = s.mandatoryEquipment || [];
+                                            const pref = s.requiredEquipment || [];
+                                            const isPJ = eq === 'PJ(中)' || eq === 'PJ(横)';
+                                            const hasManPJ = man.some(e => e.includes('PJ'));
+                                            if (eq === '可動' && s.requiresMovable) { base[eq] = '◎'; return; }
+                                            if (isPJ && s.requiresProjector && !hasManPJ && eq === 'PJ(中)') { base[eq] = '◎'; return; }
+                                            base[eq] = man.includes(eq) ? '◎' : pref.includes(eq) ? '○' : '';
+                                        });
+                                        return base;
+                                    });
                                     exportToCSV(exportData, 'subjects_export.csv');
                                 }} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#1976d2', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
@@ -417,7 +431,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                     {[
                                         { key: 'code', label: 'コード', width: '70px' },
-                                        { key: 'name', label: '授業名', width: '160px' },
+                                        { key: 'name', label: '時間割名称', width: '160px' },
                                         { key: 'teacher', label: '教員', width: '80px' },
                                         { key: 'faculty', label: '学部', width: '60px' },
                                         { key: 'department', label: '管轄', width: '50px' },
@@ -455,8 +469,12 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         { key: 'department', type: 'select', options: ['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v })) },
                                         {
                                             key: 'term', type: 'select', options: [
-                                                { value: 'spring', label: '春' },
-                                                { value: 'autumn', label: '秋' },
+                                                { value: 'spring', label: '春学期' },
+                                                { value: 'spring_first', label: '春前半' },
+                                                { value: 'spring_second', label: '春後半' },
+                                                { value: 'autumn', label: '秋学期' },
+                                                { value: 'autumn_first', label: '秋前半' },
+                                                { value: 'autumn_second', label: '秋後半' },
                                                 { value: 'full_year', label: '通年' }
                                             ]
                                         },
@@ -539,8 +557,12 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                         </td>
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                             <select value={editForm.term} onChange={e => setEditForm({ ...editForm, term: e.target.value as Term })} style={{ width: '100%' }}>
-                                                <option value="spring">春</option>
-                                                <option value="autumn">秋</option>
+                                                <option value="spring">春学期</option>
+                                                <option value="spring_first">春前半</option>
+                                                <option value="spring_second">春後半</option>
+                                                <option value="autumn">秋学期</option>
+                                                <option value="autumn_first">秋前半</option>
+                                                <option value="autumn_second">秋後半</option>
                                                 <option value="full_year">通年</option>
                                             </select>
                                         </td>
@@ -614,7 +636,7 @@ export const SubjectManager = ({ subjects, onUpdate, onClose }: Props) => {
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.faculty}</td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.department}</td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                                                {subject.term === 'spring' ? '春' : subject.term === 'autumn' ? '秋' : '通年'}
+                                                {TERM_LABELS[subject.term] || subject.term}
                                             </td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>{DAY_LABELS[subject.day]}</td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>

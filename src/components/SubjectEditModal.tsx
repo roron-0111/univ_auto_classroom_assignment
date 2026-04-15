@@ -28,7 +28,7 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
 
     const handleSave = () => {
         if (!form.name || !form.code) {
-            alert('時間割コードと授業名を入力してください。');
+            alert('時間割コードと時間割名称を入力してください。');
             return;
         }
         onSave(form);
@@ -55,7 +55,7 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
                             </div>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                <label style={{ fontWeight: 'bold', color: '#555' }}>授業名</label>
+                                <label style={{ fontWeight: 'bold', color: '#555' }}>時間割名称</label>
                                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
                             </div>
                         </div>
@@ -82,7 +82,11 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 <label style={{ fontWeight: 'bold', color: '#555' }}>配当期</label>
                                 <select value={form.term} onChange={e => setForm({ ...form, term: e.target.value as Term })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}>
                                     <option value="spring">春学期</option>
+                                    <option value="spring_first">春学期前半</option>
+                                    <option value="spring_second">春学期後半</option>
                                     <option value="autumn">秋学期</option>
+                                    <option value="autumn_first">秋学期前半</option>
+                                    <option value="autumn_second">秋学期後半</option>
                                     <option value="full_year">通年</option>
                                 </select>
                             </div>

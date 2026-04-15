@@ -1,4 +1,5 @@
 import type { Classroom, Subject, Allocation, AllocationRule, OptimizerResult } from '../types';
+import { getTermsToMark, getComplementaryTerm } from '../types';
 
 // 重み値は AllocationRule.weight を直接使用
 
@@ -40,12 +41,9 @@ export const runAutoAllocation = (
             // 連続講時も考慮して埋める
             const start = subj.period;
             const end = subj.endPeriod || subj.period;
+            const termsToMark = getTermsToMark(subj.term);
             for (let p = start; p <= end; p++) {
-                occupied.add(`${subj.term}-${subj.day}-${p}-${alloc.classroomId}`);
-                if (subj.term === 'full_year') {
-                    occupied.add(`spring-${subj.day}-${p}-${alloc.classroomId}`);
-                    occupied.add(`autumn-${subj.day}-${p}-${alloc.classroomId}`);
-                }
+                termsToMark.forEach(t => occupied.add(`${t}-${subj.day}-${p}-${alloc.classroomId}`));
             }
         }
     });
@@ -288,6 +286,22 @@ export const runAutoAllocation = (
                     }
                 }
 
+                // 前半・後半スタッキングボーナス
+                // 春学期前半と後半（または秋）は時間的に重ならないため同室配当を優先
+                const complementary = getComplementaryTerm(subject.term);
+                if (complementary) {
+                    const hasComplement = newAllocations.some(a => {
+                        const s = subjects.find(sub => sub.id === a.subjectId);
+                        if (!s || s.term !== complementary || s.day !== subject.day || a.classroomId !== room.id) return false;
+                        const sStart = s.period;
+                        const sEnd = s.endPeriod || s.period;
+                        const tStart = subject.period;
+                        const tEnd = subject.endPeriod || subject.period;
+                        return sStart <= tEnd && tStart <= sEnd; // 期間が重なる（講時帯が同じ）
+                    });
+                    if (hasComplement) score += 60; // 同室スタック強ボーナス
+                }
+
                 if (score > bestScore) {
                     bestScore = score;
                     bestClassroom = room;
@@ -306,12 +320,9 @@ export const runAutoAllocation = (
                 });
                 const start = subject.period;
                 const end = subject.endPeriod || subject.period;
+                const termsToMarkNew = getTermsToMark(subject.term);
                 for (let p = start; p <= end; p++) {
-                    occupied.add(`${subject.term}-${subject.day}-${p}-${bestClassroom.id}`);
-                    if (subject.term === 'full_year') {
-                        occupied.add(`spring-${subject.day}-${p}-${bestClassroom.id}`);
-                        occupied.add(`autumn-${subject.day}-${p}-${bestClassroom.id}`);
-                    }
+                    termsToMarkNew.forEach(t => occupied.add(`${t}-${subject.day}-${p}-${bestClassroom!.id}`));
                 }
             } else {
                 if (!unassigned.some(s => s.id === subject.id)) {

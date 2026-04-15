@@ -1,4 +1,42 @@
-export type Term = 'spring' | 'autumn' | 'full_year';
+export type Term = 'spring' | 'spring_first' | 'spring_second' | 'autumn' | 'autumn_first' | 'autumn_second' | 'full_year';
+
+export const TERM_LABELS: Record<Term, string> = {
+    spring: '春学期',
+    spring_first: '春学期前半',
+    spring_second: '春学期後半',
+    autumn: '秋学期',
+    autumn_first: '秋学期前半',
+    autumn_second: '秋学期後半',
+    full_year: '通年'
+};
+
+/** 配当時、このtermのスロットが占有されたとき、競合キーとしてマークするterm一覧 */
+export const getTermsToMark = (term: Term): Term[] => {
+    switch (term) {
+        case 'spring':       return ['spring', 'spring_first', 'spring_second', 'full_year'];
+        case 'spring_first': return ['spring_first', 'spring', 'full_year'];
+        case 'spring_second': return ['spring_second', 'spring', 'full_year'];
+        case 'autumn':       return ['autumn', 'autumn_first', 'autumn_second', 'full_year'];
+        case 'autumn_first': return ['autumn_first', 'autumn', 'full_year'];
+        case 'autumn_second': return ['autumn_second', 'autumn', 'full_year'];
+        case 'full_year':    return ['full_year', 'spring', 'spring_first', 'spring_second', 'autumn', 'autumn_first', 'autumn_second'];
+    }
+};
+
+/** 前半↔後半のペア（重ねて配当可能なterm） */
+export const getComplementaryTerm = (term: Term): Term | null => {
+    if (term === 'spring_first') return 'spring_second';
+    if (term === 'spring_second') return 'spring_first';
+    if (term === 'autumn_first') return 'autumn_second';
+    if (term === 'autumn_second') return 'autumn_first';
+    return null;
+};
+
+/** タイムテーブルグリッドでの表示行 ('spring' | 'autumn') */
+export const getTermSeason = (term: Term): 'spring' | 'autumn' => {
+    if (term === 'autumn' || term === 'autumn_first' || term === 'autumn_second') return 'autumn';
+    return 'spring';
+};
 export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
 export type Period = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
