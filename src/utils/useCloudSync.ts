@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import type { CloudData } from '../types_cloud';
@@ -26,11 +26,13 @@ export const useCloudSync = (user: User | null) => {
     };
 
     const saveData = useCallback(async (data: CloudData) => {
-        if (!user) return;
+        // React state may lag behind Firebase auth state — use auth.currentUser as fallback
+        const currentUser = user || auth.currentUser;
+        if (!currentUser) return;
 
         try {
             const sanitized = sanitizeData(data);
-            const docRef = doc(db, 'user_data', user.uid);
+            const docRef = doc(db, 'user_data', currentUser.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
@@ -43,7 +45,7 @@ export const useCloudSync = (user: User | null) => {
                     data: sanitized,
                     lastUpdated: Date.now(),
                     createdAt: Date.now(),
-                    email: user.email
+                    email: currentUser.email
                 });
             }
             setLastSynced(new Date());
@@ -54,9 +56,10 @@ export const useCloudSync = (user: User | null) => {
     }, [user]);
 
     const refreshData = useCallback(async (): Promise<CloudData | null> => {
-        if (!user) return null;
+        const currentUser = user || auth.currentUser;
+        if (!currentUser) return null;
         try {
-            const docRef = doc(db, 'user_data', user.uid);
+            const docRef = doc(db, 'user_data', currentUser.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {

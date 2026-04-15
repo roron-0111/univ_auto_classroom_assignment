@@ -22,7 +22,8 @@ export const useAuth = () => {
 
     const loginByCampus = async (campusId: string) => {
         const email = `${campusId}@campus.local`;
-        const pass = `fixed-pass-${campusId}`; // 簡略化のため固定パスワードを使用
+        const secret = import.meta.env.VITE_CAMPUS_SECRET || 'fallback-dev-only';
+        const pass = `${campusId}::${secret}`;
 
         try {
             return await signInWithEmailAndPassword(auth, email, pass);

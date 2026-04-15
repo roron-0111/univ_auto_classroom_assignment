@@ -52,16 +52,22 @@ function App() {
   }, [authLoading, user]);
 
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
-    const saved = localStorage.getItem('classrooms');
-    return saved ? JSON.parse(saved) : mockClassrooms;
+    try {
+      const saved = localStorage.getItem('classrooms');
+      return saved ? JSON.parse(saved) : mockClassrooms;
+    } catch { return mockClassrooms; }
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
-    const saved = localStorage.getItem('subjects');
-    return saved ? JSON.parse(saved) : mockSubjects;
+    try {
+      const saved = localStorage.getItem('subjects');
+      return saved ? JSON.parse(saved) : mockSubjects;
+    } catch { return mockSubjects; }
   });
   const [allocations, setAllocations] = useState<Allocation[]>(() => {
-    const saved = localStorage.getItem('allocations');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('allocations');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
   });
 
   const [currentDay, setCurrentDay] = useState<DayOfWeek>('mon');
@@ -75,13 +81,17 @@ function App() {
   const [showExtraPeriods, setShowExtraPeriods] = useState(false);
 
   const [allocationSettings, setAllocationSettings] = useState<AllocationRule[]>(() => {
-    const saved = localStorage.getItem('allocationSettings');
-    return saved ? JSON.parse(saved) : DEFAULT_ALLOCATION_RULES;
+    try {
+      const saved = localStorage.getItem('allocationSettings');
+      return saved ? JSON.parse(saved) : DEFAULT_ALLOCATION_RULES;
+    } catch { return DEFAULT_ALLOCATION_RULES; }
   });
 
   const [orderBonuses, setOrderBonuses] = useState<number[]>(() => {
-    const saved = localStorage.getItem('orderBonuses');
-    return saved ? JSON.parse(saved) : DEFAULT_ORDER_BONUSES;
+    try {
+      const saved = localStorage.getItem('orderBonuses');
+      return saved ? JSON.parse(saved) : DEFAULT_ORDER_BONUSES;
+    } catch { return DEFAULT_ORDER_BONUSES; }
   });
 
   const [equipmentSettings, setEquipmentSettings] = useState<{
@@ -107,8 +117,10 @@ function App() {
   });
 
   const [displayConfig, setDisplayConfig] = useState<DisplayConfig>(() => {
-    const saved = localStorage.getItem('displayConfig');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('displayConfig');
+      if (saved) return JSON.parse(saved);
+    } catch { /* fall through to default */ }
     return {
       showCapacity: true,
       showExamCapacity: true,
@@ -126,32 +138,6 @@ function App() {
 
   const [pickingCell, setPickingCell] = useState<{ room: string; period: Period; term: Term } | null>(null);
   const [draggingSubjectId, setDraggingSubjectId] = useState<string | null>(null);
-
-  // 開発用: 古いlocalStorageデータが残っている場合に、サンプル科目の機材情報を最新のmockDataに合わせて更新する
-  useEffect(() => {
-    setSubjects(prev => {
-      let hasChanges = false;
-      const next = prev.map(s => {
-        // サンプルデータ（IDがsample-で始まる、またはX1で始まるものなど）を対象
-        const mock = mockSubjects.find(m => m.id === s.id);
-        if (mock && (s.id.startsWith('sample-') || s.code.startsWith('X1'))) {
-          // 機材情報やPJフラグが異なれば更新
-          if (JSON.stringify(s.requiredEquipment) !== JSON.stringify(mock.requiredEquipment) ||
-            s.requiresProjector !== mock.requiresProjector) {
-            hasChanges = true;
-            return {
-              ...s,
-              requiredEquipment: mock.requiredEquipment,
-              requiresProjector: mock.requiresProjector,
-              requiresMovable: mock.requiresMovable
-            };
-          }
-        }
-        return s;
-      });
-      return hasChanges ? next : prev;
-    });
-  }, []); // 初回マウント時のみ実行
 
   // 永続化（ローカルストレージ）
   // クラウド接続中もローカルバックアップとして機能させるが、
@@ -253,7 +239,6 @@ function App() {
     const set = new Set<string>(EQUIPMENT_LIST);
     classrooms.forEach(c => {
       c.equipment.forEach(e => set.add(e));
-      set.add(c.isMovable ? '可動' : '固定'); // Legacy support if needed, but '可動'/'固定' are in EQUIPMENT_LIST
     });
     return Array.from(set).sort();
   }, [classrooms]);
