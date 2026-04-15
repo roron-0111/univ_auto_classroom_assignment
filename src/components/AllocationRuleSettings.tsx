@@ -156,10 +156,13 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                                 ))}
                             </div>
                             <button
-                                onClick={() => setTerms(terms.length === 3 ? [] : ['spring', 'autumn', 'full_year'])}
+                                onClick={() => {
+                                    const allTerms = Object.keys(TERM_LABELS) as Term[];
+                                    setTerms(terms.length === allTerms.length ? [] : allTerms);
+                                }}
                                 style={{ fontSize: '0.75rem', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                             >
-                                {terms.length === 3 ? '全解除' : '全選択'}
+                                {terms.length === Object.keys(TERM_LABELS).length ? '全解除' : '全選択'}
                             </button>
                         </div>
 
