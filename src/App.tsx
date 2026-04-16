@@ -66,6 +66,8 @@ function App() {
 
   const [currentDay, setCurrentDay] = useState<DayOfWeek>('mon');
   const [selectedBuilding, setSelectedBuilding] = useState<string>('all');
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [showManager, setShowManager] = useState(false);
   const [showSubjectManager, setShowSubjectManager] = useState(false);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
@@ -252,6 +254,20 @@ function App() {
       ? classrooms
       : classrooms.filter(c => c.building === selectedBuilding);
 
+    if (selectedTypes.length > 0) {
+      list = list.filter(c => selectedTypes.includes(c.type));
+    }
+
+    if (selectedEquipment.length > 0) {
+      list = list.filter(c =>
+        selectedEquipment.every(eq => {
+          if (eq === 'PJ') return c.equipment.some(e => e === 'PJ(中)' || e === 'PJ(横)');
+          if (eq === '可動') return c.isMovable;
+          return c.equipment.includes(eq);
+        })
+      );
+    }
+
     // BUILDINGS の順序でソート
     return [...list].sort((a, b) => {
       const indexA = BUILDINGS.indexOf(a.building as any);
@@ -262,7 +278,7 @@ function App() {
       if (indexA !== indexB) return indexA - indexB;
       return a.name.localeCompare(b.name);
     });
-  }, [classrooms, selectedBuilding]);
+  }, [classrooms, selectedBuilding, selectedTypes, selectedEquipment]);
 
   const handleClassroomUpdate = (updated: Classroom[]) => {
     const roomIds = new Set(updated.map(r => r.id));
@@ -594,19 +610,20 @@ function App() {
           {/* Grid Control Bar (Day & Building) */}
           <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
             {/* Day Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid #646cff' }}>
               {
-                DAYS.map(d => (
+                DAYS.map((d, i) => (
                   <button
                     key={d}
                     onClick={() => setCurrentDay(d)}
                     style={{
-                      padding: '12px 25px', border: 'none',
-                      background: currentDay === d ? '#fff' : 'transparent',
-                      borderBottom: currentDay === d ? '3px solid #646cff' : 'none',
-                      color: currentDay === d ? '#646cff' : '#666',
+                      padding: '10px 20px', border: 'none',
+                      borderRight: i < DAYS.length - 1 ? '1px solid #d0d0d0' : 'none',
+                      background: currentDay === d ? '#646cff' : (i % 2 === 0 ? '#f5f5f5' : '#efefef'),
+                      color: currentDay === d ? '#fff' : '#555',
                       fontWeight: currentDay === d ? 'bold' : 'normal',
-                      cursor: 'pointer', fontSize: '0.95em'
+                      cursor: 'pointer', fontSize: '0.92em',
+                      transition: 'background 0.15s'
                     }}
                   >
                     {(() => {
@@ -620,28 +637,18 @@ function App() {
             </div>
 
             {/* Building Selection & Extra Options */}
-            < div style={{ display: 'flex', gap: '20px', padding: '10px 20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85em', color: '#666', fontWeight: 'bold' }}>建物：</span>
+            <div style={{ padding: '8px 20px', borderBottom: '1px solid #eee', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.82em', color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>建物：</span>
                 {buildings.map(b => (
                   <button
                     key={b}
                     onClick={() => setSelectedBuilding(b)}
                     style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0 12px',
-                      height: '30px',
-                      minWidth: '60px',
-                      borderRadius: '15px',
-                      border: '1px solid #ddd',
+                      padding: '3px 12px', borderRadius: '12px', border: '1px solid #ddd',
                       background: selectedBuilding === b ? '#646cff' : '#fff',
                       color: selectedBuilding === b ? '#fff' : '#333',
-                      fontSize: '0.85em',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      whiteSpace: 'nowrap'
+                      fontSize: '0.82em', cursor: 'pointer', whiteSpace: 'nowrap'
                     }}
                   >
                     {b === 'all' ? 'すべて' : b}
@@ -654,6 +661,57 @@ function App() {
                   6・7講時を表示
                 </label>
               </div>
+            </div>
+
+            {/* Type & Equipment Filter */}
+            <div style={{ padding: '6px 20px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
+              {/* タイプ */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>タイプ：</span>
+                {[{ id: 'normal', label: '一般' }, { id: 'seminar', label: 'ゼミ' }, { id: 'pc', label: 'PC' }].map(t => (
+                  <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.includes(t.id)}
+                      onChange={e => setSelectedTypes(prev =>
+                        e.target.checked ? [...prev, t.id] : prev.filter(x => x !== t.id)
+                      )}
+                    />
+                    {t.label}
+                  </label>
+                ))}
+              </div>
+              <div style={{ width: '1px', height: '18px', background: '#ddd', flexShrink: 0 }} />
+              {/* 設備 */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>設備：</span>
+                {[
+                  { id: 'PJ', label: 'PJ(中/横)' },
+                  { id: '可動', label: '可動' },
+                  { id: '黒板', label: '黒板' },
+                  { id: '白板', label: '白板' },
+                  { id: 'マイク', label: 'マイク' },
+                ].map(eq => (
+                  <label key={eq.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedEquipment.includes(eq.id)}
+                      onChange={e => setSelectedEquipment(prev =>
+                        e.target.checked ? [...prev, eq.id] : prev.filter(x => x !== eq.id)
+                      )}
+                    />
+                    {eq.label}
+                  </label>
+                ))}
+              </div>
+              {(selectedTypes.length > 0 || selectedEquipment.length > 0) && (
+                <button
+                  onClick={() => { setSelectedTypes([]); setSelectedEquipment([]); }}
+                  style={{ marginLeft: 'auto', padding: '2px 8px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff', color: '#666', cursor: 'pointer', fontSize: '0.85em' }}
+                >
+                  絞込解除
+                </button>
+              )}
             </div>
           </div>
 

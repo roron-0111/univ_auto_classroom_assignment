@@ -108,8 +108,10 @@ export const TimeTableGrid = ({
                     </span>
                 </div>
                 {displayConfig.showSubInfo && (
-                    <div style={{ fontSize: '0.7rem', color: '#666', overflow: 'hidden', overflowWrap: 'anywhere', marginTop: '2px', paddingBottom: '6px' }}>
-                        {displayConfig.subjectMainDisplay === 'name' ? `${subject.teacher} (${subject.faculty})` : subject.name}
+                    <div style={{ fontSize: '0.7rem', color: '#666', overflow: 'hidden', overflowWrap: 'anywhere', marginTop: '2px', paddingBottom: '2px' }}>
+                        {displayConfig.subjectMainDisplay === 'name'
+                            ? `${subject.teacher}${subject.faculty ? ` (開講:${subject.faculty})` : ''}`
+                            : subject.name}
                     </div>
                 )}
 
@@ -121,12 +123,13 @@ export const TimeTableGrid = ({
                     const movOk = !room || !subject.requiresMovable || room.isMovable;
                     const eqMatch = (req: string) => !room || (() => {
                         if (req === 'PJ(横)' || req === 'PJ(中)') return room.equipment.some(e => e === 'PJ(横)' || e === 'PJ(中)');
+                        if (req === '可動') return room.isMovable;
                         return room.equipment.some(e => e === req || e.includes(req) || req.includes(e));
                     })();
                     const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
 
                     return (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '12px', marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '2px', marginBottom: '4px' }}>
                             {/* 希望教室タイプ（不一致: 橙ベタ） */}
                             {subject.preferredRoomType && (
                                 <span style={{

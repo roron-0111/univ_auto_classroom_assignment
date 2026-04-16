@@ -167,9 +167,8 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <label style={{ fontWeight: 'bold', color: '#555' }}>教室機材・設備要件</label>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
-                                {/* プロジェクターと可動机椅子を含めた全機材を表示 */}
-                                {['PJ', '可動', ...availableEquipment.filter(eq => eq !== 'PJ' && eq !== '可動' && eq !== '可動式' && eq !== '固定' && eq !== '固定式')].map(eq => {
-                                    const isRequired = form.requiredEquipment?.includes(eq) || (eq === 'PJ' && form.requiresProjector) || (eq === '可動' && form.requiresMovable);
+                                {availableEquipment.filter(eq => eq !== '固定' && eq !== '固定式' && eq !== '可動式').map(eq => {
+                                    const isRequired = form.requiredEquipment?.includes(eq) || (eq === '可動' && form.requiresMovable);
                                     const isMandatory = form.mandatoryEquipment?.includes(eq);
                                     const style = getEquipmentStyle(eq);
 
@@ -195,7 +194,6 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
 
                                                         // 既存フラグとの同期
                                                         const updates: any = { requiredEquipment: nextRequired };
-                                                        if (eq === 'PJ') updates.requiresProjector = checked;
                                                         if (eq === '可動') updates.requiresMovable = checked;
 
                                                         // 必須がONで希望をOFFにした場合、必須もOFFにする

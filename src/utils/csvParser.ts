@@ -37,7 +37,8 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                         'ID', 'Name', '教室名', '名前', 'Building', '建物', '学舎',
                         'Capacity', '収容人数', '定員', 'ExamCapacity', '試験時定員',
                         'Type', '教室タイプ',
-                        'IsMovable', '可動', '机椅子', 'スクリーン', '電子黒板', '可動式', '固定式'
+                        'IsMovable', '可動', '机椅子', 'スクリーン', '電子黒板', '可動式', '固定式',
+                        'IsExcluded', '配当対象外'
                     ];
                     const equipment: string[] = [];
                     Object.keys(row).forEach(k => {
@@ -68,6 +69,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                         examCapacity: examCap,
                         type,
                         isMovable,
+                        isExcluded: isTrue(getVal(['IsExcluded', '配当対象外'])),
                         equipment: [
                             ...equipment,
                             ...(row.Equipment ? row.Equipment.split(';').map((s: string) => s.trim()).filter(Boolean) : [])

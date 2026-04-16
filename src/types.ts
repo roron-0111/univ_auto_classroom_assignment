@@ -274,11 +274,10 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     }
 ];
 
-// 画像に基づく機材リスト
+// 機材リスト（標準）
 export const EQUIPMENT_LIST = [
-    'BD', 'PC', 'PJ(中)', 'PJ(横)', 'TV', 'カーテン',
-    'タッチディスプレイ', 'ブラインド', 'マイク', 'モニター',
-    '可動', '固定', '天井モニター', '白板', '黒板'
+    'PJ(中)', 'PJ(横)', 'タッチディスプレイ', 'PC', 'BD',
+    'マイク', '黒板', '白板', '可動', '固定', 'ブラインド'
 ];
 
 export const DEFAULT_EQUIPMENT_SETTINGS = {
