@@ -43,8 +43,10 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
         });
     }, [classrooms, sortConfig]);
 
-    const handleMove = (index: number, direction: 'up' | 'down') => {
+    const handleMove = (roomId: string, direction: 'up' | 'down') => {
         const newClassrooms = [...classrooms];
+        const index = newClassrooms.findIndex(r => r.id === roomId);
+        if (index === -1) return;
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newClassrooms.length) return;
 
@@ -165,7 +167,23 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                 }}>
                                     <Upload size={18} /> CSVインポート
                                 </button>
-                                <button onClick={() => exportToCSV(classrooms, 'classrooms_export.csv')} style={{
+                                <button onClick={() => {
+                                    const exportData = classrooms.map(r => {
+                                        const base: Record<string, any> = {
+                                            'ID': r.id,
+                                            '教室名': r.name,
+                                            '建物': r.building,
+                                            '収容人数': r.capacity,
+                                            '試験時定員': r.examCapacity ?? '',
+                                            '教室タイプ': ROOM_TYPE_LABELS[r.type],
+                                            '可動': r.isMovable ? '○' : '',
+                                            '配当対象外': r.isExcluded ? '○' : '',
+                                        };
+                                        r.equipment.forEach(eq => { base[eq] = '○'; });
+                                        return base;
+                                    });
+                                    exportToCSV(exportData, 'classrooms_export.csv');
+                                }} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#1976d2', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
                                     <Download size={18} /> CSVエクスポート
@@ -264,14 +282,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                                                 <button
-                                                    onClick={() => handleMove(index, 'up')}
+                                                    onClick={() => handleMove(room.id, 'up')}
                                                     disabled={index === 0}
                                                     style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', color: index === 0 ? '#eee' : '#666', padding: 0 }}
                                                 >
                                                     <ArrowUp size={14} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleMove(index, 'down')}
+                                                    onClick={() => handleMove(room.id, 'down')}
                                                     disabled={index === classrooms.length - 1}
                                                     style={{ background: 'none', border: 'none', cursor: index === classrooms.length - 1 ? 'default' : 'pointer', color: index === classrooms.length - 1 ? '#eee' : '#666', padding: 0 }}
                                                 >

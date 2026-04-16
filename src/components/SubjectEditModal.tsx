@@ -31,7 +31,16 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
             alert('時間割コードと時間割名称を入力してください。');
             return;
         }
-        onSave(form);
+        // endPeriod が period より小さい場合は補正
+        const saved = { ...form };
+        if (saved.endPeriod && saved.endPeriod < saved.period) {
+            saved.endPeriod = saved.period;
+        }
+        // endPeriod が period と同じなら省略（単一講時）
+        if (saved.endPeriod === saved.period) {
+            saved.endPeriod = undefined;
+        }
+        onSave(saved);
     };
 
     return (

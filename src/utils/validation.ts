@@ -38,6 +38,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
     // 4. Mandatory Equipment (Essential)
     if (subject.mandatoryEquipment && subject.mandatoryEquipment.length > 0) {
         const missingMandatory = subject.mandatoryEquipment.filter(req => {
+            if (req === '可動') return !room.isMovable;
             if (req === 'PJ(横)' || req === 'PJ(中)') {
                 return !room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
             }
@@ -57,6 +58,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
     // 1. Desired Equipment (Score bonus)
     if (subject.requiredEquipment && subject.requiredEquipment.length > 0) {
         const missingDesired = subject.requiredEquipment.filter(req => {
+            if (req === '可動') return !room.isMovable;
             if (req === 'PJ(横)' || req === 'PJ(中)') {
                 return !room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
             }
@@ -80,7 +82,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
         });
     }
 
-    // 2. Building Preference
+    // 3. Building Preference
     if (subject.buildingPreference && subject.buildingPreference !== room.building) {
         violations.push({
             type: 'warning',

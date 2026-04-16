@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Cloud, LogIn, LogOut } from 'lucide-react';
 import type { User } from 'firebase/auth';
+import { CAMPUSES } from '../types';
 
 interface CloudConnectionModalProps {
     onClose: () => void;
@@ -9,12 +10,6 @@ interface CloudConnectionModalProps {
     isConnecting: boolean;
     user: User | null;
 }
-
-const CAMPUSES = [
-    { id: 'hakkei', name: '八景' },
-    { id: 'kannnai', name: '関内' },
-    { id: 'muronoki', name: '室の木' }
-];
 
 export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
     onClose,

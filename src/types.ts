@@ -82,6 +82,9 @@ export interface Subject {
     // その他
     buildingPreference?: string; // 希望学舎
     requiredRoomCount: number; // 必要教室数
+
+    // 内部用（複数室配当スロット展開時に元のIDを保持）
+    _realId?: string;
 }
 
 export interface Allocation {
@@ -117,6 +120,12 @@ export type Department = typeof DEPARTMENTS[number];
 
 export const BUILDINGS = ['フォーサイト', '3号館', '7号館', '8号館', 'SCC'] as const;
 export type Building = typeof BUILDINGS[number];
+
+export const CAMPUSES = [
+    { id: 'hakkei', name: '八景' },
+    { id: 'kannnai', name: '関内' },
+    { id: 'muronoki', name: '室の木' }
+] as const;
 
 // 割り当て結果の全体像
 export interface Schedule {

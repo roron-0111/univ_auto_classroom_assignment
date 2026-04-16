@@ -269,7 +269,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
 
                         {/* 注意書き (移動分) */}
                         <div style={{ marginTop: '10px', padding: '10px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.rem' }}>⚠️</span>
+                            <span style={{ fontSize: '1rem' }}>⚠️</span>
                             <span><strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。</span>
                         </div>
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule } from './types';
-import { BUILDINGS, DAY_LABELS } from './types';
+import { BUILDINGS, DAY_LABELS, CAMPUSES } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList } from './components/UnassignedList';
@@ -29,12 +29,6 @@ import {
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-
-const CAMPUSES = [
-  { id: 'hakkei', name: '八景' },
-  { id: 'kannnai', name: '関内' },
-  { id: 'muronoki', name: '室の木' }
-];
 
 function App() {
   // Auth & Cloud Sync
@@ -170,6 +164,10 @@ function App() {
   }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, orderBonuses, saveData]);
 
 
+  // クラウドデータの旧フォーマット（フラット構造）を新フォーマットに移行
+  const migrateEquipmentSettings = (s: any) =>
+    s && typeof s === 'object' && 'items' in s ? s : { items: s || {}, strictLevel5: false };
+
   const handleCloudConnect = async (email: string) => {
     try {
       setIsCloudLoading(true);
@@ -183,9 +181,9 @@ function App() {
           setClassrooms(cloudData.classrooms);
           setSubjects(cloudData.subjects);
           setAllocations(cloudData.allocations);
-          setAllocationSettings(cloudData.settings || []);
-          setOrderBonuses(cloudData.orderBonuses || []);
-          setEquipmentSettings(cloudData.equipmentSettings || { items: {}, strictLevel5: false });
+          setAllocationSettings(cloudData.settings?.length ? cloudData.settings : DEFAULT_ALLOCATION_RULES);
+          setOrderBonuses(cloudData.orderBonuses?.length ? cloudData.orderBonuses : DEFAULT_ORDER_BONUSES);
+          setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
 
           alert('クラウドデータをロードしました。');
           setShowCloudModal(false);
@@ -288,7 +286,12 @@ function App() {
         const oldSub = subjects.find(s => s.id === a.subjectId);
         const newSub = updated.find(s => s.id === a.subjectId);
         if (oldSub && newSub) {
-          if (oldSub.term !== newSub.term || oldSub.day !== newSub.day || oldSub.period !== newSub.period) {
+          if (
+            oldSub.term !== newSub.term ||
+            oldSub.day !== newSub.day ||
+            oldSub.period !== newSub.period ||
+            (oldSub.endPeriod ?? oldSub.period) !== (newSub.endPeriod ?? newSub.period)
+          ) {
             return false;
           }
         }
@@ -327,8 +330,13 @@ function App() {
     if (!subject) return;
 
     // 学期（春・秋）の不一致のみをチェック（通年科目は両方可）
-    if (subject.term !== 'full_year' && subject.term !== term) {
-      alert(`${subject.term === 'spring' ? '春' : '秋'}学期の授業です。${term === 'spring' ? '春' : '秋'}行には配置できません。`);
+    // spring_first/spring_second は春行(term='spring')、autumn_first/second は秋行(term='autumn') に対応
+    const springTerms = ['spring', 'spring_first', 'spring_second'];
+    const autumnTerms = ['autumn', 'autumn_first', 'autumn_second'];
+    const subjectSeason = springTerms.includes(subject.term) ? 'spring' : (autumnTerms.includes(subject.term) ? 'autumn' : null);
+    if (subjectSeason !== null && subjectSeason !== term) {
+      const termLabel = springTerms.includes(subject.term) ? '春学期' : '秋学期';
+      alert(`${termLabel}の授業です。${term === 'spring' ? '春' : '秋'}行には配置できません。`);
       return;
     }
 
@@ -475,7 +483,7 @@ function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Calendar size={20} color="#646cff" />
-          <h1 style={{ fontSize: '1.2rem', margin: 0, letterSpacing: '0.5px' }}>教室自動調整</h1>
+          <h1 style={{ fontSize: '1.2rem', margin: 0, letterSpacing: '0.5px' }}>教室配当調整</h1>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -515,9 +523,9 @@ function App() {
                       if (data.classrooms) setClassrooms(data.classrooms);
                       if (data.subjects) setSubjects(data.subjects);
                       if (data.allocations) setAllocations(data.allocations);
-                      if (data.settings) setAllocationSettings(data.settings);
-                      if (data.equipmentSettings) setEquipmentSettings(data.equipmentSettings);
-                      if (data.orderBonuses) setOrderBonuses(data.orderBonuses);
+                      if (data.settings?.length) setAllocationSettings(data.settings);
+                      if (data.equipmentSettings) setEquipmentSettings(migrateEquipmentSettings(data.equipmentSettings));
+                      if (data.orderBonuses?.length) setOrderBonuses(data.orderBonuses);
                       alert('最新のデータを取得しました');
                     } else {
                       alert('保存されたデータが見つかりませんでした');
@@ -602,8 +610,9 @@ function App() {
                     }}
                   >
                     {(() => {
-                      const count = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
-                      return `${DAY_LABELS[d]}曜日${count > 0 ? ` (${count})` : ''}`;
+                      const total = subjects.filter(s => s.day === d).length;
+                      const allocated = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
+                      return `${DAY_LABELS[d]}曜日${total > 0 ? ` (${allocated}/${total})` : ''}`;
                     })()}
                   </button>
                 ))
@@ -711,11 +720,21 @@ function App() {
                 <div style={{ marginBottom: '10px', color: '#666', fontSize: '0.9em' }}>
                   {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}限 ({pickingCell.term === 'spring' ? '春' : '秋'})
                 </div>
-                {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').length === 0 ? (
+                {displayedUnassigned.filter(s => {
+                    const springGroup = ['spring', 'spring_first', 'spring_second'];
+                    const autumnGroup = ['autumn', 'autumn_first', 'autumn_second'];
+                    const matchGroup = pickingCell.term === 'spring' ? springGroup : autumnGroup;
+                    return matchGroup.includes(s.term) || s.term === 'full_year';
+                  }).length === 0 ? (
                   <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未配当授業はありません。</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {displayedUnassigned.filter(s => s.term === pickingCell.term || s.term === 'full_year').map(s => (
+                    {displayedUnassigned.filter(s => {
+                    const springGroup = ['spring', 'spring_first', 'spring_second'];
+                    const autumnGroup = ['autumn', 'autumn_first', 'autumn_second'];
+                    const matchGroup = pickingCell.term === 'spring' ? springGroup : autumnGroup;
+                    return matchGroup.includes(s.term) || s.term === 'full_year';
+                  }).map(s => (
                       <button
                         key={s.id}
                         onClick={() => handleQuickAssign(s.id)}

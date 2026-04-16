@@ -1,3 +1,5 @@
+import type { Subject, Classroom, Allocation, AllocationRule, AllocationSettings } from './types';
+
 export interface CloudProject {
     id: string; // プロジェクトID（ユーザー指定）
     passcode: string; // パスコード
@@ -6,10 +8,10 @@ export interface CloudProject {
 }
 
 export interface CloudData {
-    subjects: any[];
-    classrooms: any[];
-    allocations: any[];
-    settings: any; // allocationSettings
-    equipmentSettings: any;
-    orderBonuses: any[];
+    subjects: Subject[];
+    classrooms: Classroom[];
+    allocations: Allocation[];
+    settings: AllocationRule[];
+    equipmentSettings: AllocationSettings['equipmentSettings'];
+    orderBonuses: number[];
 }

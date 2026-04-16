@@ -89,7 +89,19 @@ export const runAutoAllocation = (
                 // 3. 基本的な収容人数
                 if (room.capacity < subject.requiredCapacity) continue;
 
-                // 4. 機材要件 (Strict Level 5)
+                // 4. 必須機材（mandatoryEquipment）の hard constraint
+                if (subject.mandatoryEquipment && subject.mandatoryEquipment.length > 0) {
+                    const missingMandatory = subject.mandatoryEquipment.some(req => {
+                        if (req === '可動') return !room.isMovable;
+                        if (req === 'PJ(横)' || req === 'PJ(中)') {
+                            return !room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
+                        }
+                        return !room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
+                    });
+                    if (missingMandatory) continue;
+                }
+
+                // 5. 機材要件 (Strict Level 5)
                 if (isEnabled('equipment') && equipmentSettings?.strictLevel5) {
                     const requiredItems = subject.requiredEquipment || [];
                     const allRequired = new Set(requiredItems);
@@ -193,11 +205,11 @@ export const runAutoAllocation = (
                 // 同一教員連続授業 (同じ建物・同じ教室)
                 if (isEnabled('teacher_continuity')) {
                     const weight = getScore('teacher_continuity');
-                    // 直前の講時で同じ先生がどこにいるか探す
+                    // 直前の講時で同じ先生がどこにいるか探す（連続講時の endPeriod も考慮）
                     const prevSubj = subjects.find(s =>
                         s.teacher === subject.teacher &&
                         s.day === subject.day &&
-                        s.period === subject.period - 1 &&
+                        (s.endPeriod || s.period) === subject.period - 1 &&
                         s.term === subject.term
                     );
                     if (prevSubj) {
@@ -261,7 +273,12 @@ export const runAutoAllocation = (
                 // 春秋同一配当
                 if (isEnabled('term_consistency')) {
                     const weight = getScore('term_consistency');
-                    const oppositeTerm = subject.term === 'spring' ? 'autumn' : (subject.term === 'autumn' ? 'spring' : null);
+                    const termOpposites: Partial<Record<string, string>> = {
+                        spring: 'autumn', autumn: 'spring',
+                        spring_first: 'autumn_first', autumn_first: 'spring_first',
+                        spring_second: 'autumn_second', autumn_second: 'spring_second',
+                    };
+                    const oppositeTerm = termOpposites[subject.term] ?? null;
                     if (oppositeTerm) {
                         const partner = subjects.find(s =>
                             s.teacher === subject.teacher &&
@@ -286,20 +303,22 @@ export const runAutoAllocation = (
                     }
                 }
 
-                // 前半・後半スタッキングボーナス
+                // 前半・後半スタッキングボーナス（term_consistency が有効な場合のみ）
                 // 春学期前半と後半（または秋）は時間的に重ならないため同室配当を優先
-                const complementary = getComplementaryTerm(subject.term);
-                if (complementary) {
-                    const hasComplement = newAllocations.some(a => {
-                        const s = subjects.find(sub => sub.id === a.subjectId);
-                        if (!s || s.term !== complementary || s.day !== subject.day || a.classroomId !== room.id) return false;
-                        const sStart = s.period;
-                        const sEnd = s.endPeriod || s.period;
-                        const tStart = subject.period;
-                        const tEnd = subject.endPeriod || subject.period;
-                        return sStart <= tEnd && tStart <= sEnd; // 期間が重なる（講時帯が同じ）
-                    });
-                    if (hasComplement) score += 60; // 同室スタック強ボーナス
+                if (isEnabled('term_consistency')) {
+                    const complementary = getComplementaryTerm(subject.term);
+                    if (complementary) {
+                        const hasComplement = newAllocations.some(a => {
+                            const s = subjects.find(sub => sub.id === a.subjectId);
+                            if (!s || s.term !== complementary || s.day !== subject.day || a.classroomId !== room.id) return false;
+                            const sStart = s.period;
+                            const sEnd = s.endPeriod || s.period;
+                            const tStart = subject.period;
+                            const tEnd = subject.endPeriod || subject.period;
+                            return sStart <= tEnd && tStart <= sEnd; // 期間が重なる（講時帯が同じ）
+                        });
+                        if (hasComplement) score += 60; // 同室スタック強ボーナス
+                    }
                 }
 
                 if (score > bestScore) {

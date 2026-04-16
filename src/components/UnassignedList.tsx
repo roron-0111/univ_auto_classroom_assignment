@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Subject, Term, DayOfWeek, Allocation } from '../types';
-import { DAY_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, ROOM_TYPE_LABELS } from '../types';
+import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, ROOM_TYPE_LABELS } from '../types';
 import { Users } from 'lucide-react';
 
 interface Props {
@@ -196,14 +196,18 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                             label="すべての学期"
                             options={[
                                 { value: 'spring', label: '春学期' },
+                                { value: 'spring_first', label: '春前半' },
+                                { value: 'spring_second', label: '春後半' },
                                 { value: 'autumn', label: '秋学期' },
+                                { value: 'autumn_first', label: '秋前半' },
+                                { value: 'autumn_second', label: '秋後半' },
                                 { value: 'full_year', label: '通年' }
                             ]}
                             selected={selectedTerms}
                             onToggle={(val: Term) => toggleFilter(selectedTerms, setSelectedTerms, val)}
                             isOpen={isTermOpen}
                             setIsOpen={setIsTermOpen}
-                            getLabel={(val: Term) => val === 'spring' ? '春学期' : val === 'autumn' ? '秋学期' : '通年'}
+                            getLabel={(val: Term) => TERM_LABELS[val] || val}
                         />
                         <FilterDropdown
                             label="すべての曜日"
@@ -280,7 +284,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                                 {subject.teacher} ({subject.faculty})
                             </div>
                             <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                                {subject.term === 'spring' ? '春' : subject.term === 'autumn' ? '秋' : '通年'} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}講時
+                                {TERM_LABELS[subject.term]} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}講時
                             </div>
 
                             {/* タグ一覧 (希望タイプ・機材) */}
@@ -347,7 +351,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                                 <span style={{ fontSize: '0.85em', fontWeight: 'bold', color: '#666' }}>{subject.department}</span>
                                 {/* 複数教室が必要な場合の配当状況表示 */}
                                 {(() => {
-                                    const realId = (subject as any)._realId || subject.id;
+                                    const realId = subject._realId || subject.id;
                                     const requiredCount = subject.requiredRoomCount || 1;
                                     const currentCount = allocations.filter(a => a.subjectId === realId).length;
                                     // 必要数に関わらず表示（ユーザー要望：配当していないときにも何教室必要なのかわかるように）
