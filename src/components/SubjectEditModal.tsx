@@ -94,8 +94,8 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>過年度教室 <span style={{ fontWeight: 'normal', color: '#999', fontSize: '0.75rem' }}>(;区切り)</span></label>
                                     <input
-                                        value={form.previousRooms?.join('; ') || ''}
-                                        onChange={e => setForm({ ...form, previousRooms: e.target.value.split(';').map(s => s.trim()).filter(Boolean) })}
+                                        value={form.previousRooms?.join(', ') || ''}
+                                        onChange={e => setForm({ ...form, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                                         style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
                                         placeholder="例: 3-201; 7-107"
                                     />

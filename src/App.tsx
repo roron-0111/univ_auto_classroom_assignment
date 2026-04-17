@@ -609,18 +609,9 @@ function App() {
           {/* Grid Control Bar (Day & Building) */}
           <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
             {/* Day Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #ddd' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #ddd', background: '#f0f0f0' }}>
               {
                 DAYS.map((d, i) => {
-                  const DAY_ACCENTS: Record<string, { active: string; bg: string; accent: string }> = {
-                    mon: { active: '#e3f2fd', bg: '#f8fbff', accent: '#1976d2' },
-                    tue: { active: '#ffebee', bg: '#fff8f8', accent: '#c62828' },
-                    wed: { active: '#e8f5e9', bg: '#f6fbf6', accent: '#2e7d32' },
-                    thu: { active: '#fff8e1', bg: '#fffcf0', accent: '#ef6c00' },
-                    fri: { active: '#f3e5f5', bg: '#faf4fc', accent: '#6a1b9a' },
-                    sat: { active: '#fce4ec', bg: '#fff5f8', accent: '#c2185b' },
-                  };
-                  const c = DAY_ACCENTS[d] ?? { active: '#e8eaf6', bg: '#fafafa', accent: '#3949ab' };
                   const isActive = currentDay === d;
                   return (
                     <button
@@ -628,14 +619,13 @@ function App() {
                       onClick={() => setCurrentDay(d)}
                       style={{
                         padding: '10px 20px', border: 'none',
-                        borderRight: i < DAYS.length - 1 ? `1px solid ${isActive ? c.accent + '44' : '#d0d0d0'}` : 'none',
-                        borderBottom: isActive ? `3px solid ${c.accent}` : '3px solid transparent',
-                        marginBottom: '-1px',
-                        background: isActive ? c.active : c.bg,
-                        color: isActive ? c.accent : '#666',
+                        borderRight: i < DAYS.length - 1 ? '1px solid #ccc' : 'none',
+                        background: isActive ? '#fff' : 'transparent',
+                        color: isActive ? '#333' : '#777',
                         fontWeight: isActive ? 'bold' : 'normal',
                         cursor: 'pointer', fontSize: '0.92em',
-                        transition: 'background 0.15s'
+                        transition: 'background 0.1s',
+                        boxShadow: isActive ? 'inset 0 -2px 0 #646cff' : 'none'
                       }}
                     >
                       {(() => {
@@ -647,12 +637,17 @@ function App() {
                   );
                 })
               }
+              <div style={{ flex: 1 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '0 16px', fontSize: '0.85em', color: '#666', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showExtraPeriods} onChange={e => setShowExtraPeriods(e.target.checked)} />
+                6・7講時を表示
+              </label>
             </div>
 
-            {/* Building Selection & Extra Options */}
-            <div style={{ padding: '8px 20px', borderBottom: '1px solid #eee', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.82em', color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>建物：</span>
+            {/* Building / Type / Equipment Filters - single row */}
+            <div style={{ padding: '6px 20px', borderBottom: '1px solid #eee', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>建物：</span>
                 {buildings.map(b => (
                   <button
                     key={b}
@@ -668,35 +663,21 @@ function App() {
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85em', color: '#666' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showExtraPeriods} onChange={e => setShowExtraPeriods(e.target.checked)} />
-                  6・7講時を表示
-                </label>
-              </div>
-            </div>
+              <div style={{ width: '1px', height: '18px', background: '#ddd', flexShrink: 0 }} />
 
-            {/* Type & Equipment Filter */}
-            <div style={{ padding: '6px 20px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
               {/* タイプ */}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>タイプ：</span>
                 {[{ id: 'normal', label: '一般' }, { id: 'seminar', label: 'ゼミ' }, { id: 'pc', label: 'PC' }].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTypes(prev =>
-                      prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id]
-                    )}
+                  <button key={t.id}
+                    onClick={() => setSelectedTypes(prev => prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id])}
                     style={{
                       padding: '3px 12px', borderRadius: '12px',
                       border: selectedTypes.includes(t.id) ? '1px solid #646cff' : '1px solid #ddd',
                       background: selectedTypes.includes(t.id) ? '#646cff' : '#fff',
                       color: selectedTypes.includes(t.id) ? '#fff' : '#333',
                       fontSize: '0.82em', cursor: 'pointer', whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {t.label}
-                  </button>
+                    }}>{t.label}</button>
                 ))}
               </div>
               <div style={{ width: '1px', height: '18px', background: '#ddd', flexShrink: 0 }} />
@@ -706,34 +687,27 @@ function App() {
                 {[
                   { id: 'PJ(中)', label: 'PJ(中)' },
                   { id: 'PJ(横)', label: 'PJ(横)' },
-                  { id: 'タッチディスプレイ', label: 'タッチ' },
+                  { id: 'タッチディスプレイ', label: 'タッチディスプレイ' },
+                  { id: 'BD', label: 'BD' },
                   { id: '可動', label: '可動' },
                   { id: '黒板', label: '黒板' },
                   { id: '白板', label: '白板' },
                   { id: 'マイク', label: 'マイク' },
                 ].map(eq => (
-                  <button
-                    key={eq.id}
-                    onClick={() => setSelectedEquipment(prev =>
-                      prev.includes(eq.id) ? prev.filter(x => x !== eq.id) : [...prev, eq.id]
-                    )}
+                  <button key={eq.id}
+                    onClick={() => setSelectedEquipment(prev => prev.includes(eq.id) ? prev.filter(x => x !== eq.id) : [...prev, eq.id])}
                     style={{
                       padding: '3px 12px', borderRadius: '12px',
                       border: selectedEquipment.includes(eq.id) ? '1px solid #646cff' : '1px solid #ddd',
                       background: selectedEquipment.includes(eq.id) ? '#646cff' : '#fff',
                       color: selectedEquipment.includes(eq.id) ? '#fff' : '#333',
                       fontSize: '0.82em', cursor: 'pointer', whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {eq.label}
-                  </button>
+                    }}>{eq.label}</button>
                 ))}
               </div>
               {(selectedTypes.length > 0 || selectedEquipment.length > 0) && (
-                <button
-                  onClick={() => { setSelectedTypes([]); setSelectedEquipment([]); }}
-                  style={{ marginLeft: 'auto', padding: '2px 8px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff', color: '#666', cursor: 'pointer', fontSize: '0.85em' }}
-                >
+                <button onClick={() => { setSelectedTypes([]); setSelectedEquipment([]); }}
+                  style={{ marginLeft: 'auto', padding: '2px 8px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff', color: '#666', cursor: 'pointer', fontSize: '0.85em' }}>
                   絞込解除
                 </button>
               )}

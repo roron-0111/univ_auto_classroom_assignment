@@ -16,6 +16,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
+    const [filters, setFilters] = useState({ name: '', building: '', type: '' });
     const [newEquipment, setNewEquipment] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [sortConfig, setSortConfig] = useState<{ key: keyof Classroom | 'order'; direction: 'asc' | 'desc' } | null>(null);
@@ -29,11 +30,20 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
         });
     };
 
+    const filteredClassrooms = useMemo(() => {
+        return classrooms.filter(r => {
+            if (filters.name && !r.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
+            if (filters.building && r.building !== filters.building) return false;
+            if (filters.type && r.type !== filters.type) return false;
+            return true;
+        });
+    }, [classrooms, filters]);
+
     const sortedClassrooms = useMemo(() => {
-        if (!sortConfig) return classrooms;
-        return [...classrooms].sort((a, b) => {
+        if (!sortConfig) return filteredClassrooms;
+        return [...filteredClassrooms].sort((a, b) => {
             const { key, direction } = sortConfig;
-            if (key === 'order') return 0; // 手動並び替え時はソート無効
+            if (key === 'order') return 0;
 
             const aVal = a[key] ?? '';
             const bVal = b[key] ?? '';
@@ -42,7 +52,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
             if (aVal > bVal) return direction === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [classrooms, sortConfig]);
+    }, [filteredClassrooms, sortConfig]);
 
     const handleMove = (roomId: string, direction: 'up' | 'down') => {
         const newClassrooms = [...classrooms];
@@ -151,9 +161,10 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                 }}><X /></button>
             </header>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: '30px' }}>
+            {/* 固定ヘッダーエリア（スクロール外） */}
+            <div style={{ flexShrink: 0, padding: '20px 30px 12px', borderBottom: '1px solid #eee' }}>
                 <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'flex-end' }}>
                         <div>
                             <p style={{ color: '#666', margin: '0 0 10px 0' }}>教室情報の編集、削除、一括インポートが行えます。</p>
                             <div style={{ display: 'flex', gap: '10px' }}>
@@ -193,32 +204,60 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                         </div>
                     </div>
 
-                    <div style={{ marginBottom: '20px', padding: '12px 15px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '1.1rem' }}>⚠️</span>
-                        <strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。
+                    <div style={{ padding: '8px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>⚠️</span>
+                        <strong>※注意:</strong> 配当対象外の教室には自動配当時に科目が配当されません。
                     </div>
-
+                </div>
+            </div>
+            {/* スクロールエリア（テーブルのみ） */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+                <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 30px 20px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.9em' }}>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                            <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer' }} onClick={() => handleSort('order')}>順</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px', cursor: 'pointer' }} onClick={() => handleSort('id')}>ID</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '120px', cursor: 'pointer' }} onClick={() => handleSort('name')}>教室名</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer' }} onClick={() => handleSort('building')}>建物</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer' }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('type')}>タイプ</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd' }}>機材・設備</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px' }}>
+                        <thead>
+                            <tr style={{ textAlign: 'left' }}>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('order')}>順</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('id')}>ID</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '120px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('name')}>教室名</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '110px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>操作</span>
-                                        <button
-                                            onClick={handleDeleteAll}
-                                            style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                                            title="全件削除"
-                                        >全削除</button>
                                     </div>
                                 </th>
+                            </tr>
+                            {/* 検索行 */}
+                            <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
+                                        value={filters.name} onChange={e => setFilters(f => ({ ...f, name: e.target.value }))} placeholder="検索..." />
+                                </td>
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <select style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px' }}
+                                        value={filters.building} onChange={e => setFilters(f => ({ ...f, building: e.target.value }))}>
+                                        <option value="">全て</option>
+                                        {BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
+                                    </select>
+                                </td>
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <select style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px' }}
+                                        value={filters.type} onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}>
+                                        <option value="">全て</option>
+                                        {Object.entries(ROOM_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                                    </select>
+                                </td>
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa', textAlign: 'center' }}>
+                                    <button onClick={handleDeleteAll} style={{ fontSize: '0.7rem', padding: '2px 8px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>全削除</button>
+                                </td>
                             </tr>
                         </thead>
                         <tbody>

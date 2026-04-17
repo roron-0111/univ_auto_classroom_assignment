@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Classroom } from '../types';
-import { ROOM_TYPE_LABELS, getEquipmentStyle, BUILDINGS } from '../types';
+import { ROOM_TYPE_LABELS, getEquipmentStyle, BUILDINGS, EQUIPMENT_LIST } from '../types';
 import { X, Check } from 'lucide-react';
 
 interface Props {
@@ -11,7 +11,6 @@ interface Props {
 
 export const ClassroomEditModal = ({ classroom, onSave, onClose }: Props) => {
     const [form, setForm] = useState<Classroom>({ ...classroom });
-    const [newEquipment, setNewEquipment] = useState('');
 
     useEffect(() => {
         setForm({ ...classroom });
@@ -22,17 +21,13 @@ export const ClassroomEditModal = ({ classroom, onSave, onClose }: Props) => {
         onSave(form);
     };
 
-    const addEq = () => {
-        if (!newEquipment.trim()) return;
-        const currentEq = form.equipment || [];
-        if (!currentEq.includes(newEquipment.trim())) {
-            setForm({ ...form, equipment: [...currentEq, newEquipment.trim()] });
+    const toggleEq = (name: string) => {
+        const current = form.equipment || [];
+        if (current.includes(name)) {
+            setForm({ ...form, equipment: current.filter(e => e !== name) });
+        } else {
+            setForm({ ...form, equipment: [...current, name] });
         }
-        setNewEquipment('');
-    };
-
-    const removeEq = (name: string) => {
-        setForm({ ...form, equipment: (form.equipment || []).filter(e => e !== name) });
     };
 
     return (
@@ -94,28 +89,24 @@ export const ClassroomEditModal = ({ classroom, onSave, onClose }: Props) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <label style={{ fontWeight: 'bold', color: '#555' }}>機材・設備</label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' }}>
-                            {form.equipment.map(eq => {
-                                const style = getEquipmentStyle(eq);
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {EQUIPMENT_LIST.map(eq => {
+                                const has = (form.equipment || []).includes(eq);
+                                const s = getEquipmentStyle(eq);
                                 return (
-                                    <span key={eq} style={{
-                                        background: style.bg, color: style.text, border: `1px solid ${style.border}`,
-                                        padding: '2px 10px', borderRadius: '15px', fontSize: '0.8em', display: 'flex', alignItems: 'center', gap: '4px'
+                                    <label key={eq} style={{
+                                        display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                                        padding: '3px 10px', borderRadius: '15px', fontSize: '0.82em',
+                                        background: has ? s.bg : '#f5f5f5',
+                                        color: has ? s.text : '#999',
+                                        border: `1px solid ${has ? s.border : '#e0e0e0'}`,
+                                        fontWeight: has ? 'bold' : 'normal'
                                     }}>
-                                        {eq} <X size={12} onClick={() => removeEq(eq)} style={{ cursor: 'pointer' }} />
-                                    </span>
+                                        <input type="checkbox" checked={has} onChange={() => toggleEq(eq)} style={{ display: 'none' }} />
+                                        {eq}
+                                    </label>
                                 );
                             })}
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                            <input
-                                value={newEquipment}
-                                onChange={e => setNewEquipment(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addEq()}
-                                placeholder="追加する機材名"
-                                style={{ flex: 1, padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                            />
-                            <button onClick={addEq} style={{ padding: '8px 15px', background: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>追加</button>
                         </div>
                     </div>
                 </div>

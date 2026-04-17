@@ -359,7 +359,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         return <span style={{ color: '#000', fontSize: '10px' }}>{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>;
     };
 
-    const thStyle = { padding: '8px', border: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' as const, background: '#f5f5f5', fontSize: '0.8rem', whiteSpace: 'nowrap' as const };
+    const thStyle = { padding: '8px', border: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' as const, background: '#f5f5f5', fontSize: '0.8rem', whiteSpace: 'nowrap' as const, position: 'sticky' as const, top: 0, zIndex: 10 };
     const filterInputStyle = { width: '100%', padding: '4px', fontSize: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' as const };
 
     return (
@@ -380,9 +380,10 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                 }}><X /></button>
             </header>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: '30px' }}>
+            {/* 固定ヘッダーエリア（スクロール外） */}
+            <div style={{ flexShrink: 0, padding: '16px 30px 12px', borderBottom: '1px solid #eee' }}>
                 <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap', gap: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
                         <div>
                             <p style={{ color: '#666', margin: '0 0 10px 0' }}>授業情報の編集、削除、一括インポートが行えます。</p>
                             <div style={{ display: 'flex', gap: '10px' }}>
@@ -455,9 +456,14 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                         </div>
                     </div>
 
-                    <div style={{ overflowX: 'auto', border: '1px solid #ddd', borderRadius: '4px', minHeight: '500px' }}>
+                </div>
+            </div>
+            {/* スクロールエリア（テーブルのみ） */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+                <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 30px 20px' }}>
+                    <div style={{ border: '1px solid #ddd', borderRadius: '4px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
-                            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                            <thead>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                     {[
                                         { key: 'code', label: 'コード', width: '70px' },
@@ -491,7 +497,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         </div>
                                     </th>
                                 </tr>
-                                <tr style={{ background: '#fafafa' }}>
+                                <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
                                     {[
                                         { key: 'code', type: 'text' },
                                         { key: 'name', type: 'text' },
@@ -527,7 +533,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         { key: 'previousRooms', type: 'text' },
                                         { key: 'allocatedRoom', type: 'text' },
                                     ].map((field, idx) => (
-                                        <td key={idx} style={{ padding: '4px', border: '1px solid #ddd' }}>
+                                        <td key={idx} style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                             {field.type === 'text' && (
                                                 <input
                                                     style={filterInputStyle}
@@ -554,7 +560,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                             )}
                                         </td>
                                     ))}
-                                    <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                    <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center', background: '#fafafa' }}>
                                         <button
                                             onClick={handleDeleteAll}
                                             style={{

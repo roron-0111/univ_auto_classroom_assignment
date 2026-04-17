@@ -276,8 +276,8 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
 
 // 機材リスト（標準）
 export const EQUIPMENT_LIST = [
-    'PJ(中)', 'PJ(横)', 'タッチディスプレイ', 'PC', 'BD',
-    'マイク', '黒板', '白板', '可動', '固定', 'ブラインド'
+    'PJ(中)', 'PJ(横)', 'タッチディスプレイ', 'BD', '黒板', '白板', 'マイク', 'ブラインド',
+    'PC', '可動', '固定'
 ];
 
 export const DEFAULT_EQUIPMENT_SETTINGS = {
