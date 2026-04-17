@@ -4,6 +4,7 @@ import { ROOM_TYPE_LABELS, BUILDINGS } from '../types';
 import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { parseClassroomCSV, exportToCSV } from '../utils/csvParser';
 import { getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
+import { ClassroomEditModal } from './ClassroomEditModal';
 
 interface Props {
     classrooms: Classroom[];
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
     const [newEquipment, setNewEquipment] = useState('');
@@ -62,8 +63,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     };
 
     const handleEdit = (room: Classroom) => {
-        setEditingId(room.id);
-        setEditForm({ ...room });
+        setEditingClassroom(room);
     };
 
     const handleSave = () => {
@@ -71,19 +71,19 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
             alert('教室IDと教室名を入力してください。');
             return;
         }
-
-        if (isAdding) {
-            if (classrooms.find(r => r.id === editForm.id)) {
-                alert('その教室IDは既に存在します。');
-                return;
-            }
-            onUpdate([...classrooms, editForm as Classroom]);
-            setIsAdding(false);
-        } else {
-            onUpdate(classrooms.map(r => r.id === editingId ? (editForm as Classroom) : r));
-            setEditingId(null);
+        if (classrooms.find(r => r.id === editForm.id)) {
+            alert('その教室IDは既に存在します。');
+            return;
         }
+        onUpdate([...classrooms, editForm as Classroom]);
+        setIsAdding(false);
         setEditForm({});
+    };
+
+    const handleDeleteAll = () => {
+        if (confirm('全ての教室データを削除しますか？配当もリセットされます。この操作は取り消せません。')) {
+            onUpdate([]);
+        }
     };
 
     const handleDelete = (id: string) => {
@@ -199,7 +199,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                     </div>
 
                     <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.9em' }}>
-                        <thead>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                             <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer' }} onClick={() => handleSort('order')}>順</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px', cursor: 'pointer' }} onClick={() => handleSort('id')}>ID</th>
@@ -209,15 +209,24 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('type')}>タイプ</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd' }}>機材・設備</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer' }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px' }}>操作</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>操作</span>
+                                        <button
+                                            onClick={handleDeleteAll}
+                                            style={{ fontSize: '0.7rem', padding: '2px 6px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                            title="全件削除"
+                                        >全削除</button>
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
-                            {(isAdding || editingId) && (
+                            {isAdding && (
                                 <tr style={{ background: '#f0f4ff' }}>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}></td>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                        <input disabled={!isAdding} value={editForm.id} onChange={e => setEditForm({ ...editForm, id: e.target.value })} style={{ width: '100%' }} placeholder="A101" />
+                                        <input value={editForm.id} onChange={e => setEditForm({ ...editForm, id: e.target.value })} style={{ width: '100%' }} placeholder="A101" />
                                     </td>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} />
@@ -271,14 +280,13 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <div style={{ display: 'flex', gap: '6px' }}>
                                             <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
-                                            <button onClick={() => { setEditingId(null); setIsAdding(false); setEditForm({}); }} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><X size={16} /></button>
+                                            <button onClick={() => { setIsAdding(false); setEditForm({}); }} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><X size={16} /></button>
                                         </div>
                                     </td>
                                 </tr>
                             )}
                             {sortedClassrooms.map((room, index) => (
-                                room.id !== editingId && (
-                                    <tr key={room.id} style={{ borderBottom: '1px solid #eee', background: room.isExcluded ? '#fff8f8' : 'transparent' }}>
+                                <tr key={room.id} style={{ borderBottom: '1px solid #eee', background: room.isExcluded ? '#fff8f8' : 'transparent' }}>
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                                                 <button
@@ -343,12 +351,21 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                             </div>
                                         </td>
                                     </tr>
-                                )
                             ))}
                         </tbody>
                     </table>
                 </div>
             </div>
+            {editingClassroom && (
+                <ClassroomEditModal
+                    classroom={editingClassroom}
+                    onSave={(updated) => {
+                        onUpdate(classrooms.map(r => r.id === updated.id ? updated : r));
+                        setEditingClassroom(null);
+                    }}
+                    onClose={() => setEditingClassroom(null)}
+                />
+            )}
         </div>
     );
 };

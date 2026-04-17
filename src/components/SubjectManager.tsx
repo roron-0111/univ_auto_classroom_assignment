@@ -3,6 +3,7 @@ import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '..
 import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST, ROOM_TYPE_LABELS } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
+import { SubjectEditModal } from './SubjectEditModal';
 
 function equipValue(
     eq: string,
@@ -154,10 +155,16 @@ const MultiSelectFilter = ({
 };
 
 export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, onClose }: Props) => {
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingSubjectModal, setEditingSubjectModal] = useState<Subject | null>(null);
     const [editForm, setEditForm] = useState<Partial<Subject>>({});
     const [isAdding, setIsAdding] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const availableEquipment = useMemo(() => {
+        const set = new Set<string>(EQUIPMENT_LIST);
+        classrooms.forEach(c => c.equipment.forEach(e => set.add(e)));
+        return Array.from(set);
+    }, [classrooms]);
 
     // フィルタステート（配列で保持）
     const [filters, setFilters] = useState({
@@ -200,9 +207,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     }, [subjects]);
 
     const handleEdit = (subject: Subject) => {
-        setEditingId(subject.id);
-        const { id, ...rest } = subject;
-        setEditForm({ id, ...rest }); // IDは維持、その他コピー
+        setEditingSubjectModal(subject);
     };
 
     // フィルタリング処理（メモ化）
@@ -293,18 +298,12 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
             alert('時間割名称、時間割コードを入力してください。');
             return;
         }
-
-        if (isAdding) {
-            if (subjects.find(s => s.id === editForm.id)) {
-                alert('その授業IDは既に存在します。');
-                return;
-            }
-            onUpdate([...subjects, editForm as Subject]);
-            setIsAdding(false);
-        } else {
-            onUpdate(subjects.map(s => s.id === editingId ? (editForm as Subject) : s));
-            setEditingId(null);
+        if (subjects.find(s => s.id === editForm.id)) {
+            alert('その授業IDは既に存在します。');
+            return;
         }
+        onUpdate([...subjects, editForm as Subject]);
+        setIsAdding(false);
         setEditForm({});
     };
 
@@ -569,7 +568,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 </tr>
                             </thead>
                             <tbody>
-                                {(isAdding || editingId) && (
+                                {isAdding && (
                                     <tr style={{ background: '#f0f4ff' }}>
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                             <input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} style={{ width: '100%' }} placeholder="A0001" />
@@ -655,14 +654,13 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', gap: '6px' }}>
                                                 <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
-                                                <button onClick={() => { setEditingId(null); setIsAdding(false); setEditForm({}); }} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><X size={16} /></button>
+                                                <button onClick={() => { setIsAdding(false); setEditForm({}); }} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><X size={16} /></button>
                                             </div>
                                         </td>
                                     </tr>
                                 )}
                                 {sortedSubjects.map(subject => (
-                                    subject.id !== editingId && (
-                                        <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
+                                    <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
                                             <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>
                                             <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.teacher}</td>
@@ -711,9 +709,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                 </div>
                                             </td>
                                         </tr>
-                                    )
                                 ))}
-                                {sortedSubjects.length === 0 && !isAdding && !editingId && (
+                                {sortedSubjects.length === 0 && !isAdding && (
                                     <tr>
                                         <td colSpan={18} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
@@ -736,6 +733,17 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                     </div>
                 </div>
             </div>
+            {editingSubjectModal && (
+                <SubjectEditModal
+                    subject={editingSubjectModal}
+                    availableEquipment={availableEquipment}
+                    onSave={(updated) => {
+                        onUpdate(subjects.map(s => s.id === updated.id ? updated : s));
+                        setEditingSubjectModal(null);
+                    }}
+                    onClose={() => setEditingSubjectModal(null)}
+                />
+            )}
         </div>
     );
 };

@@ -329,19 +329,24 @@ export const TimeTableGrid = ({
                                             </div>
                                         )}
                                     </div>
-                                    <div style={{ fontSize: '0.7em', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                                        {room.equipment.filter(e => displayConfig.highlightedEquipment.includes(e)).map(e => {
-                                            const style = getEquipmentStyle(e);
-                                            return (
-                                                <span key={e} style={{
-                                                    background: style.bg, color: style.text, border: `1px solid ${style.border}`,
-                                                    padding: '1px 6px', borderRadius: '12px', fontSize: '0.75em'
-                                                }}>
-                                                    {e}
-                                                </span>
-                                            );
-                                        })}
-                                        {/* ここにあった可動/固定タグを削除 */}
+                                    <div style={{ fontSize: '0.7em', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '6px' }}>
+                                        {displayConfig.highlightedEquipment
+                                            .filter(e => e !== '可動' && e !== '固定')
+                                            .map(e => {
+                                                const has = room.equipment.includes(e);
+                                                const s = getEquipmentStyle(e);
+                                                return (
+                                                    <span key={e} style={{
+                                                        background: has ? s.bg : '#f5f5f5',
+                                                        color: has ? s.text : '#ccc',
+                                                        border: `1px solid ${has ? s.border : '#e8e8e8'}`,
+                                                        padding: '1px 5px', borderRadius: '10px', fontSize: '0.72em',
+                                                        fontWeight: has ? 'bold' : 'normal'
+                                                    }}>
+                                                        {e}
+                                                    </span>
+                                                );
+                                            })}
                                     </div>
                                 </td>
 

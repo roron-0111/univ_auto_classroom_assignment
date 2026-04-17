@@ -261,7 +261,6 @@ function App() {
     if (selectedEquipment.length > 0) {
       list = list.filter(c =>
         selectedEquipment.every(eq => {
-          if (eq === 'PJ') return c.equipment.some(e => e === 'PJ(中)' || e === 'PJ(横)');
           if (eq === '可動') return c.isMovable;
           return c.equipment.includes(eq);
         })
@@ -610,29 +609,43 @@ function App() {
           {/* Grid Control Bar (Day & Building) */}
           <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
             {/* Day Tabs */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #646cff' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #ddd' }}>
               {
-                DAYS.map((d, i) => (
-                  <button
-                    key={d}
-                    onClick={() => setCurrentDay(d)}
-                    style={{
-                      padding: '10px 20px', border: 'none',
-                      borderRight: i < DAYS.length - 1 ? '1px solid #d0d0d0' : 'none',
-                      background: currentDay === d ? '#646cff' : (i % 2 === 0 ? '#f5f5f5' : '#efefef'),
-                      color: currentDay === d ? '#fff' : '#555',
-                      fontWeight: currentDay === d ? 'bold' : 'normal',
-                      cursor: 'pointer', fontSize: '0.92em',
-                      transition: 'background 0.15s'
-                    }}
-                  >
-                    {(() => {
-                      const total = subjects.filter(s => s.day === d).length;
-                      const allocated = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
-                      return `${DAY_LABELS[d]}曜日${total > 0 ? ` (${allocated}/${total})` : ''}`;
-                    })()}
-                  </button>
-                ))
+                DAYS.map((d, i) => {
+                  const DAY_ACCENTS: Record<string, { active: string; bg: string; accent: string }> = {
+                    mon: { active: '#e3f2fd', bg: '#f8fbff', accent: '#1976d2' },
+                    tue: { active: '#ffebee', bg: '#fff8f8', accent: '#c62828' },
+                    wed: { active: '#e8f5e9', bg: '#f6fbf6', accent: '#2e7d32' },
+                    thu: { active: '#fff8e1', bg: '#fffcf0', accent: '#ef6c00' },
+                    fri: { active: '#f3e5f5', bg: '#faf4fc', accent: '#6a1b9a' },
+                    sat: { active: '#fce4ec', bg: '#fff5f8', accent: '#c2185b' },
+                  };
+                  const c = DAY_ACCENTS[d] ?? { active: '#e8eaf6', bg: '#fafafa', accent: '#3949ab' };
+                  const isActive = currentDay === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setCurrentDay(d)}
+                      style={{
+                        padding: '10px 20px', border: 'none',
+                        borderRight: i < DAYS.length - 1 ? `1px solid ${isActive ? c.accent + '44' : '#d0d0d0'}` : 'none',
+                        borderBottom: isActive ? `3px solid ${c.accent}` : '3px solid transparent',
+                        marginBottom: '-1px',
+                        background: isActive ? c.active : c.bg,
+                        color: isActive ? c.accent : '#666',
+                        fontWeight: isActive ? 'bold' : 'normal',
+                        cursor: 'pointer', fontSize: '0.92em',
+                        transition: 'background 0.15s'
+                      }}
+                    >
+                      {(() => {
+                        const total = subjects.filter(s => s.day === d).length;
+                        const allocated = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
+                        return `${DAY_LABELS[d]}曜日${total > 0 ? ` (${allocated}/${total})` : ''}`;
+                      })()}
+                    </button>
+                  );
+                })
               }
             </div>
 
@@ -664,44 +677,56 @@ function App() {
             </div>
 
             {/* Type & Equipment Filter */}
-            <div style={{ padding: '6px 20px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
+            <div style={{ padding: '6px 20px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
               {/* タイプ */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>タイプ：</span>
                 {[{ id: 'normal', label: '一般' }, { id: 'seminar', label: 'ゼミ' }, { id: 'pc', label: 'PC' }].map(t => (
-                  <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.includes(t.id)}
-                      onChange={e => setSelectedTypes(prev =>
-                        e.target.checked ? [...prev, t.id] : prev.filter(x => x !== t.id)
-                      )}
-                    />
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTypes(prev =>
+                      prev.includes(t.id) ? prev.filter(x => x !== t.id) : [...prev, t.id]
+                    )}
+                    style={{
+                      padding: '3px 12px', borderRadius: '12px',
+                      border: selectedTypes.includes(t.id) ? '1px solid #646cff' : '1px solid #ddd',
+                      background: selectedTypes.includes(t.id) ? '#646cff' : '#fff',
+                      color: selectedTypes.includes(t.id) ? '#fff' : '#333',
+                      fontSize: '0.82em', cursor: 'pointer', whiteSpace: 'nowrap'
+                    }}
+                  >
                     {t.label}
-                  </label>
+                  </button>
                 ))}
               </div>
               <div style={{ width: '1px', height: '18px', background: '#ddd', flexShrink: 0 }} />
               {/* 設備 */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>設備：</span>
                 {[
-                  { id: 'PJ', label: 'PJ(中/横)' },
+                  { id: 'PJ(中)', label: 'PJ(中)' },
+                  { id: 'PJ(横)', label: 'PJ(横)' },
+                  { id: 'タッチディスプレイ', label: 'タッチ' },
                   { id: '可動', label: '可動' },
                   { id: '黒板', label: '黒板' },
                   { id: '白板', label: '白板' },
                   { id: 'マイク', label: 'マイク' },
                 ].map(eq => (
-                  <label key={eq.id} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedEquipment.includes(eq.id)}
-                      onChange={e => setSelectedEquipment(prev =>
-                        e.target.checked ? [...prev, eq.id] : prev.filter(x => x !== eq.id)
-                      )}
-                    />
+                  <button
+                    key={eq.id}
+                    onClick={() => setSelectedEquipment(prev =>
+                      prev.includes(eq.id) ? prev.filter(x => x !== eq.id) : [...prev, eq.id]
+                    )}
+                    style={{
+                      padding: '3px 12px', borderRadius: '12px',
+                      border: selectedEquipment.includes(eq.id) ? '1px solid #646cff' : '1px solid #ddd',
+                      background: selectedEquipment.includes(eq.id) ? '#646cff' : '#fff',
+                      color: selectedEquipment.includes(eq.id) ? '#fff' : '#333',
+                      fontSize: '0.82em', cursor: 'pointer', whiteSpace: 'nowrap'
+                    }}
+                  >
                     {eq.label}
-                  </label>
+                  </button>
                 ))}
               </div>
               {(selectedTypes.length > 0 || selectedEquipment.length > 0) && (

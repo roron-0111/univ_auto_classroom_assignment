@@ -11,7 +11,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const classrooms: Classroom[] = results.data.map((row: any) => {
+                const classrooms: Classroom[] = (results.data as Record<string, string>[]).map((row) => {
                     const getVal = (keys: string[]) => {
                         const key = keys.find(k => row[k] !== undefined);
                         return key ? row[key] : '';
@@ -25,7 +25,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                     const examCap = parseInt(getVal(['ExamCapacity', '試験時定員', '試験定員']), 10) || undefined;
 
                     // 教室タイプ変換
-                    let typeVal = getVal(['Type', '教室タイプ', '種別']).toLowerCase();
+                    const typeVal = getVal(['Type', '教室タイプ', '種別']).toLowerCase();
                     let type: Classroom['type'] = 'normal';
                     if (typeVal.includes('pc')) type = 'pc';
                     else if (typeVal.includes('ゼミ')) type = 'seminar';
@@ -89,7 +89,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                const rawSubjects = results.data.map((row: any) => ({
+                const rawSubjects = (results.data as Record<string, string>[]).map((row) => ({
                     id: row.ID || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
                     code: row['時間割コード'] || row.Code || row.ID,
                     name: row.Name || row['時間割名称'] || row['授業名'],
@@ -122,7 +122,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                         if (t === 'PC' || t === 'PC室') return 'pc';
                         if (t === 'ゼミ' || t === 'ゼミ室') return 'seminar';
                         if (t === '一般') return 'normal';
-                        return t ? t as any : undefined;
+                        return t ? (t as Subject['preferredRoomType']) : undefined;
                     })(),
                     // 新形式: PJ(中) or PJ(横) = ◎ → requiresProjector
                     // 旧形式: 専用列も引き続き受け付ける
@@ -178,7 +178,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
     });
 };
 
-export const exportToCSV = (data: any[], filename: string) => {
+export const exportToCSV = (data: Record<string, unknown>[], filename: string) => {
     const csv = Papa.unparse(data);
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
