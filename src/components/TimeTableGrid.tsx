@@ -269,7 +269,7 @@ export const TimeTableGrid = ({
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', tableLayout: 'fixed' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 100 }}>
                     <tr>
-                        <th style={{ width: '120px', background: '#f5f5f5', padding: '8px', textAlign: 'left', border: '1px solid #ddd', position: 'sticky', left: 0, top: 0, zIndex: 110, fontSize: '0.85em' }}>教室 / 講時</th>
+                        <th style={{ width: '138px', background: '#f5f5f5', padding: '8px', textAlign: 'left', border: '1px solid #ddd', position: 'sticky', left: 0, top: 0, zIndex: 110, fontSize: '0.85em' }}>教室 / 講時</th>
                         <th style={{ width: '50px', background: '#f5f5f5', padding: '8px', textAlign: 'center', border: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 105, fontSize: '0.8em' }}>定員</th>
                         <th style={{ width: '40px', background: '#f5f5f5', padding: '8px', textAlign: 'center', border: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 105, fontSize: '0.8em' }}>学期</th>
                         {displayedPeriods.map(p => {
@@ -293,7 +293,7 @@ export const TimeTableGrid = ({
                                 <td
                                     rowSpan={2}
                                     style={{
-                                        width: '120px', padding: '6px 8px', border: '1px solid #ddd', background: '#fff',
+                                        width: '138px', padding: '6px 8px', border: '1px solid #ddd', background: '#fff',
                                         position: 'sticky', left: 0, zIndex: 4, overflow: 'hidden', verticalAlign: 'top',
                                         cursor: 'pointer', color: '#1976d2', transition: 'all 0.2s'
                                     }}
@@ -308,7 +308,7 @@ export const TimeTableGrid = ({
                                     }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
-                                        <span style={{ fontWeight: 'bold', fontSize: '1.1em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '75px' }} title={room.name}>{room.name}</span>
+                                        <span style={{ fontWeight: 'bold', fontSize: '1.1em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '86px' }} title={room.name}>{room.name}</span>
                                         {displayConfig.showRoomType && (
                                             <div style={{ display: 'flex', gap: '2px' }}>
                                                 <span style={{

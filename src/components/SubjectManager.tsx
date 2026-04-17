@@ -655,7 +655,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                             />
                                         </td>
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.previousRooms?.join(';')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(';').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201" />
+                                            <input value={editForm.previousRooms?.join(',')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201,3-202" />
                                         </td>
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', gap: '6px' }}>

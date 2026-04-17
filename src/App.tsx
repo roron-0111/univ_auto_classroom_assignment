@@ -240,7 +240,7 @@ function App() {
     classrooms.forEach(c => {
       c.equipment.forEach(e => set.add(e));
     });
-    return Array.from(set).sort();
+    return Array.from(set);
   }, [classrooms]);
 
   const hasInitializedEquipment = useRef(false);
@@ -609,7 +609,7 @@ function App() {
           {/* Grid Control Bar (Day & Building) */}
           <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
             {/* Day Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #ddd', background: '#f0f0f0' }}>
+            <div style={{ display: 'flex', borderBottom: '2px solid #c8cdd8', background: '#e4e8f0', paddingTop: '4px', paddingLeft: '4px', gap: '2px' }}>
               {
                 DAYS.map((d, i) => {
                   const isActive = currentDay === d;
@@ -618,14 +618,19 @@ function App() {
                       key={d}
                       onClick={() => setCurrentDay(d)}
                       style={{
-                        padding: '10px 20px', border: 'none',
-                        borderRight: i < DAYS.length - 1 ? '1px solid #ccc' : 'none',
-                        background: isActive ? '#fff' : 'transparent',
-                        color: isActive ? '#333' : '#777',
-                        fontWeight: isActive ? 'bold' : 'normal',
+                        padding: '8px 18px',
+                        border: isActive ? '2px solid #c8cdd8' : '1px solid #b0b8c8',
+                        borderBottom: isActive ? '2px solid #fff' : 'none',
+                        borderRadius: '6px 6px 0 0',
+                        background: isActive ? '#fff' : '#c2cad8',
+                        color: isActive ? '#333' : '#4a5568',
+                        fontWeight: isActive ? 'bold' : '500',
                         cursor: 'pointer', fontSize: '0.92em',
-                        transition: 'background 0.1s',
-                        boxShadow: isActive ? 'inset 0 -2px 0 #646cff' : 'none'
+                        transition: 'background 0.15s',
+                        marginBottom: isActive ? '-2px' : '2px',
+                        position: 'relative' as const,
+                        zIndex: isActive ? 2 : 1,
+                        boxShadow: isActive ? 'none' : 'inset 0 -3px 0 rgba(0,0,0,0.08)'
                       }}
                     >
                       {(() => {
@@ -687,7 +692,7 @@ function App() {
                 {[
                   { id: 'PJ(中)', label: 'PJ(中)' },
                   { id: 'PJ(横)', label: 'PJ(横)' },
-                  { id: 'タッチディスプレイ', label: 'タッチディスプレイ' },
+                  { id: 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ', label: 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' },
                   { id: 'BD', label: 'BD' },
                   { id: '可動', label: '可動' },
                   { id: '黒板', label: '黒板' },

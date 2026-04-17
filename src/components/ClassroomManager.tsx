@@ -1,10 +1,51 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import type { Classroom } from '../types';
-import { ROOM_TYPE_LABELS, BUILDINGS } from '../types';
+import { ROOM_TYPE_LABELS, BUILDINGS, EQUIPMENT_LIST } from '../types';
 import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { parseClassroomCSV, exportToCSV } from '../utils/csvParser';
 import { getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
 import { ClassroomEditModal } from './ClassroomEditModal';
+
+const MultiSelectFilter = ({
+    options, selected, onChange, placeholder = '全て'
+}: {
+    options: { value: string; label: string }[];
+    selected: string[];
+    onChange: (v: string[]) => void;
+    placeholder?: string;
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+    const toggle = (v: string) => onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+    const label = selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length}件`;
+    return (
+        <div ref={ref} style={{ position: 'relative', userSelect: 'none' }}>
+            <div onMouseDown={e => { e.stopPropagation(); setIsOpen(!isOpen); }}
+                style={{ padding: '3px 6px', border: '1px solid #ddd', borderRadius: '3px', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px', minHeight: '24px' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                <span style={{ fontSize: '0.6rem', color: '#888' }}>{isOpen ? '▲' : '▼'}</span>
+            </div>
+            {isOpen && (
+                <div onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+                    style={{ position: 'absolute', top: '100%', left: 0, minWidth: 'max(120px, 100%)', maxHeight: '280px', overflowY: 'auto', background: '#fff', border: '1px solid #ccc', borderRadius: '4px', boxShadow: '0 6px 16px rgba(0,0,0,0.15)', zIndex: 5000, marginTop: '2px' }}>
+                    <div onClick={() => onChange([])} style={{ padding: '6px 10px', cursor: 'pointer', borderBottom: '1px solid #eee', fontSize: '0.78rem', color: '#666', background: '#f9f9f9' }}>(選択解除)</div>
+                    {options.map(opt => (
+                        <div key={opt.value} onClick={() => toggle(opt.value)}
+                            style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', background: selected.includes(opt.value) ? '#f0f4ff' : 'transparent' }}>
+                            <input type="checkbox" checked={selected.includes(opt.value)} readOnly style={{ margin: 0, pointerEvents: 'none' }} />
+                            <span>{opt.label}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface Props {
     classrooms: Classroom[];
@@ -16,7 +57,16 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
-    const [filters, setFilters] = useState({ name: '', building: '', type: '' });
+    const [filters, setFilters] = useState({
+        id: '', name: '', buildings: [] as string[], type: '',
+        capacityMin: '', capacityMax: '', examCapacityMin: '', examCapacityMax: '',
+        equipment: [] as string[]
+    });
+
+    const allEquipmentOptions = useMemo(() => {
+        const set = new Set<string>(EQUIPMENT_LIST);
+        return Array.from(set).filter(e => e !== '可動' && e !== '固定').map(e => ({ value: e, label: e }));
+    }, []);
     const [newEquipment, setNewEquipment] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [sortConfig, setSortConfig] = useState<{ key: keyof Classroom | 'order'; direction: 'asc' | 'desc' } | null>(null);
@@ -32,9 +82,15 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
 
     const filteredClassrooms = useMemo(() => {
         return classrooms.filter(r => {
+            if (filters.id && !r.id.toLowerCase().includes(filters.id.toLowerCase())) return false;
             if (filters.name && !r.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
-            if (filters.building && r.building !== filters.building) return false;
+            if (filters.buildings.length > 0 && !filters.buildings.includes(r.building)) return false;
             if (filters.type && r.type !== filters.type) return false;
+            if (filters.capacityMin && r.capacity < Number(filters.capacityMin)) return false;
+            if (filters.capacityMax && r.capacity > Number(filters.capacityMax)) return false;
+            if (filters.examCapacityMin && (r.examCapacity ?? 0) < Number(filters.examCapacityMin)) return false;
+            if (filters.examCapacityMax && (r.examCapacity ?? 0) > Number(filters.examCapacityMax)) return false;
+            if (filters.equipment.length > 0 && !filters.equipment.every(eq => eq === '可動' ? r.isMovable : r.equipment.includes(eq))) return false;
             return true;
         });
     }, [classrooms, filters]);
@@ -233,19 +289,39 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                             {/* 検索行 */}
                             <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
+                                        value={filters.id} onChange={e => setFilters(f => ({ ...f, id: e.target.value }))} placeholder="ID..." />
+                                </td>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
                                         value={filters.name} onChange={e => setFilters(f => ({ ...f, name: e.target.value }))} placeholder="検索..." />
                                 </td>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
-                                    <select style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px' }}
-                                        value={filters.building} onChange={e => setFilters(f => ({ ...f, building: e.target.value }))}>
-                                        <option value="">全て</option>
-                                        {BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
-                                    </select>
+                                    <MultiSelectFilter
+                                        options={BUILDINGS.map(b => ({ value: b, label: b }))}
+                                        selected={filters.buildings}
+                                        onChange={v => setFilters(f => ({ ...f, buildings: v }))}
+                                    />
                                 </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                            <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px' }}
+                                                value={filters.capacityMin} onChange={e => setFilters(f => ({ ...f, capacityMin: e.target.value }))} placeholder="以上" title="通常定員・以上" />
+                                            <span style={{ fontSize: '0.65rem', color: '#999' }}>〜</span>
+                                            <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px' }}
+                                                value={filters.capacityMax} onChange={e => setFilters(f => ({ ...f, capacityMax: e.target.value }))} placeholder="以下" title="通常定員・以下" />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                            <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px', color: '#d32f2f' }}
+                                                value={filters.examCapacityMin} onChange={e => setFilters(f => ({ ...f, examCapacityMin: e.target.value }))} placeholder="試験↑" title="試験定員・以上" />
+                                            <span style={{ fontSize: '0.65rem', color: '#999' }}>〜</span>
+                                            <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px', color: '#d32f2f' }}
+                                                value={filters.examCapacityMax} onChange={e => setFilters(f => ({ ...f, examCapacityMax: e.target.value }))} placeholder="試験↓" title="試験定員・以下" />
+                                        </div>
+                                    </div>
+                                </td>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <select style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px' }}
                                         value={filters.type} onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}>
@@ -253,7 +329,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                         {Object.entries(ROOM_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                                     </select>
                                 </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                    <MultiSelectFilter
+                                        options={allEquipmentOptions}
+                                        selected={filters.equipment}
+                                        onChange={v => setFilters(f => ({ ...f, equipment: v }))}
+                                        placeholder="機材..."
+                                    />
+                                </td>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa', textAlign: 'center' }}>
                                     <button onClick={handleDeleteAll} style={{ fontSize: '0.7rem', padding: '2px 8px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>全削除</button>
