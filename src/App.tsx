@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
-import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule } from './types';
+import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building } from './types';
 import { BUILDINGS, DAY_LABELS, CAMPUSES } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
@@ -107,7 +107,7 @@ function App() {
         items: parsed,
         strictLevel5: false
       };
-    } catch (e) {
+    } catch {
       return DEFAULT_EQUIPMENT_SETTINGS;
     }
   });
@@ -167,6 +167,7 @@ function App() {
 
 
   // クラウドデータの旧フォーマット（フラット構造）を新フォーマットに移行
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const migrateEquipmentSettings = (s: any) =>
     s && typeof s === 'object' && 'items' in s ? s : { items: s || {}, strictLevel5: false };
 
@@ -205,8 +206,6 @@ function App() {
       await saveData(currentData);
       alert('現在のデータをクラウドに同期しました。');
       setShowCloudModal(false);
-    } catch (e) {
-      throw e; // Modalでエラー表示させるために再スロー
     } finally {
       setIsCloudLoading(false);
     }
@@ -269,8 +268,8 @@ function App() {
 
     // BUILDINGS の順序でソート
     return [...list].sort((a, b) => {
-      const indexA = BUILDINGS.indexOf(a.building as any);
-      const indexB = BUILDINGS.indexOf(b.building as any);
+      const indexA = BUILDINGS.indexOf(a.building as Building);
+      const indexB = BUILDINGS.indexOf(b.building as Building);
       if (indexA === -1 && indexB === -1) return a.building.localeCompare(b.building);
       if (indexA === -1) return 1;
       if (indexB === -1) return -1;
@@ -545,7 +544,7 @@ function App() {
                     } else {
                       alert('保存されたデータが見つかりませんでした');
                     }
-                  } catch (e: any) {
+                  } catch (e) {
                     console.error('Refresh Error:', e);
                     alert('データの取得に失敗しました');
                   } finally {
@@ -611,7 +610,7 @@ function App() {
             {/* Day Tabs */}
             <div style={{ display: 'flex', borderBottom: '2px solid #c8cdd8', background: '#e4e8f0', paddingTop: '4px', paddingLeft: '4px', gap: '2px' }}>
               {
-                DAYS.map((d, i) => {
+                DAYS.map((d) => {
                   const isActive = currentDay === d;
                   return (
                     <button
