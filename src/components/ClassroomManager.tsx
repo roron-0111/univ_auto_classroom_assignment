@@ -246,7 +246,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                             '可動': r.isMovable ? '○' : '',
                                             '配当対象外': r.isExcluded ? '○' : '',
                                         };
-                                        r.equipment.forEach(eq => { base[eq] = '○'; });
+                                        // 標準機材全列を固定順で出力
+                                        EQUIPMENT_LIST.filter(eq => eq !== '可動' && eq !== '固定').forEach(eq => {
+                                            base[eq] = r.equipment.includes(eq) ? '○' : '';
+                                        });
+                                        // 非標準機材
+                                        r.equipment.filter(eq => !EQUIPMENT_LIST.includes(eq)).forEach(eq => {
+                                            base[eq] = '○';
+                                        });
                                         return base;
                                     });
                                     exportToCSV(exportData, 'classrooms_export.csv');
@@ -278,9 +285,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '225px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '110px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>操作</span>
                                     </div>
@@ -308,10 +315,10 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
                                             <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px' }}
-                                                value={filters.capacityMin} onChange={e => setFilters(f => ({ ...f, capacityMin: e.target.value }))} placeholder="以上" title="通常定員・以上" />
+                                                value={filters.capacityMin} onChange={e => setFilters(f => ({ ...f, capacityMin: e.target.value }))} placeholder="通常↑" title="通常定員・以上" />
                                             <span style={{ fontSize: '0.65rem', color: '#999' }}>〜</span>
                                             <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px' }}
-                                                value={filters.capacityMax} onChange={e => setFilters(f => ({ ...f, capacityMax: e.target.value }))} placeholder="以下" title="通常定員・以下" />
+                                                value={filters.capacityMax} onChange={e => setFilters(f => ({ ...f, capacityMax: e.target.value }))} placeholder="通常↓" title="通常定員・以下" />
                                         </div>
                                         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
                                             <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px', color: '#d32f2f' }}

@@ -50,7 +50,7 @@ export const runAutoAllocation = (
 
     // 優先度順にソート (科目自体の優先度のみ。同列は元の順序=CSV取込順を維持)
     const sortedSubjects = [...subjects].sort((a, b) => {
-        return b.priority - a.priority;
+        return (b.priority || 1) - (a.priority || 1);
     });
 
     const unassigned: Subject[] = [];

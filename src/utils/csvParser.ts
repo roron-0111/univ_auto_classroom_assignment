@@ -112,7 +112,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                         const map: Record<string, DayOfWeek> = { '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu', '金': 'fri', '土': 'sat' };
                         return map[d] || d as DayOfWeek;
                     })(),
-                    period: parseInt(row.Period || row['講時'], 10) as Period,
+                    period: parseInt(row.Period || row['開始講時'] || row['講時'], 10) as Period,
                     endPeriod: (parseInt(row.EndPeriod || row['終了講時'], 10) || undefined) as Period | undefined,
                     requiredCapacity: parseInt(row.RequiredCapacity || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
                     campus: row.Campus || row['キャンパス'],
@@ -133,7 +133,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     requiresMovable: row['可動'] === '◎' ||
                         row.RequiresMovable === 'true' || row.RequiresMovable === '1' ||
                         row['可動席'] === '○' || row['可動式'] === '○',
-                    priority: parseInt(row.Priority || row['優先度'], 10) || 1,
+                    priority: parseInt(row.Priority || row['優先度[1(低)～3(高)]'] || row['優先度'], 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
                     buildingPreference: row.BuildingPreference || row['棟希望'],
                     // 必須設備: 設備列の値が◎のもの（新形式）、または旧形式の必須_X列

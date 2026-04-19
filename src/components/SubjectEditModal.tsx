@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, DEPARTMENTS, BUILDINGS, getEquipmentStyle } from '../types';
+import { DAY_LABELS, DEPARTMENTS, BUILDINGS, CAMPUSES, getEquipmentStyle } from '../types';
 import { X, Check } from 'lucide-react';
 
 interface Props {
@@ -77,7 +77,10 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 </div>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>開講学部</label>
-                                    <input value={form.faculty || ''} onChange={e => setForm({ ...form, faculty: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} placeholder="例: 理工学部" />
+                                    <select value={form.faculty || ''} onChange={e => setForm({ ...form, faculty: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                                        <option value="">（未選択）</option>
+                                        {['理', '経', '国', 'IR', '教', '他'].map(f => <option key={f} value={f}>{f}</option>)}
+                                    </select>
                                 </div>
                                 <div style={{ width: '70px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>管轄</label>
@@ -89,15 +92,17 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>キャンパス</label>
-                                    <input value={form.campus || ''} onChange={e => setForm({ ...form, campus: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} placeholder="例: 寝屋川" />
+                                    <select value={form.campus || ''} onChange={e => setForm({ ...form, campus: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                                        <option value="">（未選択）</option>
+                                        {CAMPUSES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    </select>
                                 </div>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>過年度教室 <span style={{ fontWeight: 'normal', color: '#999', fontSize: '0.75rem' }}>(;区切り)</span></label>
+                                    <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>過年度教室 <span style={{ fontWeight: 'normal', color: '#999', fontSize: '0.75rem' }}>(,区切り)</span></label>
                                     <input
                                         value={form.previousRooms?.join(', ') || ''}
                                         onChange={e => setForm({ ...form, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                                         style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
-                                        placeholder="例: 3-201; 7-107"
                                     />
                                 </div>
                             </div>
@@ -144,7 +149,11 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>優先度</label>
-                                        <input type="number" min="1" max="5" value={form.priority} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                        <select value={form.priority || 1} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}>
+                                            <option value={1}>1（低）</option>
+                                            <option value={2}>2（中）</option>
+                                            <option value={3}>3（高）</option>
+                                        </select>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>必要教室数</label>

@@ -155,7 +155,7 @@ export const IMPORTANT_EQUIPMENT_COLORS: Record<string, { bg: string; text: stri
     'PJ(横)': { bg: '#f1f8e9', text: '#33691e', border: '#dcedc8' }, // 薄緑
     'TV': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' }, // グレー
     'カーテン': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
-    'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ': { bg: '#fff3e0', text: '#e65100', border: '#ffe0b2' }, // オレンジ
+    'タッチディスプレイ': { bg: '#fff3e0', text: '#e65100', border: '#ffe0b2' }, // オレンジ
     'ブラインド': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     'マイク': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     'モニター': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
@@ -276,7 +276,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
 
 // 機材リスト（標準）
 export const EQUIPMENT_LIST = [
-    'PJ(中)', 'PJ(横)', 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ', 'BD', '黒板', '白板', 'マイク', 'ブラインド',
+    'PJ(中)', 'PJ(横)', 'タッチディスプレイ', 'BD', '黒板', '白板', 'マイク', 'ブラインド',
     'PC', '可動', '固定'
 ];
 
@@ -285,7 +285,7 @@ export const DEFAULT_EQUIPMENT_SETTINGS = {
         // デフォルトの重要度設定
         let importance = 3;
         if (['PC', 'PJ(中)', 'PJ(横)', '可動'].includes(output)) importance = 5;
-        if (['BD', 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ'].includes(output)) importance = 4;
+        if (['BD', 'タッチディスプレイ'].includes(output)) importance = 4;
 
         acc[output] = { enabled: true, importance };
         return acc;

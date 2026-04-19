@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
-import { ROOM_TYPE_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
+import { ROOM_TYPE_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, EQUIPMENT_LIST } from '../types';
 import { checkConstraints } from '../utils/validation';
 import { Users } from 'lucide-react';
 
@@ -117,9 +117,7 @@ export const TimeTableGrid = ({
 
                 {/* タグ一覧 (希望タイプ・機材) */}
                 {displayConfig.showRequirementTags && (() => {
-                    // 配当済みの場合、条件チェック用の判定値を事前計算
                     const typeOk = !room || !subject.preferredRoomType || subject.preferredRoomType === room.type;
-                    const pjOk = !room || !subject.requiresProjector || room.equipment.some(eq => eq.includes('PJ'));
                     const movOk = !room || !subject.requiresMovable || room.isMovable;
                     const eqMatch = (req: string) => !room || (() => {
                         if (req === 'PJ(横)' || req === 'PJ(中)') return room.equipment.some(e => e === 'PJ(横)' || e === 'PJ(中)');
@@ -128,9 +126,21 @@ export const TimeTableGrid = ({
                     })();
                     const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
 
+                    // 全機材を EQUIPMENT_LIST 順でソート（mandatory と preferred を統合）
+                    const mandatorySet = new Set(subject.mandatoryEquipment || []);
+                    const allEqSet = new Set([
+                        ...(subject.mandatoryEquipment || []),
+                        ...(subject.requiredEquipment || [])
+                    ]);
+                    allEqSet.delete('可動');
+                    const sortedEq = [
+                        ...EQUIPMENT_LIST.filter(e => allEqSet.has(e)),
+                        ...Array.from(allEqSet).filter(e => !EQUIPMENT_LIST.includes(e))
+                    ];
+
                     return (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '2px', marginBottom: '4px' }}>
-                            {/* 希望教室タイプ（不一致: 橙ベタ） */}
+                            {/* 希望教室タイプ */}
                             {subject.preferredRoomType && (
                                 <span style={{
                                     fontSize: '0.65em', padding: '1px 4px',
@@ -142,18 +152,7 @@ export const TimeTableGrid = ({
                                     {ROOM_TYPE_LABELS[subject.preferredRoomType]}{room && !typeOk ? '×' : ''}
                                 </span>
                             )}
-                            {/* PJ必須（不足: 赤ベタ） */}
-                            {!!subject.requiresProjector && (
-                                <span style={{
-                                    background: (room && !pjOk) ? '#d32f2f' : '#e3f2fd',
-                                    color: (room && !pjOk) ? '#fff' : '#1565c0',
-                                    border: `1px solid ${(room && !pjOk) ? '#b71c1c' : '#bbdefb'}`,
-                                    padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
-                                }}>
-                                    PJ必須{room && !pjOk ? '×' : ''}
-                                </span>
-                            )}
-                            {/* 可動必須（不足: 赤ベタ） */}
+                            {/* 可動必須 */}
                             {!!subject.requiresMovable && (
                                 <span style={{
                                     background: (room && !movOk) ? '#d32f2f' : IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
@@ -164,37 +163,24 @@ export const TimeTableGrid = ({
                                     可動{room && !movOk ? '×' : ''}
                                 </span>
                             )}
-                            {/* 必須設備（不足: 赤ベタ） */}
-                            {(subject.mandatoryEquipment || []).map(eq => {
+                            {/* 機材（EQUIPMENT_LIST順） */}
+                            {sortedEq.map(eq => {
                                 const ok = eqMatch(eq);
+                                const isMandatory = mandatorySet.has(eq);
                                 const style = getEquipmentStyle(eq);
                                 return (
-                                    <span key={`m-${eq}`} style={{
+                                    <span key={eq} style={{
                                         background: (room && !ok) ? '#d32f2f' : style.bg,
                                         color: (room && !ok) ? '#fff' : style.text,
                                         border: `1px solid ${(room && !ok) ? '#b71c1c' : style.border}`,
-                                        padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
+                                        padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em',
+                                        fontWeight: isMandatory ? 'bold' : 'normal'
                                     }}>
                                         {eq}{room && !ok ? '×' : ''}
                                     </span>
                                 );
                             })}
-                            {/* 希望設備（不足: 橙ベタ） */}
-                            {(subject.requiredEquipment || []).map(eq => {
-                                const ok = eqMatch(eq);
-                                const style = getEquipmentStyle(eq);
-                                return (
-                                    <span key={`r-${eq}`} style={{
-                                        background: (room && !ok) ? '#d32f2f' : style.bg,
-                                        color: (room && !ok) ? '#fff' : style.text,
-                                        border: `1px solid ${(room && !ok) ? '#b71c1c' : style.border}`,
-                                        padding: '1px 4px', borderRadius: '3px', fontSize: '0.65em', fontWeight: 'bold'
-                                    }}>
-                                        {eq}{room && !ok ? '×' : ''}
-                                    </span>
-                                );
-                            })}
-                            {/* 希望学舎（不一致: 橙ベタ） */}
+                            {/* 希望学舎 */}
                             {subject.buildingPreference && (
                                 <span style={{
                                     background: (room && !bldOk) ? '#d32f2f' : '#f5f5f5',
@@ -269,7 +255,7 @@ export const TimeTableGrid = ({
             <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', tableLayout: 'fixed' }}>
                 <thead style={{ position: 'sticky', top: 0, zIndex: 100 }}>
                     <tr>
-                        <th style={{ width: '138px', background: '#f5f5f5', padding: '8px', textAlign: 'left', border: '1px solid #ddd', position: 'sticky', left: 0, top: 0, zIndex: 110, fontSize: '0.85em' }}>教室 / 講時</th>
+                        <th style={{ width: '180px', background: '#f5f5f5', padding: '8px', textAlign: 'left', border: '1px solid #ddd', position: 'sticky', left: 0, top: 0, zIndex: 110, fontSize: '0.85em' }}>教室 / 講時</th>
                         <th style={{ width: '50px', background: '#f5f5f5', padding: '8px', textAlign: 'center', border: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 105, fontSize: '0.8em' }}>定員</th>
                         <th style={{ width: '40px', background: '#f5f5f5', padding: '8px', textAlign: 'center', border: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 105, fontSize: '0.8em' }}>学期</th>
                         {displayedPeriods.map(p => {
@@ -293,7 +279,7 @@ export const TimeTableGrid = ({
                                 <td
                                     rowSpan={2}
                                     style={{
-                                        width: '138px', padding: '6px 8px', border: '1px solid #ddd', background: '#fff',
+                                        width: '180px', padding: '6px 8px', border: '1px solid #ddd', background: '#fff',
                                         position: 'sticky', left: 0, zIndex: 4, overflow: 'hidden', verticalAlign: 'top',
                                         cursor: 'pointer', color: '#1976d2', transition: 'all 0.2s'
                                     }}
@@ -308,7 +294,7 @@ export const TimeTableGrid = ({
                                     }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
-                                        <span style={{ fontWeight: 'bold', fontSize: '1.1em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '86px' }} title={room.name}>{room.name}</span>
+                                        <span style={{ fontWeight: 'bold', fontSize: '1.1em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '112px' }} title={room.name}>{room.name}</span>
                                         {displayConfig.showRoomType && (
                                             <div style={{ display: 'flex', gap: '2px' }}>
                                                 <span style={{
@@ -340,7 +326,7 @@ export const TimeTableGrid = ({
                                                         background: has ? s.bg : '#f5f5f5',
                                                         color: has ? s.text : '#ccc',
                                                         border: `1px solid ${has ? s.border : '#e8e8e8'}`,
-                                                        padding: '1px 5px', borderRadius: '10px', fontSize: '0.72em',
+                                                        padding: '1px 5px', borderRadius: '3px', fontSize: '0.72em',
                                                         fontWeight: has ? 'bold' : 'normal'
                                                     }}>
                                                         {e}

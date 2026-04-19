@@ -403,7 +403,7 @@ function App() {
     const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
     const targetSubjects = subjects.filter(s => {
       // 優先度フィルタ
-      if (!priorities.includes(s.priority)) return false;
+      if (!priorities.includes(s.priority || 1)) return false;
 
       // 配当期フィルタ
       if (!options.terms.includes(s.term)) return false;
@@ -635,7 +635,7 @@ function App() {
                       {(() => {
                         const total = subjects.filter(s => s.day === d).length;
                         const allocated = subjects.filter(s => s.day === d && allocations.some(a => a.subjectId === s.id)).length;
-                        return `${DAY_LABELS[d]}曜日${total > 0 ? ` (${allocated}/${total})` : ''}`;
+                        return `${DAY_LABELS[d]}曜日${total > 0 ? ` (${allocated} / ${total})` : ''}`;
                       })()}
                     </button>
                   );
@@ -691,7 +691,7 @@ function App() {
                 {[
                   { id: 'PJ(中)', label: 'PJ(中)' },
                   { id: 'PJ(横)', label: 'PJ(横)' },
-                  { id: 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ', label: 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' },
+                  { id: 'タッチディスプレイ', label: 'タッチディスプレイ' },
                   { id: 'BD', label: 'BD' },
                   { id: '可動', label: '可動' },
                   { id: '黒板', label: '黒板' },

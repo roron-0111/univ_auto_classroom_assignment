@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { Subject, Term, DayOfWeek, Allocation } from '../types';
-import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, ROOM_TYPE_LABELS } from '../types';
+import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
 import { Users } from 'lucide-react';
 
 interface Props {
@@ -269,7 +269,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                             gap: '4px'
                         }}
                     >
-                        <div style={{ flex: 1 }}>
+                        <div>
                             <div style={{
                                 fontWeight: 'bold', overflowWrap: 'anywhere', wordBreak: 'break-word', fontSize: '0.85rem', lineHeight: '1.3', marginBottom: '2px'
                             }}>
@@ -288,38 +288,52 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                             </div>
 
                             {/* タグ一覧 (希望タイプ・機材) */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '4px', marginBottom: '4px' }}>
-                                {subject.preferredRoomType && (
-                                    <span style={{
-                                        fontSize: '0.65em', padding: '1px 4px',
-                                        background: roomTypeStyle[subject.preferredRoomType].bg,
-                                        color: roomTypeStyle[subject.preferredRoomType].text,
-                                        border: `1px solid ${roomTypeStyle[subject.preferredRoomType].border}`,
-                                        borderRadius: '3px', fontWeight: 'bold'
-                                    }}>
-                                        {ROOM_TYPE_LABELS[subject.preferredRoomType]}
-                                    </span>
-                                )}
-                                {!!subject.requiresMovable && (
-                                    <span style={{
-                                        fontSize: '0.65em', padding: '1px 4px',
-                                        background: IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
-                                        color: IMPORTANT_EQUIPMENT_COLORS['可動'].text,
-                                        border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
-                                        borderRadius: '3px', fontWeight: 'bold'
-                                    }}>可動</span>
-                                )}
-                                {(subject.requiredEquipment || []).map(eq => {
-                                    const style = getEquipmentStyle(eq);
-                                    return (
-                                        <span key={eq} style={{
-                                            fontSize: '0.65em', padding: '1px 4px',
-                                            background: style.bg, color: style.text, border: `1px solid ${style.border}`,
-                                            borderRadius: '3px', fontWeight: 'bold'
-                                        }}>{eq}</span>
-                                    );
-                                })}
-                            </div>
+                            {(() => {
+                                const allEqSet = new Set([
+                                    ...(subject.mandatoryEquipment || []),
+                                    ...(subject.requiredEquipment || [])
+                                ]);
+                                allEqSet.delete('可動');
+                                const sortedEq = [
+                                    ...EQUIPMENT_LIST.filter(e => allEqSet.has(e)),
+                                    ...Array.from(allEqSet).filter(e => !EQUIPMENT_LIST.includes(e))
+                                ];
+                                return (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '4px', marginBottom: '4px' }}>
+                                        {subject.preferredRoomType && (
+                                            <span style={{
+                                                fontSize: '0.65em', padding: '1px 4px',
+                                                background: roomTypeStyle[subject.preferredRoomType].bg,
+                                                color: roomTypeStyle[subject.preferredRoomType].text,
+                                                border: `1px solid ${roomTypeStyle[subject.preferredRoomType].border}`,
+                                                borderRadius: '3px', fontWeight: 'bold'
+                                            }}>
+                                                {ROOM_TYPE_LABELS[subject.preferredRoomType]}
+                                            </span>
+                                        )}
+                                        {!!subject.requiresMovable && (
+                                            <span style={{
+                                                fontSize: '0.65em', padding: '1px 4px',
+                                                background: IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
+                                                color: IMPORTANT_EQUIPMENT_COLORS['可動'].text,
+                                                border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
+                                                borderRadius: '3px', fontWeight: 'bold'
+                                            }}>可動</span>
+                                        )}
+                                        {sortedEq.map(eq => {
+                                            const style = getEquipmentStyle(eq);
+                                            const isMandatory = (subject.mandatoryEquipment || []).includes(eq);
+                                            return (
+                                                <span key={eq} style={{
+                                                    fontSize: '0.65em', padding: '1px 4px',
+                                                    background: style.bg, color: style.text, border: `1px solid ${style.border}`,
+                                                    borderRadius: '3px', fontWeight: isMandatory ? 'bold' : 'normal'
+                                                }}>{eq}</span>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
 
                             <div style={{
                                 fontSize: '0.65em',

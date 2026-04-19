@@ -17,7 +17,7 @@ interface Props {
 export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses, equipmentSettings: initialEquipment, onSave, onClose }: Props) => {
     const [rules, setRules] = useState<AllocationRule[]>([...settings].sort((a, b) => a.order - b.order));
     const [bonuses, setBonuses] = useState<number[]>(initialBonuses || [...DEFAULT_ORDER_BONUSES]);
-    const [priorities, setPriorities] = useState<number[]>([1, 2, 3, 4, 5]);
+    const [priorities, setPriorities] = useState<number[]>([1, 2, 3]);
     const [terms, setTerms] = useState<Term[]>(['spring', 'spring_first', 'spring_second', 'autumn', 'autumn_first', 'autumn_second', 'full_year']);
     const [days, setDays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
     const [periods, setPeriods] = useState<Period[]>([1, 2, 3, 4, 5, 6, 7]);
@@ -129,7 +129,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
             </header>
 
             {/* Content */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '30px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '30px 40px' }}>
 
                 {/* フィルターセクション */}
                 <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e9ecef' }}>
@@ -220,7 +220,7 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>科目の優先度:</span>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                {[5, 4, 3, 2, 1].map(p => (
+                                {[3, 2, 1].map(p => (
                                     <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
                                         <input
                                             type="checkbox"

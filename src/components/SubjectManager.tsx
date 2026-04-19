@@ -399,10 +399,10 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 </button>
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
-                                    const exportData = subjects.map(s => {
+                                    // 複数教室配当がある場合は1教室につき1行で出力
+                                    const exportData = subjects.flatMap(s => {
                                         const subjectAllocations = allocations.filter(a => a.subjectId === s.id);
-                                        const allocatedRooms = subjectAllocations.map(a => classrooms.find(r => r.id === a.classroomId));
-                                        const base: Record<string, any> = {
+                                        const baseRow: Record<string, any> = {
                                             '時間割コード': s.code,
                                             '時間割名称': s.name,
                                             '教員': s.teacher,
@@ -410,34 +410,41 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                             '学科': s.department,
                                             '配当期': TERM_LABELS[s.term] || s.term,
                                             '曜日': DAY_LABELS[s.day],
-                                            '講時': s.period,
+                                            '開始講時': s.period,
                                             '終了講時': s.endPeriod || s.period,
                                             'キャンパス': s.campus,
                                             '履修予定人数': s.requiredCapacity,
-                                            '優先度': s.priority,
+                                            '優先度[1(低)～3(高)]': s.priority,
                                             '必要教室数': s.requiredRoomCount,
                                             '棟希望': s.buildingPreference || '',
                                             '希望教室タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
-                                            '過去教室': s.previousRooms?.join(' ') || '',
+                                            '過去教室': s.previousRooms?.join(', ') || '',
                                         };
                                         // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
                                         EQUIPMENT_LIST.forEach(eq => {
-                                            base[eq] = equipValue(eq, s.requiresMovable, s.requiresProjector, s.mandatoryEquipment, s.requiredEquipment);
+                                            baseRow[eq] = equipValue(eq, s.requiresMovable, s.requiresProjector, s.mandatoryEquipment, s.requiredEquipment);
                                         });
-                                        // 配当教室情報
-                                        base['教室ID'] = allocatedRooms.map(r => r?.id ?? '').join(' / ');
-                                        base['教室名'] = allocatedRooms.map(r => r?.name ?? '').join(' / ');
-                                        base['建物'] = allocatedRooms.map(r => r?.building ?? '').join(' / ');
-                                        base['教室定員'] = allocatedRooms.map(r => r?.capacity ?? '').join(' / ');
-                                        base['教室試験定員'] = allocatedRooms.map(r => r?.examCapacity ?? '').join(' / ');
-                                        base['教室タイプ'] = allocatedRooms.map(r => r ? (ROOM_TYPE_LABELS[r.type] ?? r.type) : '').join(' / ');
-                                        base['教室設備'] = allocatedRooms.map(r => {
-                                            if (!r) return '';
-                                            const eqList = [...(r.equipment ?? [])];
-                                            if (r.isMovable) eqList.unshift('可動');
-                                            return eqList.join('/');
-                                        }).join(' | ');
-                                        return base;
+
+                                        if (subjectAllocations.length === 0) {
+                                            // 未配当：教室情報なしで1行
+                                            return [{ ...baseRow, '教室ID': '', '教室名': '', '建物': '', '教室定員': '', '教室試験定員': '', '教室タイプ': '', '教室設備': '' }];
+                                        }
+                                        // 配当済み：1教室1行
+                                        return subjectAllocations.map(alloc => {
+                                            const r = classrooms.find(rm => rm.id === alloc.classroomId);
+                                            const eqList = r ? [...(r.equipment ?? [])] : [];
+                                            if (r?.isMovable) eqList.unshift('可動');
+                                            return {
+                                                ...baseRow,
+                                                '教室ID': r?.id ?? '',
+                                                '教室名': r?.name ?? '',
+                                                '建物': r?.building ?? '',
+                                                '教室定員': r?.capacity ?? '',
+                                                '教室試験定員': r?.examCapacity ?? '',
+                                                '教室タイプ': r ? (ROOM_TYPE_LABELS[r.type] ?? r.type) : '',
+                                                '教室設備': eqList.join(', ')
+                                            };
+                                        });
                                     });
                                     exportToCSV(exportData, 'subjects_export.csv');
                                 }} style={{
@@ -467,20 +474,20 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                     {[
                                         { key: 'code', label: 'コード', width: '70px' },
-                                        { key: 'name', label: '時間割名称', width: '160px' },
-                                        { key: 'teacher', label: '教員', width: '80px' },
-                                        { key: 'faculty', label: '学部', width: '60px' },
+                                        { key: 'name', label: '時間割名称', width: '208px' },
+                                        { key: 'teacher', label: '教員', width: '104px' },
+                                        { key: 'faculty', label: '学部', width: '78px' },
                                         { key: 'department', label: '管轄', width: '50px' },
-                                        { key: 'term', label: '学期', width: '70px' },
+                                        { key: 'term', label: '学期', width: '77px' },
                                         { key: 'day', label: '曜日', width: '60px' },
                                         { key: 'period', label: '講時', width: '70px' },
                                         { key: 'campus', label: 'キャンパス', width: '70px' },
                                         { key: 'requiredCapacity', label: '定員', width: '50px' },
-                                        { key: 'priority', label: '優先', width: '60px' },
+                                        { key: 'priority', label: '優先度', width: '65px' },
                                         { key: 'requiredRoomCount', label: '数', width: '55px' },
                                         { key: 'buildingPreference', label: '希望建物', width: '60px' },
                                         { key: 'preferredRoomType', label: 'タイプ', width: '60px' },
-                                        { key: 'requiredEquipment', label: '機材', width: '100px' },
+                                        { key: 'requiredEquipment', label: '機材･設備', width: '130px' },
                                         { key: 'previousRooms', label: '過去教室', width: '80px' },
                                         { key: 'allocatedRoom', label: '配当教室', width: '100px' },
                                     ].map(col => (
