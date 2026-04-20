@@ -285,7 +285,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '225px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
+                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '293px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -266,6 +266,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                             display: 'flex',
                             flexDirection: 'column',
                             minHeight: '120px',
+                            flexShrink: 0,
                             gap: '4px'
                         }}
                     >

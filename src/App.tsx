@@ -30,6 +30,13 @@ import {
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 
+// ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ（半角）→ タッチディスプレイ（全角）の正規化
+const normalizeClassrooms = (rooms: Classroom[]): Classroom[] =>
+  rooms.map(r => ({
+    ...r,
+    equipment: r.equipment.map(eq => eq === 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' ? 'タッチディスプレイ' : eq)
+  }));
+
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
@@ -48,7 +55,7 @@ function App() {
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     try {
       const saved = localStorage.getItem('classrooms');
-      return saved ? JSON.parse(saved) : mockClassrooms;
+      return saved ? normalizeClassrooms(JSON.parse(saved)) : mockClassrooms;
     } catch { return mockClassrooms; }
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
@@ -181,7 +188,7 @@ function App() {
       const cloudData = await refreshData();
       if (cloudData) {
         if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
-          setClassrooms(cloudData.classrooms);
+          setClassrooms(normalizeClassrooms(cloudData.classrooms));
           setSubjects(cloudData.subjects);
           setAllocations(cloudData.allocations);
           setAllocationSettings(cloudData.settings?.length ? cloudData.settings : DEFAULT_ALLOCATION_RULES);
@@ -709,8 +716,8 @@ function App() {
                     }}>{eq.label}</button>
                 ))}
               </div>
-              {(selectedTypes.length > 0 || selectedEquipment.length > 0) && (
-                <button onClick={() => { setSelectedTypes([]); setSelectedEquipment([]); }}
+              {(selectedBuilding !== 'all' || selectedTypes.length > 0 || selectedEquipment.length > 0) && (
+                <button onClick={() => { setSelectedBuilding('all'); setSelectedTypes([]); setSelectedEquipment([]); }}
                   style={{ marginLeft: 'auto', padding: '2px 8px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff', color: '#666', cursor: 'pointer', fontSize: '0.85em' }}>
                   絞込解除
                 </button>
