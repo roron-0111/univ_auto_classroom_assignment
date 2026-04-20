@@ -192,6 +192,15 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     const smW = (k: SMColKey) => `${colConfig[k].width}px`;
     const smToggle = (k: SMColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
     const smSetW = (k: SMColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
+    const [showCsvHint, setShowCsvHint] = useState(false);
+    const csvHintRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!showCsvHint) return;
+        const handler = (e: MouseEvent) => { if (csvHintRef.current && !csvHintRef.current.contains(e.target as Node)) setShowCsvHint(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showCsvHint]);
+
     const smDrag = (k: SMColKey) => (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
         const x0 = e.clientX, w0 = colConfig[k].width;
@@ -442,7 +451,19 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     }}>
                                         <Upload size={18} /> CSVインポート
                                     </button>
-                                    <span title={'必須列: 時間割コード(またはID), 曜日(月火水木金土), 開始講時(数値), 配当期(春学期/春前半/春後半/秋学期/秋前半/秋後半/通年)\n任意列: 時間割名称, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)\n機材列: ◎=必須 ○=希望\n※エクスポートCSVをそのまま再インポート可'} style={{ cursor: 'help', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0 }}>?</span>
+                                    <div ref={csvHintRef} style={{ position: 'relative' }}>
+                                        <button onClick={() => setShowCsvHint(s => !s)} style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0, background: showCsvHint ? '#f0f4ff' : '#fff', padding: 0 }}>?</button>
+                                        {showCsvHint && (
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
+                                                <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 時間割コード(またはID), 曜日(月〜土), 開始講時(数値), 配当期</div>
+                                                <div style={{ marginBottom: '2px', fontSize: '0.73rem', color: '#888', paddingLeft: '4px' }}>配当期: 春学期/春前半/春後半/秋学期/秋前半/秋後半/通年</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: 時間割名称, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)</div>
+                                                <div style={{ marginBottom: '4px' }}>機材列: 列名=機材名、◎=必須 ○=希望</div>
+                                                <div style={{ color: '#1976d2', fontSize: '0.75rem', marginTop: '6px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）

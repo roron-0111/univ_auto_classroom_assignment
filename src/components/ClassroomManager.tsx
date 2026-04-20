@@ -80,6 +80,15 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const crW = (k: CRColKey) => `${colConfig[k].width}px`;
     const crToggle = (k: CRColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
     const crSetW = (k: CRColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
+    const [showCsvHint, setShowCsvHint] = useState(false);
+    const csvHintRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!showCsvHint) return;
+        const handler = (e: MouseEvent) => { if (csvHintRef.current && !csvHintRef.current.contains(e.target as Node)) setShowCsvHint(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showCsvHint]);
+
     const crDrag = (k: CRColKey) => (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
         const x0 = e.clientX, w0 = colConfig[k].width;
@@ -267,7 +276,18 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                     }}>
                                         <Upload size={18} /> CSVインポート
                                     </button>
-                                    <span title={'必須列: 教室名, 建物, 収容人数\n任意列: ID, 教室タイプ, 可動, 配当対象外, 機材列(○で有効)\n※エクスポートCSVをそのまま再インポート可'} style={{ cursor: 'help', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0 }}>?</span>
+                                    <div ref={csvHintRef} style={{ position: 'relative' }}>
+                                        <button onClick={() => setShowCsvHint(s => !s)} style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0, background: showCsvHint ? '#f0f4ff' : '#fff', padding: 0 }}>?</button>
+                                        {showCsvHint && (
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '260px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
+                                                <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 教室名, 建物, 収容人数</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: ID, 教室タイプ, 可動(○), 配当対象外(○)</div>
+                                                <div style={{ marginBottom: '4px' }}>機材列: 列名がそのまま機材名、値が○なら有効</div>
+                                                <div style={{ color: '#1976d2', fontSize: '0.75rem', marginTop: '6px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <button onClick={() => {
                                     const exportData = classrooms.map(r => {
