@@ -154,11 +154,44 @@ const MultiSelectFilter = ({
     );
 };
 
+const SM_COL_DEFS = [
+    { key: 'code', label: 'コード', width: 70 },
+    { key: 'name', label: '時間割名称', width: 208 },
+    { key: 'teacher', label: '教員', width: 104 },
+    { key: 'faculty', label: '学部', width: 78 },
+    { key: 'department', label: '管轄', width: 50 },
+    { key: 'term', label: '学期', width: 77 },
+    { key: 'day', label: '曜日', width: 60 },
+    { key: 'period', label: '講時', width: 70 },
+    { key: 'campus', label: 'キャンパス', width: 70 },
+    { key: 'requiredCapacity', label: '定員', width: 90 },
+    { key: 'priority', label: '優先度', width: 65 },
+    { key: 'requiredRoomCount', label: '数', width: 55 },
+    { key: 'buildingPreference', label: '希望建物', width: 60 },
+    { key: 'preferredRoomType', label: 'タイプ', width: 60 },
+    { key: 'requiredEquipment', label: '機材･設備', width: 130 },
+    { key: 'previousRooms', label: '過去教室', width: 80 },
+    { key: 'allocatedRoom', label: '配当教室', width: 100 },
+] as const;
+type SMColKey = typeof SM_COL_DEFS[number]['key'];
+type SMColConfig = Record<SMColKey, { width: number; hidden: boolean }>;
+const smColDefaults = (): SMColConfig => Object.fromEntries(SM_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as SMColConfig;
+
 export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, onClose }: Props) => {
     const [editingSubjectModal, setEditingSubjectModal] = useState<Subject | null>(null);
     const [editForm, setEditForm] = useState<Partial<Subject>>({});
     const [isAdding, setIsAdding] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [colConfig, setColConfig] = useState<SMColConfig>(() => {
+        try { const s = localStorage.getItem('smColConfig'); if (s) return { ...smColDefaults(), ...JSON.parse(s) }; } catch {}
+        return smColDefaults();
+    });
+    const [showColSettings, setShowColSettings] = useState(false);
+    useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
+    const smShow = (k: SMColKey) => !colConfig[k].hidden;
+    const smW = (k: SMColKey) => `${colConfig[k].width}px`;
+    const smToggle = (k: SMColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
+    const smSetW = (k: SMColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
 
     const availableEquipment = useMemo(() => {
         const set = new Set<string>(EQUIPMENT_LIST);
@@ -178,6 +211,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         period: [] as string[],
         campus: '',
         requiredCapacity: '',
+        requiredCapacityMax: '',
         priority: [] as number[],
         requiredRoomCount: [] as number[],
         buildingPreference: [] as string[],
@@ -242,6 +276,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
 
             // 数値系
             if (filters.requiredCapacity && s.requiredCapacity < Number(filters.requiredCapacity)) return false;
+            if (filters.requiredCapacityMax && s.requiredCapacity > Number(filters.requiredCapacityMax)) return false;
             if (filters.requiredRoomCount.length > 0 && !filters.requiredRoomCount.includes(s.requiredRoomCount || 1)) return false;
 
             // テキスト系（配列など）
@@ -453,6 +488,27 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     <Download size={18} /> CSVエクスポート
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
+                                <div style={{ position: 'relative' }}>
+                                    <button onClick={() => setShowColSettings(s => !s)} style={{
+                                        display: 'flex', gap: '6px', alignItems: 'center', background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
+                                    }}>列設定</button>
+                                    {showColSettings && (
+                                        <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', padding: '10px', width: '250px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', marginTop: '4px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>列設定</span>
+                                                <button onClick={() => setColConfig(smColDefaults())} style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#f5f5f5', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>初期値に戻す</button>
+                                            </div>
+                                            {SM_COL_DEFS.map(col => (
+                                                <div key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                                                    <input type="checkbox" checked={!colConfig[col.key].hidden} onChange={() => smToggle(col.key)} style={{ cursor: 'pointer' }} />
+                                                    <span style={{ flex: 1, fontSize: '0.82rem' }}>{col.label}</span>
+                                                    <input type="number" value={colConfig[col.key].width} onChange={e => smSetW(col.key, Number(e.target.value))} style={{ width: '54px', fontSize: '0.8rem', border: '1px solid #ddd', borderRadius: '3px', padding: '2px 4px' }} />
+                                                    <span style={{ fontSize: '0.7rem', color: '#999' }}>px</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -472,26 +528,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
                             <thead>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                                    {[
-                                        { key: 'code', label: 'コード', width: '70px' },
-                                        { key: 'name', label: '時間割名称', width: '208px' },
-                                        { key: 'teacher', label: '教員', width: '104px' },
-                                        { key: 'faculty', label: '学部', width: '78px' },
-                                        { key: 'department', label: '管轄', width: '50px' },
-                                        { key: 'term', label: '学期', width: '77px' },
-                                        { key: 'day', label: '曜日', width: '60px' },
-                                        { key: 'period', label: '講時', width: '70px' },
-                                        { key: 'campus', label: 'キャンパス', width: '70px' },
-                                        { key: 'requiredCapacity', label: '定員', width: '50px' },
-                                        { key: 'priority', label: '優先度', width: '65px' },
-                                        { key: 'requiredRoomCount', label: '数', width: '55px' },
-                                        { key: 'buildingPreference', label: '希望建物', width: '60px' },
-                                        { key: 'preferredRoomType', label: 'タイプ', width: '60px' },
-                                        { key: 'requiredEquipment', label: '機材･設備', width: '130px' },
-                                        { key: 'previousRooms', label: '過去教室', width: '80px' },
-                                        { key: 'allocatedRoom', label: '配当教室', width: '100px' },
-                                    ].map(col => (
-                                        <th key={col.key} style={{ ...thStyle, width: col.width }} onClick={() => handleSort(col.key)}>
+                                    {SM_COL_DEFS.filter(col => smShow(col.key)).map(col => (
+                                        <th key={col.key} style={{ ...thStyle, width: smW(col.key) }} onClick={() => handleSort(col.key)}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                                                 {col.label}
                                                 <SortIcon columnKey={col.key} />
@@ -505,68 +543,29 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     </th>
                                 </tr>
                                 <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
-                                    {[
-                                        { key: 'code', type: 'text' },
-                                        { key: 'name', type: 'text' },
-                                        { key: 'teacher', type: 'text' },
-                                        { key: 'faculty', type: 'select', options: ['理', '経', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v })) },
-                                        { key: 'department', type: 'select', options: ['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v })) },
-                                        {
-                                            key: 'term', type: 'select', options: [
-                                                { value: 'spring', label: '春学期' },
-                                                { value: 'spring_first', label: '春前半' },
-                                                { value: 'spring_second', label: '春後半' },
-                                                { value: 'autumn', label: '秋学期' },
-                                                { value: 'autumn_first', label: '秋前半' },
-                                                { value: 'autumn_second', label: '秋後半' },
-                                                { value: 'full_year', label: '通年' }
-                                            ]
-                                        },
-                                        { key: 'day', type: 'select', options: Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v, label: l })) },
-                                        { key: 'period', type: 'select', options: periodOptions },
-                                        { key: 'campus', type: 'text' },
-                                        { key: 'requiredCapacity', type: 'number' },
-                                        { key: 'priority', type: 'select', options: [1, 2, 3].map(v => ({ value: v, label: String(v) })) },
-                                        { key: 'requiredRoomCount', type: 'select', options: [1, 2, 3, 4, 5].map(v => ({ value: v, label: String(v) })) },
-                                        { key: 'buildingPreference', type: 'select', options: BUILDINGS.map(v => ({ value: v, label: v })) },
-                                        {
-                                            key: 'preferredRoomType', type: 'select', options: [
-                                                { value: 'normal', label: '一般' },
-                                                { value: 'pc', label: 'PC' },
-                                                { value: 'seminar', label: 'ゼミ' }
-                                            ]
-                                        },
-                                        { key: 'requiredEquipment', type: 'text' },
-                                        { key: 'previousRooms', type: 'text' },
-                                        { key: 'allocatedRoom', type: 'text' },
-                                    ].map((field, idx) => (
-                                        <td key={idx} style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
-                                            {field.type === 'text' && (
-                                                <input
-                                                    style={filterInputStyle}
-                                                    value={(filters as any)[field.key]}
-                                                    onChange={e => setFilters({ ...filters, [field.key]: e.target.value })}
-                                                    placeholder="検索..."
-                                                />
-                                            )}
-                                            {field.type === 'number' && (
-                                                <input
-                                                    style={filterInputStyle}
-                                                    type="number"
-                                                    value={(filters as any)[field.key]}
-                                                    onChange={e => setFilters({ ...filters, [field.key]: e.target.value })}
-                                                    placeholder={field.key === 'requiredCapacity' ? "以上" : ""}
-                                                />
-                                            )}
-                                            {field.type === 'select' && field.options && (
-                                                <MultiSelectFilter
-                                                    options={field.options}
-                                                    selected={(filters as any)[field.key] as any[]}
-                                                    onChange={(val) => setFilters({ ...filters, [field.key]: val })}
-                                                />
-                                            )}
-                                        </td>
-                                    ))}
+                                    {smShow('code') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.code} onChange={e => setFilters({ ...filters, code: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('name') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('teacher') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacher} onChange={e => setFilters({ ...filters, teacher: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('faculty') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '経', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.faculty} onChange={v => setFilters({ ...filters, faculty: v as string[] })} /></td>}
+                                    {smShow('department') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.department} onChange={v => setFilters({ ...filters, department: v as string[] })} /></td>}
+                                    {smShow('term') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[{value:'spring',label:'春学期'},{value:'spring_first',label:'春前半'},{value:'spring_second',label:'春後半'},{value:'autumn',label:'秋学期'},{value:'autumn_first',label:'秋前半'},{value:'autumn_second',label:'秋後半'},{value:'full_year',label:'通年'}]} selected={filters.term} onChange={v => setFilters({ ...filters, term: v as Term[] })} /></td>}
+                                    {smShow('day') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v, label: l }))} selected={filters.day} onChange={v => setFilters({ ...filters, day: v as DayOfWeek[] })} /></td>}
+                                    {smShow('period') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={periodOptions} selected={filters.period} onChange={v => setFilters({ ...filters, period: v as string[] })} /></td>}
+                                    {smShow('campus') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.campus} onChange={e => setFilters({ ...filters, campus: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('requiredCapacity') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                                            <input type="number" style={{ ...filterInputStyle, width: '42px' }} value={filters.requiredCapacity} onChange={e => setFilters({ ...filters, requiredCapacity: e.target.value })} placeholder="以上" />
+                                            <span style={{ fontSize: '0.65rem', color: '#999' }}>〜</span>
+                                            <input type="number" style={{ ...filterInputStyle, width: '42px' }} value={filters.requiredCapacityMax} onChange={e => setFilters({ ...filters, requiredCapacityMax: e.target.value })} placeholder="以下" />
+                                        </div>
+                                    </td>}
+                                    {smShow('priority') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[1, 2, 3].map(v => ({ value: v, label: String(v) }))} selected={filters.priority} onChange={v => setFilters({ ...filters, priority: v as number[] })} /></td>}
+                                    {smShow('requiredRoomCount') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[1, 2, 3, 4, 5].map(v => ({ value: v, label: String(v) }))} selected={filters.requiredRoomCount} onChange={v => setFilters({ ...filters, requiredRoomCount: v as number[] })} /></td>}
+                                    {smShow('buildingPreference') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={BUILDINGS.map(v => ({ value: v, label: v }))} selected={filters.buildingPreference} onChange={v => setFilters({ ...filters, buildingPreference: v as string[] })} /></td>}
+                                    {smShow('preferredRoomType') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[{value:'normal',label:'一般'},{value:'pc',label:'PC'},{value:'seminar',label:'ゼミ'}]} selected={filters.preferredRoomType} onChange={v => setFilters({ ...filters, preferredRoomType: v as string[] })} /></td>}
+                                    {smShow('requiredEquipment') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.requiredEquipment} onChange={e => setFilters({ ...filters, requiredEquipment: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('previousRooms') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.previousRooms} onChange={e => setFilters({ ...filters, previousRooms: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('allocatedRoom') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={(filters as any).allocatedRoom || ''} onChange={e => setFilters({ ...filters, allocatedRoom: e.target.value } as any)} placeholder="検索..." /></td>}
                                     <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center', background: '#fafafa' }}>
                                         <button
                                             onClick={handleDeleteAll}
@@ -583,87 +582,23 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                             <tbody>
                                 {isAdding && (
                                     <tr style={{ background: '#f0f4ff' }}>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} style={{ width: '100%' }} placeholder="A0001" />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.teacher} onChange={e => setEditForm({ ...editForm, teacher: e.target.value })} style={{ width: '100%' }} />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.faculty} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }} placeholder="学部" />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.department || '他'} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}>
-                                                {['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => <option key={v} value={v}>{v}</option>)}
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.term} onChange={e => setEditForm({ ...editForm, term: e.target.value as Term })} style={{ width: '100%' }}>
-                                                <option value="spring">春学期</option>
-                                                <option value="spring_first">春前半</option>
-                                                <option value="spring_second">春後半</option>
-                                                <option value="autumn">秋学期</option>
-                                                <option value="autumn_first">秋前半</option>
-                                                <option value="autumn_second">秋後半</option>
-                                                <option value="full_year">通年</option>
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.day} onChange={e => setEditForm({ ...editForm, day: e.target.value as DayOfWeek })} style={{ width: '100%' }}>
-                                                {Object.entries(DAY_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.period} onChange={e => setEditForm({ ...editForm, period: Number(e.target.value) as Period })} style={{ width: '100%' }}>
-                                                {[1, 2, 3, 4, 5, 6, 7].map(p => <option key={p} value={p}>{p}</option>)}
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.campus || ''} onChange={e => setEditForm({ ...editForm, campus: e.target.value })} style={{ width: '100%' }} placeholder="キャンパス" />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input type="number" value={editForm.requiredCapacity} onChange={e => setEditForm({ ...editForm, requiredCapacity: Number(e.target.value) })} style={{ width: '100%' }} />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.priority || 1} onChange={e => setEditForm({ ...editForm, priority: Number(e.target.value) })} style={{ width: '100%' }}>
-                                                {[1, 2, 3].map(p => <option key={p} value={p}>{p}</option>)}
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input type="number" min="1" value={editForm.requiredRoomCount || 1} onChange={e => setEditForm({ ...editForm, requiredRoomCount: Number(e.target.value) })} style={{ width: '100%' }} />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select
-                                                value={editForm.buildingPreference || ''}
-                                                onChange={e => setEditForm({ ...editForm, buildingPreference: e.target.value })}
-                                                style={{ width: '100%', padding: '4px' }}
-                                            >
-                                                <option value="">(なし)</option>
-                                                {BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
-                                            </select>
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <select value={editForm.preferredRoomType || 'normal'} onChange={e => setEditForm({ ...editForm, preferredRoomType: e.target.value as any })} style={{ width: '100%' }}>
-                                                <option value="normal">一般</option>
-                                                <option value="pc">PC</option>
-                                                <option value="seminar">ゼミ</option>
-                                            </select>
-                                        </td>
-                                        {/* 機材編集 */}
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input
-                                                value={editForm.requiredEquipment?.join(' ') || ''}
-                                                onChange={e => setEditForm({ ...editForm, requiredEquipment: e.target.value.split(/\s+/).filter(Boolean) })}
-                                                style={{ width: '100%' }}
-                                                placeholder="例: プロジェクタ 可動"
-                                            />
-                                        </td>
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <input value={editForm.previousRooms?.join(',')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201,3-202" />
-                                        </td>
+                                        {smShow('code') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} style={{ width: '100%' }} placeholder="A0001" /></td>}
+                                        {smShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} /></td>}
+                                        {smShow('teacher') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacher} onChange={e => setEditForm({ ...editForm, teacher: e.target.value })} style={{ width: '100%' }} /></td>}
+                                        {smShow('faculty') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.faculty} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }} placeholder="学部" /></td>}
+                                        {smShow('department') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.department || '他'} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}>{['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
+                                        {smShow('term') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.term} onChange={e => setEditForm({ ...editForm, term: e.target.value as Term })} style={{ width: '100%' }}><option value="spring">春学期</option><option value="spring_first">春前半</option><option value="spring_second">春後半</option><option value="autumn">秋学期</option><option value="autumn_first">秋前半</option><option value="autumn_second">秋後半</option><option value="full_year">通年</option></select></td>}
+                                        {smShow('day') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.day} onChange={e => setEditForm({ ...editForm, day: e.target.value as DayOfWeek })} style={{ width: '100%' }}>{Object.entries(DAY_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}</select></td>}
+                                        {smShow('period') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.period} onChange={e => setEditForm({ ...editForm, period: Number(e.target.value) as Period })} style={{ width: '100%' }}>{[1, 2, 3, 4, 5, 6, 7].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
+                                        {smShow('campus') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.campus || ''} onChange={e => setEditForm({ ...editForm, campus: e.target.value })} style={{ width: '100%' }} placeholder="キャンパス" /></td>}
+                                        {smShow('requiredCapacity') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" value={editForm.requiredCapacity} onChange={e => setEditForm({ ...editForm, requiredCapacity: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
+                                        {smShow('priority') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.priority || 1} onChange={e => setEditForm({ ...editForm, priority: Number(e.target.value) })} style={{ width: '100%' }}>{[1, 2, 3].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
+                                        {smShow('requiredRoomCount') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" min="1" value={editForm.requiredRoomCount || 1} onChange={e => setEditForm({ ...editForm, requiredRoomCount: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
+                                        {smShow('buildingPreference') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.buildingPreference || ''} onChange={e => setEditForm({ ...editForm, buildingPreference: e.target.value })} style={{ width: '100%', padding: '4px' }}><option value="">(なし)</option>{BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}</select></td>}
+                                        {smShow('preferredRoomType') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.preferredRoomType || 'normal'} onChange={e => setEditForm({ ...editForm, preferredRoomType: e.target.value as any })} style={{ width: '100%' }}><option value="normal">一般</option><option value="pc">PC</option><option value="seminar">ゼミ</option></select></td>}
+                                        {smShow('requiredEquipment') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.requiredEquipment?.join(' ') || ''} onChange={e => setEditForm({ ...editForm, requiredEquipment: e.target.value.split(/\s+/).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: プロジェクタ 可動" /></td>}
+                                        {smShow('previousRooms') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.previousRooms?.join(',')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201,3-202" /></td>}
+                                        {smShow('allocatedRoom') && <td style={{ padding: '8px', border: '1px solid #ddd' }} />}
                                         <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', gap: '6px' }}>
                                                 <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
@@ -674,54 +609,46 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 )}
                                 {sortedSubjects.map(subject => (
                                     <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.teacher}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.faculty}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.department}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                                                {TERM_LABELS[subject.term] || subject.term}
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{DAY_LABELS[subject.day]}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                                                {subject.period}{subject.endPeriod && subject.endPeriod !== subject.period ? `-${subject.endPeriod}` : ''}
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.campus}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.requiredCapacity}名</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.priority}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{subject.requiredRoomCount || 1}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{subject.buildingPreference}</td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                                                {subject.preferredRoomType === 'normal' ? '一般' : subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '-'}
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                                                    {subject.requiredEquipment?.map(eq => (
-                                                        <span key={eq} style={{ background: '#eee', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>{eq}</span>
-                                                    ))}
-                                                    {subject.requiresMovable && <span style={{ background: '#e1bee7', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>可動</span>}
-                                                </div>
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em', color: '#666' }}>
-                                                {subject.previousRooms?.join(', ')}
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
-                                                {(() => {
-                                                    const rooms = allocations
-                                                        .filter(a => a.subjectId === subject.id)
-                                                        .map(a => classrooms.find(r => r.id === a.classroomId)?.name ?? a.classroomId);
-                                                    return rooms.length > 0
-                                                        ? <span style={{ color: '#1976d2', fontWeight: 'bold' }}>{rooms.join(' / ')}</span>
-                                                        : <span style={{ color: '#bbb' }}>未配当</span>;
-                                                })()}
-                                            </td>
-                                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
-                                                <div style={{ display: 'flex', gap: '10px' }}>
-                                                    <button onClick={() => handleEdit(subject)} style={{ background: 'none', border: 'none', color: '#1976d2', cursor: 'pointer' }} title="編集"><Edit2 size={16} /></button>
-                                                    <button onClick={() => handleDelete(subject.id)} style={{ background: 'none', border: 'none', color: '#d32f2f', cursor: 'pointer' }} title="削除"><Trash2 size={16} /></button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                        {smShow('code') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>}
+                                        {smShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>}
+                                        {smShow('teacher') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.teacher}</td>}
+                                        {smShow('faculty') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.faculty}</td>}
+                                        {smShow('department') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.department}</td>}
+                                        {smShow('term') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{TERM_LABELS[subject.term] || subject.term}</td>}
+                                        {smShow('day') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{DAY_LABELS[subject.day]}</td>}
+                                        {smShow('period') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.period}{subject.endPeriod && subject.endPeriod !== subject.period ? `-${subject.endPeriod}` : ''}</td>}
+                                        {smShow('campus') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.campus}</td>}
+                                        {smShow('requiredCapacity') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.requiredCapacity}名</td>}
+                                        {smShow('priority') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.priority}</td>}
+                                        {smShow('requiredRoomCount') && <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{subject.requiredRoomCount || 1}</td>}
+                                        {smShow('buildingPreference') && <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{subject.buildingPreference}</td>}
+                                        {smShow('preferredRoomType') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.preferredRoomType === 'normal' ? '一般' : subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '-'}</td>}
+                                        {smShow('requiredEquipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
+                                                {subject.requiredEquipment?.map(eq => (
+                                                    <span key={eq} style={{ background: '#eee', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>{eq}</span>
+                                                ))}
+                                                {subject.requiresMovable && <span style={{ background: '#e1bee7', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>可動</span>}
+                                            </div>
+                                        </td>}
+                                        {smShow('previousRooms') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em', color: '#666' }}>{subject.previousRooms?.join(', ')}</td>}
+                                        {smShow('allocatedRoom') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
+                                            {(() => {
+                                                const rooms = allocations
+                                                    .filter(a => a.subjectId === subject.id)
+                                                    .map(a => classrooms.find(r => r.id === a.classroomId)?.name ?? a.classroomId);
+                                                return rooms.length > 0
+                                                    ? <span style={{ color: '#1976d2', fontWeight: 'bold' }}>{rooms.join(' / ')}</span>
+                                                    : <span style={{ color: '#bbb' }}>未配当</span>;
+                                            })()}
+                                        </td>}
+                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                <button onClick={() => handleEdit(subject)} style={{ background: 'none', border: 'none', color: '#1976d2', cursor: 'pointer' }} title="編集"><Edit2 size={16} /></button>
+                                                <button onClick={() => handleDelete(subject.id)} style={{ background: 'none', border: 'none', color: '#d32f2f', cursor: 'pointer' }} title="削除"><Trash2 size={16} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 ))}
                                 {sortedSubjects.length === 0 && !isAdding && (
                                     <tr>
@@ -731,8 +658,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                 <span>該当する授業が見つかりません</span>
                                                 <button
                                                     onClick={() => setFilters({
-                                                        code: '', name: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: ''
-                                                    })}
+                                                        code: '', name: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', requiredCapacityMax: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: '', allocatedRoom: ''
+                                                    } as any)}
                                                     style={{ background: 'none', border: '1px solid #ccc', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', marginTop: '10px' }}
                                                 >
                                                     フィルタをすべて解除

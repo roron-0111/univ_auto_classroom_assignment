@@ -53,10 +53,33 @@ interface Props {
     onClose: () => void;
 }
 
+const CR_COL_DEFS = [
+    { key: 'id', label: 'ID', width: 60 },
+    { key: 'name', label: '教室名', width: 120 },
+    { key: 'building', label: '建物', width: 100 },
+    { key: 'capacity', label: '収容人数(試験)', width: 140 },
+    { key: 'type', label: 'タイプ', width: 90 },
+    { key: 'equipment', label: '機材・設備', width: 293 },
+    { key: 'isExcluded', label: '配当対象外', width: 90 },
+] as const;
+type CRColKey = typeof CR_COL_DEFS[number]['key'];
+type CRColConfig = Record<CRColKey, { width: number; hidden: boolean }>;
+const crColDefaults = (): CRColConfig => Object.fromEntries(CR_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as CRColConfig;
+
 export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
+    const [colConfig, setColConfig] = useState<CRColConfig>(() => {
+        try { const s = localStorage.getItem('crColConfig'); if (s) return { ...crColDefaults(), ...JSON.parse(s) }; } catch {}
+        return crColDefaults();
+    });
+    const [showColSettings, setShowColSettings] = useState(false);
+    useEffect(() => { localStorage.setItem('crColConfig', JSON.stringify(colConfig)); }, [colConfig]);
+    const crShow = (k: CRColKey) => !colConfig[k].hidden;
+    const crW = (k: CRColKey) => `${colConfig[k].width}px`;
+    const crToggle = (k: CRColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
+    const crSetW = (k: CRColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
     const [filters, setFilters] = useState({
         id: '', name: '', buildings: [] as string[], type: '',
         capacityMin: '', capacityMax: '', examCapacityMin: '', examCapacityMax: '',
@@ -263,6 +286,27 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                     <Download size={18} /> CSVエクスポート
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
+                                <div style={{ position: 'relative' }}>
+                                    <button onClick={() => setShowColSettings(s => !s)} style={{
+                                        display: 'flex', gap: '6px', alignItems: 'center', background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
+                                    }}>列設定</button>
+                                    {showColSettings && (
+                                        <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', padding: '10px', width: '250px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', marginTop: '4px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>列設定</span>
+                                                <button onClick={() => setColConfig(crColDefaults())} style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#f5f5f5', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>初期値に戻す</button>
+                                            </div>
+                                            {CR_COL_DEFS.map(col => (
+                                                <div key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                                                    <input type="checkbox" checked={!colConfig[col.key].hidden} onChange={() => crToggle(col.key)} style={{ cursor: 'pointer' }} />
+                                                    <span style={{ flex: 1, fontSize: '0.82rem' }}>{col.label}</span>
+                                                    <input type="number" value={colConfig[col.key].width} onChange={e => crSetW(col.key, Number(e.target.value))} style={{ width: '54px', fontSize: '0.8rem', border: '1px solid #ddd', borderRadius: '3px', padding: '2px 4px' }} />
+                                                    <span style={{ fontSize: '0.7rem', color: '#999' }}>px</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -280,13 +324,13 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                         <thead>
                             <tr style={{ textAlign: 'left' }}>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('order')}>順</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '60px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('id')}>ID</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '120px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('name')}>教室名</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '100px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '140px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '293px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>
-                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '90px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>
+                                {crShow('id') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('id'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('id')}>ID</th>}
+                                {crShow('name') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('name'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('name')}>教室名</th>}
+                                {crShow('building') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('building'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>}
+                                {crShow('capacity') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('capacity'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>}
+                                {crShow('type') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('type'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>}
+                                {crShow('equipment') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('equipment'), position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>}
+                                {crShow('isExcluded') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('isExcluded'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>}
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>操作</span>
@@ -296,22 +340,22 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                             {/* 検索行 */}
                             <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                {crShow('id') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
                                         value={filters.id} onChange={e => setFilters(f => ({ ...f, id: e.target.value }))} placeholder="ID..." />
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                </td>}
+                                {crShow('name') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
                                         value={filters.name} onChange={e => setFilters(f => ({ ...f, name: e.target.value }))} placeholder="検索..." />
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                </td>}
+                                {crShow('building') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <MultiSelectFilter
                                         options={BUILDINGS.map(b => ({ value: b, label: b }))}
                                         selected={filters.buildings}
                                         onChange={v => setFilters(f => ({ ...f, buildings: v }))}
                                     />
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                </td>}
+                                {crShow('capacity') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                         <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
                                             <input type="number" style={{ width: '46px', padding: '2px', fontSize: '0.72rem', border: '1px solid #ddd', borderRadius: '3px' }}
@@ -328,23 +372,23 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                 value={filters.examCapacityMax} onChange={e => setFilters(f => ({ ...f, examCapacityMax: e.target.value }))} placeholder="試験↓" title="試験定員・以下" />
                                         </div>
                                     </div>
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                </td>}
+                                {crShow('type') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <select style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px' }}
                                         value={filters.type} onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}>
                                         <option value="">全て</option>
                                         {Object.entries(ROOM_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                                     </select>
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
+                                </td>}
+                                {crShow('equipment') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <MultiSelectFilter
                                         options={allEquipmentOptions}
                                         selected={filters.equipment}
                                         onChange={v => setFilters(f => ({ ...f, equipment: v }))}
                                         placeholder="機材..."
                                     />
-                                </td>
-                                <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
+                                </td>}
+                                {crShow('isExcluded') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />}
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa', textAlign: 'center' }}>
                                     <button onClick={handleDeleteAll} style={{ fontSize: '0.7rem', padding: '2px 8px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>全削除</button>
                                 </td>
@@ -354,33 +398,33 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                             {isAdding && (
                                 <tr style={{ background: '#f0f4ff' }}>
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}></td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    {crShow('id') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <input value={editForm.id} onChange={e => setEditForm({ ...editForm, id: e.target.value })} style={{ width: '100%' }} placeholder="A101" />
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    </td>}
+                                    {crShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} />
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    </td>}
+                                    {crShow('building') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <select value={editForm.building} onChange={e => setEditForm({ ...editForm, building: e.target.value })} style={{ width: '100%', padding: '4px' }}>
                                             {BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
                                         </select>
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    </td>}
+                                    {crShow('capacity') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                             <input type="number" value={editForm.capacity} onChange={e => setEditForm({ ...editForm, capacity: Number(e.target.value) })} style={{ width: '50px' }} />
                                             <span>(</span>
                                             <input type="number" value={editForm.examCapacity} onChange={e => setEditForm({ ...editForm, examCapacity: Number(e.target.value) })} style={{ width: '50px' }} title="試験時定員" />
                                             <span>)</span>
                                         </div>
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    </td>}
+                                    {crShow('type') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value as any })} style={{ width: '100%' }}>
                                             {Object.entries(ROOM_TYPE_LABELS).map(([val, label]) => (
                                                 <option key={val} value={val}>{label}</option>
                                             ))}
                                         </select>
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                                    </td>}
+                                    {crShow('equipment') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
                                             {(editForm.equipment || []).map(eq => {
                                                 const style = getEquipmentStyle(eq);
@@ -398,14 +442,10 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                             <input value={newEquipment} onChange={e => setNewEquipment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addEq()} placeholder="機材名" style={{ width: '80px', fontSize: '0.9em' }} />
                                             <button onClick={addEq} style={{ padding: '2px 6px', background: '#eee', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>+</button>
                                         </div>
-                                    </td>
-                                    <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={!!editForm.isExcluded}
-                                            onChange={e => setEditForm({ ...editForm, isExcluded: e.target.checked })}
-                                        />
-                                    </td>
+                                    </td>}
+                                    {crShow('isExcluded') && <td style={{ padding: '8px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        <input type="checkbox" checked={!!editForm.isExcluded} onChange={e => setEditForm({ ...editForm, isExcluded: e.target.checked })} />
+                                    </td>}
                                     <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <div style={{ display: 'flex', gap: '6px' }}>
                                             <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
@@ -434,14 +474,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                 </button>
                                             </div>
                                         </td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.id}</td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{room.name}</td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.building}</td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                                        {crShow('id') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.id}</td>}
+                                        {crShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{room.name}</td>}
+                                        {crShow('building') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.building}</td>}
+                                        {crShow('capacity') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             {room.capacity}名 <span style={{ color: '#999', fontSize: '0.8em' }}>({room.examCapacity || '-'})</span>
-                                        </td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd' }}>{ROOM_TYPE_LABELS[room.type]}</td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
+                                        </td>}
+                                        {crShow('type') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{ROOM_TYPE_LABELS[room.type]}</td>}
+                                        {crShow('equipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                 <span style={{
                                                     background: IMPORTANT_EQUIPMENT_COLORS[room.isMovable ? '可動' : '固定'].bg,
@@ -451,7 +491,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                 }}>
                                                     {room.isMovable ? '可動' : '固定'}
                                                 </span>
-                                                {room.equipment.map(eq => {
+                                                {[...EQUIPMENT_LIST.filter(e => room.equipment.includes(e)), ...room.equipment.filter(e => !EQUIPMENT_LIST.includes(e))].map(eq => {
                                                     const style = getEquipmentStyle(eq);
                                                     return (
                                                         <span key={eq} style={{
@@ -463,8 +503,8 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                     );
                                                 })}
                                             </div>
-                                        </td>
-                                        <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                        </td>}
+                                        {crShow('isExcluded') && <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
                                             <input
                                                 type="checkbox"
                                                 checked={!!room.isExcluded}
@@ -472,7 +512,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                                 style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                                 title="自動配当の対象から外す"
                                             />
-                                        </td>
+                                        </td>}
                                         <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             <div style={{ display: 'flex', gap: '10px' }}>
                                                 <button onClick={() => handleEdit(room)} style={{ background: 'none', border: 'none', color: '#1976d2', cursor: 'pointer' }} title="編集"><Edit2 size={16} /></button>

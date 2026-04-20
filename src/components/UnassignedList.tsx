@@ -240,7 +240,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                 </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
                 {filteredSubjects.map((subject, index) => (
                     <div
                         key={subject.id}
@@ -263,11 +263,7 @@ export const UnassignedList = ({ subjects, allocations, onReorder, onDragStart, 
                             borderRadius: '6px',
                             cursor: 'grab',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            minHeight: '120px',
-                            flexShrink: 0,
-                            gap: '4px'
+                            marginBottom: '10px'
                         }}
                     >
                         <div>
