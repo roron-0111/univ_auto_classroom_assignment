@@ -285,9 +285,11 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
                     {rules.map((rule, index) => {
                         return (
                             <div key={rule.id} style={{
-                                background: '#fff', border: '1px solid #eee', borderRadius: '8px',
+                                background: rule.id === 'previous_room' ? '#fffbf0' : '#fff',
+                                border: rule.id === 'previous_room' ? '1.5px solid #f0a500' : '1px solid #eee',
+                                borderRadius: '8px',
                                 padding: '15px 20px', display: 'flex', alignItems: 'center',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                boxShadow: rule.id === 'previous_room' ? '0 2px 6px rgba(240,165,0,0.12)' : '0 2px 4px rgba(0,0,0,0.02)',
                                 transition: 'transform 0.2s',
                                 opacity: rule.enabled ? 1 : 0.6
                             }}>
@@ -322,10 +324,17 @@ export const AllocationRuleSettings = ({ settings, orderBonuses: initialBonuses,
 
                                 {/* Main Info */}
                                 <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333', marginBottom: '4px' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#333', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         {rule.name}
+                                        {rule.id === 'previous_room' && (
+                                            <span style={{ fontSize: '0.7rem', background: '#f0a500', color: '#fff', padding: '1px 7px', borderRadius: '10px', fontWeight: 'normal' }}>実務重要</span>
+                                        )}
                                     </div>
-                                    <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '8px' }}>{rule.description}</div>
+                                    <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '8px' }}>{rule.description}
+                                        {rule.id === 'previous_room' && (
+                                            <span style={{ marginLeft: '6px', fontSize: '0.8rem', color: '#b8860b' }}>— 重みを上げると過年度の教室を強く優先します</span>
+                                        )}
+                                    </div>
 
                                     {/* Weight Slider with Formula */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
