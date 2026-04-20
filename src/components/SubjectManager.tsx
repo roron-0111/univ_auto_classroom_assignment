@@ -192,6 +192,15 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     const smW = (k: SMColKey) => `${colConfig[k].width}px`;
     const smToggle = (k: SMColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
     const smSetW = (k: SMColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
+    const smDrag = (k: SMColKey) => (e: React.MouseEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        const x0 = e.clientX, w0 = colConfig[k].width;
+        const onMove = (ev: MouseEvent) => smSetW(k, w0 + ev.clientX - x0);
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+    const smRH = (k: SMColKey) => <div onMouseDown={smDrag(k)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }} />;
 
     const availableEquipment = useMemo(() => {
         const set = new Set<string>(EQUIPMENT_LIST);
@@ -427,11 +436,14 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 }}>
                                     <Plus size={18} /> 新規授業
                                 </button>
-                                <button onClick={() => fileInputRef.current?.click()} style={{
-                                    display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
-                                }}>
-                                    <Upload size={18} /> CSVインポート
-                                </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <button onClick={() => fileInputRef.current?.click()} style={{
+                                        display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
+                                    }}>
+                                        <Upload size={18} /> CSVインポート
+                                    </button>
+                                    <span title={'必須列: 時間割コード(またはID), 曜日(月火水木金土), 開始講時(数値), 配当期(春学期/春前半/春後半/秋学期/秋前半/秋後半/通年)\n任意列: 時間割名称, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)\n機材列: ◎=必須 ○=希望\n※エクスポートCSVをそのまま再インポート可'} style={{ cursor: 'help', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0 }}>?</span>
+                                </div>
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
                                     // 複数教室配当がある場合は1教室につき1行で出力
@@ -529,11 +541,12 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                             <thead>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                     {SM_COL_DEFS.filter(col => smShow(col.key)).map(col => (
-                                        <th key={col.key} style={{ ...thStyle, width: smW(col.key) }} onClick={() => handleSort(col.key)}>
+                                        <th key={col.key} style={{ ...thStyle, width: smW(col.key), overflow: 'visible' }} onClick={() => handleSort(col.key)}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                                                 {col.label}
                                                 <SortIcon columnKey={col.key} />
                                             </div>
+                                            {smRH(col.key)}
                                         </th>
                                     ))}
                                     <th style={{ ...thStyle, width: '70px', cursor: 'default' }}>
@@ -553,10 +566,9 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     {smShow('period') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={periodOptions} selected={filters.period} onChange={v => setFilters({ ...filters, period: v as string[] })} /></td>}
                                     {smShow('campus') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.campus} onChange={e => setFilters({ ...filters, campus: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('requiredCapacity') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
-                                        <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                                            <input type="number" style={{ ...filterInputStyle, width: '42px' }} value={filters.requiredCapacity} onChange={e => setFilters({ ...filters, requiredCapacity: e.target.value })} placeholder="以上" />
-                                            <span style={{ fontSize: '0.65rem', color: '#999' }}>〜</span>
-                                            <input type="number" style={{ ...filterInputStyle, width: '42px' }} value={filters.requiredCapacityMax} onChange={e => setFilters({ ...filters, requiredCapacityMax: e.target.value })} placeholder="以下" />
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <input type="number" style={{ ...filterInputStyle, fontSize: '0.72rem', padding: '2px 3px' }} value={filters.requiredCapacity} onChange={e => setFilters({ ...filters, requiredCapacity: e.target.value })} placeholder="以上" title="定員 以上" />
+                                            <input type="number" style={{ ...filterInputStyle, fontSize: '0.72rem', padding: '2px 3px' }} value={filters.requiredCapacityMax} onChange={e => setFilters({ ...filters, requiredCapacityMax: e.target.value })} placeholder="以下" title="定員 以下" />
                                         </div>
                                     </td>}
                                     {smShow('priority') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[1, 2, 3].map(v => ({ value: v, label: String(v) }))} selected={filters.priority} onChange={v => setFilters({ ...filters, priority: v as number[] })} /></td>}

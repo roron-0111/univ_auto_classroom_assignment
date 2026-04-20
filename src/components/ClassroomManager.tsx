@@ -80,6 +80,15 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const crW = (k: CRColKey) => `${colConfig[k].width}px`;
     const crToggle = (k: CRColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
     const crSetW = (k: CRColKey, w: number) => setColConfig(c => ({ ...c, [k]: { ...c[k], width: Math.max(30, w) } }));
+    const crDrag = (k: CRColKey) => (e: React.MouseEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        const x0 = e.clientX, w0 = colConfig[k].width;
+        const onMove = (ev: MouseEvent) => crSetW(k, w0 + ev.clientX - x0);
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+    const crRH = (k: CRColKey) => <div onMouseDown={crDrag(k)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }} />;
     const [filters, setFilters] = useState({
         id: '', name: '', buildings: [] as string[], type: '',
         capacityMin: '', capacityMax: '', examCapacityMin: '', examCapacityMax: '',
@@ -252,11 +261,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                 }}>
                                     <Plus size={18} /> 新規教室
                                 </button>
-                                <button onClick={() => fileInputRef.current?.click()} style={{
-                                    display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
-                                }}>
-                                    <Upload size={18} /> CSVインポート
-                                </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <button onClick={() => fileInputRef.current?.click()} style={{
+                                        display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
+                                    }}>
+                                        <Upload size={18} /> CSVインポート
+                                    </button>
+                                    <span title={'必須列: 教室名, 建物, 収容人数\n任意列: ID, 教室タイプ, 可動, 配当対象外, 機材列(○で有効)\n※エクスポートCSVをそのまま再インポート可'} style={{ cursor: 'help', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0 }}>?</span>
+                                </div>
                                 <button onClick={() => {
                                     const exportData = classrooms.map(r => {
                                         const base: Record<string, any> = {
@@ -324,13 +336,13 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                         <thead>
                             <tr style={{ textAlign: 'left' }}>
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('order')}>順</th>
-                                {crShow('id') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('id'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('id')}>ID</th>}
-                                {crShow('name') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('name'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('name')}>教室名</th>}
-                                {crShow('building') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('building'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('building')}>建物</th>}
-                                {crShow('capacity') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('capacity'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('capacity')}>収容人数 (試験)</th>}
-                                {crShow('type') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('type'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('type')}>タイプ</th>}
-                                {crShow('equipment') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('equipment'), position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>機材・設備</th>}
-                                {crShow('isExcluded') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('isExcluded'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('isExcluded')}>配当対象外</th>}
+                                {crShow('id') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('id'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('id')}>ID{crRH('id')}</th>}
+                                {crShow('name') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('name'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('name')}>教室名{crRH('name')}</th>}
+                                {crShow('building') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('building'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('building')}>建物{crRH('building')}</th>}
+                                {crShow('capacity') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('capacity'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('capacity')}>収容人数 (試験){crRH('capacity')}</th>}
+                                {crShow('type') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('type'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('type')}>タイプ{crRH('type')}</th>}
+                                {crShow('equipment') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('equipment'), position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }}>機材・設備{crRH('equipment')}</th>}
+                                {crShow('isExcluded') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('isExcluded'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('isExcluded')}>配当対象外{crRH('isExcluded')}</th>}
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '80px', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>操作</span>
