@@ -73,7 +73,7 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                                     {[
                                         { id: 'name', label: '科目名' },
                                         { id: 'teacher', label: '教員名' },
-                                        { id: 'department', label: '学科名' }
+                                        { id: 'department', label: '開講学部名' }
                                     ].map(item => (
                                         <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                             <input
