@@ -93,6 +93,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     id: row.ID || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
                     code: row['時間割コード'] || row.Code || row.ID,
                     name: row.Name || row['時間割名称'] || row['授業名'],
+                    teacherCode: row.TeacherCode || row['教員コード'] || row['教員番号'] || '',
                     teacher: row.Teacher || row['教員'] || row['代表教員'],
                     department: row.Department || row['管轄学科'] || row['学科'],
                     faculty: row.Faculty || row['開講学部'],

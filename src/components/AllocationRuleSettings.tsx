@@ -17,8 +17,7 @@ interface Props {
 
 const tierOrder: Record<AllocationRule['tier'], number> = {
     hard: 0,
-    near: 1,
-    pref: 2
+    pref: 1
 };
 
 const displayOrder = new Map(DEFAULT_ALLOCATION_RULES.map((rule, index) => [rule.id, index]));
@@ -83,7 +82,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
     };
 
     const hardRules = rules.filter(r => r.tier === 'hard');
-    const nearRules = rules.filter(r => r.tier === 'near');
     const prefRules = rules.filter(r => r.tier === 'pref').sort((a, b) => a.order - b.order);
 
     const save = () => {
@@ -121,7 +119,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </button>
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#333' }}>配当ルール設定</h2>
-                        <div style={{ fontSize: '0.78rem', color: '#777' }}>Phase1: 必須条件は固定、希望条件は上から順に比較します</div>
+                        <div style={{ fontSize: '0.78rem', color: '#777' }}>Phase7: 必須条件は固定、希望条件は上から順に比較します</div>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -262,7 +260,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 'bold', color: '#37474f' }}>
-                            <Lock size={16} /> 絶対必須
+                            <Lock size={16} /> 必須
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>固定。ここは切り替えません。</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -279,10 +277,10 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </section>
 
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#37474f' }}>準必須</div>
-                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>候補が0件のときだけ、条件を緩める順番に従って再探索します。春秋同一教室を先に、教室タイプマッチングを次に見直します。</div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#37474f' }}>希望条件</div>
+                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>上から順に比較します。春秋同一教室は通年を除き、建物希望より前に扱います。</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {nearRules.map(rule => (
+                            {prefRules.map(rule => (
                                 <label key={rule.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', background: '#f9fbfc', borderRadius: '8px', border: '1px solid #e0e0e0', cursor: 'pointer' }}>
                                     <input
                                         type="checkbox"
@@ -301,7 +299,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                 </div>
 
                 <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px', marginBottom: '24px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#37474f' }}>希望条件</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#37474f' }}>希望条件の順序</div>
                         <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '16px' }}>上から順に比較します。加点の合計ではありません。</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {prefRules.map((rule, index) => (

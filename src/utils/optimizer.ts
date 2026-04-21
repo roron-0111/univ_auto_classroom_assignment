@@ -12,19 +12,15 @@ import type {
     UnassignedInfo,
     UnassignedReason
 } from '../types';
-import { getTermsToMark, type Term } from '../types';
+import { getTermsToMark } from '../types';
 import { computeDifficulty } from './difficulty';
 import { buildApprovalKey } from './approvalKey';
 import { loadStreakMap } from './unassignedStreak';
+import { findTermPartner, subjectsShareTeacherIdentity } from './termPair';
 
 type EquipmentSettings = {
     items: { [key: string]: { enabled: boolean; importance: number } };
     strictLevel5: boolean;
-};
-
-type RelaxFlags = {
-    relaxTermConsistency: boolean;
-    relaxRoomType: boolean;
 };
 
 type Candidate = {
@@ -32,15 +28,6 @@ type Candidate = {
     exceptions: Array<'term_split' | 'room_type_relaxed'>;
     prefScores: number[];
     surplusCapacity: number;
-};
-
-const TERM_PARTNERS: Partial<Record<Term, Term>> = {
-    spring: 'autumn',
-    autumn: 'spring',
-    spring_first: 'autumn_first',
-    autumn_first: 'spring_first',
-    spring_second: 'autumn_second',
-    autumn_second: 'spring_second'
 };
 
 const cloneAllocation = (allocation: Allocation): Allocation => ({
@@ -103,27 +90,10 @@ const unmarkAllocation = (subject: Subject, allocation: Allocation, occupied: Se
     getRoomOccupiedKeys(subject, allocation.classroomId).forEach(key => occupied.delete(key));
 };
 
-const findTermPartner = (subject: Subject, subjects: Subject[]) => {
-    if (subject.linkedSubjectId) {
-        const linked = subjects.find(s => s.id === subject.linkedSubjectId);
-        if (linked) return linked;
-    }
-
-    const oppositeTerm = TERM_PARTNERS[subject.term];
-    if (!oppositeTerm) return null;
-
-    return subjects.find(s =>
-        s.term === oppositeTerm &&
-        s.day === subject.day &&
-        s.period === subject.period &&
-        s.teacher === subject.teacher
-    ) || null;
-};
-
 const getAdjacentSameTeacherSubject = (subject: Subject, subjects: Subject[], direction: 'prev' | 'next') => {
     if (direction === 'prev') {
         return subjects.find(s =>
-            s.teacher === subject.teacher &&
+            subjectsShareTeacherIdentity(s, subject) &&
             s.day === subject.day &&
             s.term === subject.term &&
             (s.endPeriod || s.period) === subject.period - 1
@@ -131,7 +101,7 @@ const getAdjacentSameTeacherSubject = (subject: Subject, subjects: Subject[], di
     }
 
     return subjects.find(s =>
-        s.teacher === subject.teacher &&
+        subjectsShareTeacherIdentity(s, subject) &&
         s.day === subject.day &&
         s.term === subject.term &&
         s.period === (subject.endPeriod || subject.period) + 1
@@ -173,6 +143,8 @@ const isHardCandidate = (
 
     if (getMandatoryItems(subject).some(req => !matchesEquipment(room, req))) return false;
 
+    if (subject.preferredRoomType && subject.preferredRoomType !== room.type) return false;
+
     if (equipmentSettings?.strictLevel5) {
         for (const req of getRequiredItems(subject)) {
             const entries = getRelevantEquipmentSetting(req, equipmentSettings);
@@ -183,32 +155,6 @@ const isHardCandidate = (
     }
 
     return true;
-};
-
-const isNearCandidate = (
-    room: Classroom,
-    subject: Subject,
-    subjects: Subject[],
-    allocations: Allocation[],
-    relaxFlags: RelaxFlags
-) => {
-    const exceptions: Candidate['exceptions'] = [];
-
-    const termPartner = findTermPartner(subject, subjects);
-    if (termPartner) {
-        const partnerRoomId = getAllocatedRoom(termPartner.id, allocations);
-        if (partnerRoomId && partnerRoomId !== room.id) {
-            if (!relaxFlags.relaxTermConsistency) return null;
-            exceptions.push('term_split');
-        }
-    }
-
-    if (subject.preferredRoomType && subject.preferredRoomType !== room.type) {
-        if (!relaxFlags.relaxRoomType) return null;
-        exceptions.push('room_type_relaxed');
-    }
-
-    return exceptions;
 };
 
 const scoreTeacherContinuity = (room: Classroom, subject: Subject, subjects: Subject[], allocations: Allocation[], classrooms: Classroom[]) => {
@@ -227,6 +173,22 @@ const scoreTeacherContinuity = (room: Classroom, subject: Subject, subjects: Sub
 
     if (prevSameBuilding || nextSameBuilding) return 0.5;
     return 0;
+};
+
+const scoreTermConsistency = (
+    room: Classroom,
+    subject: Subject,
+    subjects: Subject[],
+    allocations: Allocation[]
+) => {
+    if (subject.term === 'full_year') return 0;
+
+    const partner = findTermPartner(subject, subjects);
+    if (!partner) return 0;
+
+    const partnerRoomId = getAllocatedRoom(partner.id, allocations);
+    if (!partnerRoomId) return 0.5;
+    return partnerRoomId === room.id ? 1 : 0;
 };
 
 const scoreEquipment = (room: Classroom, subject: Subject, equipmentSettings?: EquipmentSettings) => {
@@ -286,6 +248,8 @@ const getPrefScores = (
         switch (rule.id) {
             case 'teacher_continuity':
                 return scoreTeacherContinuity(room, subject, subjects, allocations, classrooms);
+            case 'term_consistency':
+                return scoreTermConsistency(room, subject, subjects, allocations);
             case 'equipment':
                 return scoreEquipment(room, subject, equipmentSettings);
             case 'capacity_fit':
@@ -327,18 +291,14 @@ const buildCandidate = (
     allocations: Allocation[],
     ruleMap: Map<string, AllocationRule>,
     occupied: Set<string>,
-    relaxFlags: RelaxFlags,
     equipmentSettings?: EquipmentSettings
 ): Candidate | null => {
     if (!isHardCandidate(room, subject, occupied, allocations, equipmentSettings)) return null;
 
-    const exceptions = isNearCandidate(room, subject, subjects, allocations, relaxFlags);
-    if (!exceptions) return null;
-
     const prefScores = getPrefScores(room, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings);
     return {
         room,
-        exceptions,
+        exceptions: [],
         prefScores,
         surplusCapacity: room.capacity - subject.requiredCapacity
     };
@@ -351,11 +311,10 @@ const pickBestCandidate = (
     allocations: Allocation[],
     occupied: Set<string>,
     ruleMap: Map<string, AllocationRule>,
-    relaxFlags: RelaxFlags,
     equipmentSettings?: EquipmentSettings
 ) => {
     const candidates = classrooms
-        .map(room => buildCandidate(room, subject, subjects, classrooms, allocations, ruleMap, occupied, relaxFlags, equipmentSettings))
+        .map(room => buildCandidate(room, subject, subjects, classrooms, allocations, ruleMap, occupied, equipmentSettings))
         .filter((candidate): candidate is Candidate => candidate !== null);
 
     if (candidates.length === 0) return null;
@@ -365,10 +324,7 @@ const pickBestCandidate = (
 
 const classifyUnassigned = (
     subject: Subject,
-    subjects: Subject[],
     strictCandidatesCount: number,
-    termRelaxCandidatesCount: number,
-    roomRelaxCandidatesCount: number,
     requiredRoomCountShort: boolean
 ): { reason: UnassignedReason; detail?: string } => {
     if (requiredRoomCountShort) {
@@ -381,25 +337,25 @@ const classifyUnassigned = (
     if (strictCandidatesCount === 0) {
         return {
             reason: 'U1_no_hard_candidate',
-            detail: '絶対必須条件を満たす候補教室がない'
+            detail: '必須条件を満たす候補教室がない'
         };
     }
 
-    if (termRelaxCandidatesCount === 0 && findTermPartner(subject, subjects)) {
+    if (false) {
         return {
             reason: 'U3_term_split_blocked',
             detail: '春秋同一教室の条件を満たせない'
         };
     }
 
-    if (subject.preferredRoomType) {
+    if (false) {
         return {
             reason: 'U2_room_type_blocked',
             detail: '教室タイプ一致の候補がない'
         };
     }
 
-    if (roomRelaxCandidatesCount === 0) {
+    if (false) {
         return {
             reason: 'U2_room_type_blocked',
             detail: '教室タイプ条件の例外配当でも成立しない'
@@ -424,8 +380,6 @@ export const runAutoAllocation = (
     runOptions: AllocationRunOptions = {}
 ): OptimizerResult => {
     const ruleMap = getRuleMap(rules);
-    const roomTypeRule = ruleMap.get('room_type');
-    const termRule = ruleMap.get('term_consistency');
 
     const occupied = new Set<string>();
     const newAllocations: Allocation[] = currentAllocations.map(cloneAllocation);
@@ -464,8 +418,6 @@ export const runAutoAllocation = (
         let remaining = requiredRoomCount - existingCount;
 
         let strictCandidatesCount = 0;
-        let termRelaxCandidatesCount = 0;
-        let roomRelaxCandidatesCount = 0;
         let failed = false;
 
         while (remaining > 0) {
@@ -476,51 +428,12 @@ export const runAutoAllocation = (
                 newAllocations,
                 occupied,
                 ruleMap,
-                { relaxTermConsistency: false, relaxRoomType: false },
                 equipmentSettings
             );
 
-            let chosen = strictCandidate;
+            const chosen = strictCandidate;
             if (strictCandidate) {
                 strictCandidatesCount++;
-            } else {
-                const termRelaxCandidate =
-                    termRule?.enabled
-                        ? pickBestCandidate(
-                            subject,
-                            subjects,
-                            classrooms,
-                            newAllocations,
-                            occupied,
-                            ruleMap,
-                            { relaxTermConsistency: true, relaxRoomType: false },
-                            equipmentSettings
-                        )
-                        : null;
-
-                if (termRelaxCandidate) {
-                    termRelaxCandidatesCount++;
-                    chosen = termRelaxCandidate;
-                } else {
-                    const roomRelaxCandidate =
-                        roomTypeRule?.enabled
-                            ? pickBestCandidate(
-                                subject,
-                                subjects,
-                                classrooms,
-                                newAllocations,
-                                occupied,
-                                ruleMap,
-                                { relaxTermConsistency: false, relaxRoomType: true },
-                                equipmentSettings
-                            )
-                            : null;
-
-                    if (roomRelaxCandidate) {
-                        roomRelaxCandidatesCount++;
-                        chosen = roomRelaxCandidate;
-                    }
-                }
             }
 
             if (!chosen) {
@@ -572,10 +485,7 @@ export const runAutoAllocation = (
 
             const reasonInfo = classifyUnassigned(
                 subject,
-                subjects,
                 strictCandidatesCount,
-                termRelaxCandidatesCount,
-                roomRelaxCandidatesCount,
                 remaining > 0 && addedThisRound.length > 0
             );
 
@@ -629,7 +539,6 @@ export const resolveExceptions = (
             result,
             occupied,
             ruleMap,
-            { relaxTermConsistency: false, relaxRoomType: false },
             equipmentSettings
         );
 
@@ -697,20 +606,12 @@ const buildRelocationCandidate = (
     equipmentSettings?: EquipmentSettings,
     allowedExceptions: Array<'term_split' | 'room_type_relaxed'> = []
 ): Candidate | null => {
+    void allowedExceptions;
     if (!isHardRoomEligible(room, subject, equipmentSettings)) return null;
-
-    const exceptions = isNearCandidate(room, subject, subjects, allocations, {
-        relaxTermConsistency: true,
-        relaxRoomType: true
-    });
-    if (!exceptions) return null;
-
-    const allowed = new Set(allowedExceptions);
-    if (!exceptions.every(exception => allowed.has(exception))) return null;
 
     return {
         room,
-        exceptions,
+        exceptions: [],
         prefScores: getPrefScores(room, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings),
         surplusCapacity: room.capacity - subject.requiredCapacity
     };

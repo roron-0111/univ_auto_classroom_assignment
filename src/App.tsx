@@ -95,6 +95,7 @@ const normalizeClassroom = (value: unknown): Classroom | null => {
 const normalizeSubject = (value: unknown): Subject | null => {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<Subject> & {
+    teacherCode?: unknown;
     previousRooms?: unknown;
     requiredEquipment?: unknown;
     mandatoryEquipment?: unknown;
@@ -104,6 +105,7 @@ const normalizeSubject = (value: unknown): Subject | null => {
     id: raw.id,
     code: typeof raw.code === 'string' ? raw.code : '',
     name: raw.name,
+    teacherCode: typeof raw.teacherCode === 'string' ? raw.teacherCode : '',
     teacher: typeof raw.teacher === 'string' ? raw.teacher : '',
     faculty: typeof raw.faculty === 'string' ? raw.faculty : '',
     department: typeof raw.department === 'string' ? raw.department : '',
@@ -140,6 +142,41 @@ const normalizeSubjects = (value: unknown): Subject[] => {
   if (!Array.isArray(value)) return mockSubjects;
   const items = value.map(normalizeSubject).filter((item): item is Subject => item !== null);
   return items.length > 0 ? items : mockSubjects;
+};
+
+const getMissingSubjectFields = (subject: Subject) => {
+  const missing: string[] = [];
+  if (!subject.code?.trim()) missing.push('時間割コード');
+  if (!subject.name?.trim()) missing.push('時間割名称');
+  if (!subject.teacherCode?.trim()) missing.push('教員コード');
+  if (!subject.teacher?.trim()) missing.push('教員名');
+  if (!subject.faculty?.trim()) missing.push('開講学部');
+  if (!subject.department?.trim()) missing.push('管轄学科');
+  if (!subject.term) missing.push('配当期');
+  if (!subject.day) missing.push('曜日');
+  if (!subject.period) missing.push('講時');
+  if (!subject.requiredCapacity || subject.requiredCapacity <= 0) missing.push('履修予定人数');
+  return missing;
+};
+
+const validateSubjectsForAutoAllocation = (targetSubjects: Subject[]) => {
+  const issues = targetSubjects
+    .map(subject => ({ subject, missing: getMissingSubjectFields(subject) }))
+    .filter(issue => issue.missing.length > 0);
+
+  if (issues.length === 0) return true;
+
+  const lines = issues.slice(0, 8).map(issue => {
+    const label = issue.subject.code?.trim() || issue.subject.name?.trim() || issue.subject.id;
+    return `・${label}: ${issue.missing.join('、')}`;
+  });
+
+  if (issues.length > 8) {
+    lines.push(`・ほか ${issues.length - 8} 件`);
+  }
+
+  alert(`必須項目が未入力のレコードがあります。確認してください。\n${lines.join('\n')}`);
+  return false;
 };
 
 const normalizeEquipmentSettings = (value: unknown) => {
@@ -665,6 +702,10 @@ function App() {
       return;
     }
 
+    if (!validateSubjectsForAutoAllocation(targetSubjects)) {
+      return;
+    }
+
     // 配当済みを含む場合は確認
     if (includeAllocated) {
       const allocatedCount = targetSubjects.filter(s => allocatedSubjectIds.has(s.id)).length;
@@ -733,6 +774,10 @@ function App() {
 
     if (targetSubjects.length === 0) {
       alert('対象となる科目がありません。');
+      return;
+    }
+
+    if (!validateSubjectsForAutoAllocation(targetSubjects)) {
       return;
     }
 

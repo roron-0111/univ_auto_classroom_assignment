@@ -56,6 +56,7 @@ export interface Subject {
     id: string; // ID (システム内部用)
     code: string; // 時間割コード
     name: string;
+    teacherCode?: string; // 教員コード
     teacher: string; // 代表教員
     faculty: string; // 開講学部
     department: string; // 管轄学科
@@ -187,7 +188,7 @@ export const getImportantEquipmentStyle = (name: string) => {
     return IMPORTANT_EQUIPMENT_COLORS[canonical] || { bg: '#f5f5f5', text: '#666', border: '#ddd' };
 };
 
-export type RuleTier = 'hard' | 'near' | 'pref';
+export type RuleTier = 'hard' | 'pref';
 
 export interface AllocationRule {
     id: string;
@@ -256,24 +257,18 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     {
         id: 'term_consistency',
         name: '春秋同一教室',
-        description: 'linkedSubjectId を優先し、未指定時は同じ教員・曜日・講時の春秋科目を自動で同一教室扱いにする',
-        tier: 'near',
+        description: 'linkedSubjectId を優先し、未指定時は同じ教員コード・曜日・講時の春秋科目を対象にする（通年は対象外、教員コードが9始まりの暫定コードは対象外）',
+        tier: 'pref',
         enabled: true,
-        order: 0,
-        params: {
-            relaxable: true
-        }
+        order: 4
     },
     {
         id: 'room_type',
         name: '教室タイプマッチング',
-        description: '候補が0件のときだけ、教室タイプ不一致を例外的に許可する',
-        tier: 'near',
-        enabled: false,
-        order: 0,
-        params: {
-            relaxable: true
-        }
+        description: '教室タイプが一致する教室を必須とする',
+        tier: 'hard',
+        enabled: true,
+        order: 0
     },
     {
         id: 'teacher_continuity',
@@ -309,7 +304,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
         description: '指定された建物内の教室を優先',
         tier: 'pref',
         enabled: true,
-        order: 4
+        order: 5
     },
     {
         id: 'previous_room',
@@ -317,7 +312,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
         description: '過年度に使用した教室を優先',
         tier: 'pref',
         enabled: true,
-        order: 5
+        order: 6
     }
 ];
 
@@ -447,19 +442,6 @@ export const migrateAllocationRules = (oldRules: any[] | undefined): AllocationR
             return {
                 ...def,
                 enabled: true,
-                params: cloneParams(def.params)
-            };
-        }
-
-        if (def.tier === 'near') {
-            const nextEnabled =
-                def.id === 'term_consistency'
-                    ? (typeof saved.enabled === 'boolean' ? saved.enabled : def.enabled)
-                    : def.enabled;
-
-            return {
-                ...def,
-                enabled: nextEnabled,
                 params: cloneParams(def.params)
             };
         }

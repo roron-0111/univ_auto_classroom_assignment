@@ -1,4 +1,5 @@
 import type { AllocationRule, Classroom, Subject } from '../types';
+import { findTermPartner } from './termPair';
 
 type EquipmentSettings = {
   items: { [key: string]: { enabled: boolean; importance: number } };
@@ -60,31 +61,6 @@ const getRequirementImportance = (req: string, equipmentSettings?: EquipmentSett
   const enabledEntries = entries.filter(entry => entry.setting.enabled);
   const source = enabledEntries.length > 0 ? enabledEntries : entries;
   return Math.max(...source.map(entry => entry.setting.importance));
-};
-
-const findTermPartner = (subject: Subject, subjects: Subject[]) => {
-  if (subject.linkedSubjectId) {
-    const linked = subjects.find(s => s.id === subject.linkedSubjectId);
-    if (linked) return linked;
-  }
-
-  const termPartnerMap: Record<string, string> = {
-    spring: 'autumn',
-    autumn: 'spring',
-    spring_first: 'autumn_first',
-    autumn_first: 'spring_first',
-    spring_second: 'autumn_second',
-    autumn_second: 'spring_second'
-  };
-  const oppositeTerm = termPartnerMap[subject.term];
-  if (!oppositeTerm) return null;
-
-  return subjects.find(s =>
-    s.term === oppositeTerm &&
-    s.day === subject.day &&
-    s.period === subject.period &&
-    s.teacher === subject.teacher
-  ) || null;
 };
 
 const getStrictCandidateCount = (subject: Subject, classrooms: Classroom[], equipmentSettings?: EquipmentSettings) =>

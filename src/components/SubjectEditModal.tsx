@@ -71,6 +71,10 @@ export const SubjectEditModal = ({ subject, availableEquipment, onSave, onClose 
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
+                                <div style={{ width: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>教員コード</label>
+                                    <input value={form.teacherCode || ''} onChange={e => setForm({ ...form, teacherCode: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} placeholder="T001" />
+                                </div>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <label style={{ fontWeight: 'bold', color: '#555', fontSize: '0.8rem' }}>代表教員</label>
                                     <input value={form.teacher} onChange={e => setForm({ ...form, teacher: e.target.value })} style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} />

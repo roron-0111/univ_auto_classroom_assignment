@@ -157,6 +157,7 @@ const MultiSelectFilter = ({
 const SM_COL_DEFS = [
     { key: 'code', label: 'コード', width: 70 },
     { key: 'name', label: '時間割名称', width: 208 },
+    { key: 'teacherCode', label: '教員コード', width: 90 },
     { key: 'teacher', label: '教員', width: 104 },
     { key: 'faculty', label: '学部', width: 78 },
     { key: 'department', label: '管轄', width: 50 },
@@ -221,6 +222,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     const [filters, setFilters] = useState({
         code: '',
         name: '',
+        teacherCode: '',
         teacher: '',
         faculty: [] as string[],
         department: [] as string[],
@@ -276,6 +278,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
 
             if (!checkText(s.code, filters.code)) return false;
             if (!checkText(s.name, filters.name)) return false;
+            if (!checkText(s.teacherCode || '', filters.teacherCode)) return false;
             if (!checkText(s.teacher, filters.teacher)) return false;
 
             // 選択系：配列に含まれているか
@@ -378,6 +381,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
             id: 's-' + Date.now(),
             code: '',
             name: '',
+            teacherCode: '',
             teacher: '',
             faculty: '',
             department: '他',
@@ -458,7 +462,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
                                                 <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 時間割コード(またはID), 曜日(月〜土), 開始講時(数値), 配当期</div>
                                                 <div style={{ marginBottom: '2px', fontSize: '0.73rem', color: '#888', paddingLeft: '4px' }}>配当期: 春学期/春前半/春後半/秋学期/秋前半/秋後半/通年</div>
-                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: 時間割名称, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: 時間割名称, 教員コード, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)</div>
                                                 <div style={{ marginBottom: '4px' }}>機材列: 列名=機材名、◎=必須 ○=希望</div>
                                                 <div style={{ color: '#1976d2', fontSize: '0.75rem', marginTop: '6px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
@@ -473,6 +477,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         const baseRow: Record<string, any> = {
                                             '時間割コード': s.code,
                                             '時間割名称': s.name,
+                                            '教員コード': s.teacherCode || '',
                                             '教員': s.teacher,
                                             '学部': s.faculty,
                                             '学科': s.department,
@@ -579,6 +584,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
                                     {smShow('code') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.code} onChange={e => setFilters({ ...filters, code: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('name') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} placeholder="検索..." /></td>}
+                                    {smShow('teacherCode') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacherCode} onChange={e => setFilters({ ...filters, teacherCode: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('teacher') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacher} onChange={e => setFilters({ ...filters, teacher: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('faculty') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '経', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.faculty} onChange={v => setFilters({ ...filters, faculty: v as string[] })} /></td>}
                                     {smShow('department') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.department} onChange={v => setFilters({ ...filters, department: v as string[] })} /></td>}
@@ -617,6 +623,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     <tr style={{ background: '#f0f4ff' }}>
                                         {smShow('code') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} style={{ width: '100%' }} placeholder="A0001" /></td>}
                                         {smShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} /></td>}
+                                        {smShow('teacherCode') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacherCode || ''} onChange={e => setEditForm({ ...editForm, teacherCode: e.target.value })} style={{ width: '100%' }} placeholder="T001" /></td>}
                                         {smShow('teacher') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacher} onChange={e => setEditForm({ ...editForm, teacher: e.target.value })} style={{ width: '100%' }} /></td>}
                                         {smShow('faculty') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.faculty} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }} placeholder="学部" /></td>}
                                         {smShow('department') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.department || '他'} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}>{['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
@@ -644,6 +651,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
                                         {smShow('code') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>}
                                         {smShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>}
+                                        {smShow('teacherCode') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.teacherCode || ''}</td>}
                                         {smShow('teacher') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.teacher}</td>}
                                         {smShow('faculty') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.faculty}</td>}
                                         {smShow('department') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.department}</td>}
@@ -685,13 +693,13 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                 ))}
                                 {sortedSubjects.length === 0 && !isAdding && (
                                     <tr>
-                                        <td colSpan={18} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
+                                        <td colSpan={19} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                                 <Search size={40} strokeWidth={1} />
                                                 <span>該当する授業が見つかりません</span>
                                                 <button
                                                     onClick={() => setFilters({
-                                                        code: '', name: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', requiredCapacityMax: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: '', allocatedRoom: ''
+                                                        code: '', name: '', teacherCode: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', requiredCapacityMax: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: '', allocatedRoom: ''
                                                     } as any)}
                                                     style={{ background: 'none', border: '1px solid #ccc', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', marginTop: '10px' }}
                                                 >
