@@ -163,7 +163,6 @@ export const IMPORTANT_EQUIPMENT_COLORS: Record<string, { bg: string; text: stri
     'モニター': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     '可動': { bg: '#f3e5f5', text: '#4a148c', border: '#e1bee7' }, // 紫
     '固定': { bg: '#e0f7fa', text: '#006064', border: '#b2ebf2' }, // ティール
-    '天井モニター': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     '白板': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     '黒板': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' }
 };
@@ -177,8 +176,11 @@ const IMPORTANT_EQUIPMENT_ALIASES: Record<string, string> = {
     移動: '可動',
     固定: '固定',
     movable: '可動',
-    fixed: '固定'
+    fixed: '固定',
+    天井モニター: 'モニター'
 };
+
+export const normalizeEquipmentName = (name: string) => IMPORTANT_EQUIPMENT_ALIASES[name] || name;
 
 export const getImportantEquipmentStyle = (name: string) => {
     const canonical = IMPORTANT_EQUIPMENT_ALIASES[name] || name;

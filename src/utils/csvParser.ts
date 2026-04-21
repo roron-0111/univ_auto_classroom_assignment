@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import type { Classroom, Subject, Term, DayOfWeek, Period } from '../types';
-import { EQUIPMENT_LIST } from '../types';
+import { EQUIPMENT_LIST, normalizeEquipmentName } from '../types';
 
 // Header definitions
 // Header definitions
@@ -50,7 +50,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                             } else if (k.includes('ホワイトボード') || k.includes('Whiteboard')) {
                                 equipment.push('白板');
                             } else if (!knownKeys.some(kk => k.includes(kk))) {
-                                equipment.push(k);
+                                equipment.push(normalizeEquipmentName(k));
                             }
                         }
                     });
@@ -72,7 +72,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                         isExcluded: isTrue(getVal(['IsExcluded', '配当対象外'])),
                         equipment: [
                             ...equipment,
-                            ...(row.Equipment ? row.Equipment.split(';').map((s: string) => s.trim()).filter(Boolean) : [])
+                            ...(row.Equipment ? row.Equipment.split(';').map((s: string) => normalizeEquipmentName(s.trim())).filter(Boolean) : [])
                         ]
                     };
                 });
@@ -138,21 +138,21 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     buildingPreference: row.BuildingPreference || row['棟希望'],
                     // 必須設備: 設備列の値が◎のもの（新形式）、または旧形式の必須_X列
                     mandatoryEquipment: (() => {
-                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '◎');
+                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '◎').map(normalizeEquipmentName);
                         if (fromNew.length > 0) return fromNew;
                         // 旧形式後方互換: 必須_X列
-                        return EQUIPMENT_LIST.filter(eq => row[`必須_${eq}`] === '○');
+                        return EQUIPMENT_LIST.filter(eq => row[`必須_${eq}`] === '○').map(normalizeEquipmentName);
                     })(),
                     // 希望設備: 設備列の値が○のもの（新形式）、または旧形式
                     requiredEquipment: (() => {
-                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '○');
+                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '○').map(normalizeEquipmentName);
                         if (fromNew.length > 0) return fromNew;
                         // 旧形式後方互換: 希望_X列
-                        const fromOldCols = EQUIPMENT_LIST.filter(eq => row[`希望_${eq}`] === '○');
+                        const fromOldCols = EQUIPMENT_LIST.filter(eq => row[`希望_${eq}`] === '○').map(normalizeEquipmentName);
                         if (fromOldCols.length > 0) return fromOldCols;
                         // さらに旧形式: 必須設備セル（スペース/セミコロン区切り）
                         const legacy = row.RequiredEquipment || row['必須設備'];
-                        return legacy ? legacy.split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [];
+                        return legacy ? legacy.split(/[;\s]+/).map((s: string) => normalizeEquipmentName(s.trim())).filter(Boolean) : [];
                     })(),
                 }));
 

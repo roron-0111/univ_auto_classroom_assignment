@@ -15,7 +15,7 @@ import { AllocationRuleSettings } from './components/AllocationRuleSettings';
 import { AllocationResultModal } from './components/AllocationResultModal';
 import { ExceptionReviewModal } from './components/ExceptionReviewModal';
 import { RelocationPreviewModal } from './components/RelocationPreviewModal';
-import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules } from './types';
+import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
@@ -76,7 +76,7 @@ const normalizeClassroom = (value: unknown): Classroom | null => {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<Classroom> & { equipment?: unknown };
   const equipment = Array.isArray(raw.equipment)
-    ? raw.equipment.filter((item): item is string => typeof item === 'string')
+    ? raw.equipment.filter((item): item is string => typeof item === 'string').map(normalizeEquipmentName)
     : [];
   if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
   return {
@@ -122,10 +122,10 @@ const normalizeSubject = (value: unknown): Subject | null => {
     requiresProjector: Boolean(raw.requiresProjector),
     requiresMovable: Boolean(raw.requiresMovable),
     requiredEquipment: Array.isArray(raw.requiredEquipment)
-      ? raw.requiredEquipment.filter((item): item is string => typeof item === 'string')
+      ? raw.requiredEquipment.filter((item): item is string => typeof item === 'string').map(normalizeEquipmentName)
       : undefined,
     mandatoryEquipment: Array.isArray(raw.mandatoryEquipment)
-      ? raw.mandatoryEquipment.filter((item): item is string => typeof item === 'string')
+      ? raw.mandatoryEquipment.filter((item): item is string => typeof item === 'string').map(normalizeEquipmentName)
       : undefined,
     isContinuous: Boolean(raw.isContinuous),
     linkedSubjectId: typeof raw.linkedSubjectId === 'string' ? raw.linkedSubjectId : undefined,
