@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import type { Classroom, Subject, Term, DayOfWeek, Period } from '../types';
-import { EQUIPMENT_LIST, normalizeEquipmentName } from '../types';
+import { normalizeEquipmentName } from '../types';
+import { SUBJECT_EQUIPMENT_CHOICES, sanitizeSubjectEquipmentList } from './equipmentVisibility';
 
 // Header definitions
 // Header definitions
@@ -139,17 +140,17 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     buildingPreference: row.BuildingPreference || row['棟希望'],
                     // 必須設備: 設備列の値が◎のもの（新形式）、または旧形式の必須_X列
                     mandatoryEquipment: (() => {
-                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '◎').map(normalizeEquipmentName);
+                        const fromNew = SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '◎').map(normalizeEquipmentName);
                         if (fromNew.length > 0) return fromNew;
                         // 旧形式後方互換: 必須_X列
-                        return EQUIPMENT_LIST.filter(eq => row[`必須_${eq}`] === '○').map(normalizeEquipmentName);
+                        return SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[`必須_${eq}`] === '○').map(normalizeEquipmentName);
                     })(),
                     // 希望設備: 設備列の値が○のもの（新形式）、または旧形式
                     requiredEquipment: (() => {
-                        const fromNew = EQUIPMENT_LIST.filter(eq => row[eq] === '○').map(normalizeEquipmentName);
+                        const fromNew = SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '○').map(normalizeEquipmentName);
                         if (fromNew.length > 0) return fromNew;
                         // 旧形式後方互換: 希望_X列
-                        const fromOldCols = EQUIPMENT_LIST.filter(eq => row[`希望_${eq}`] === '○').map(normalizeEquipmentName);
+                        const fromOldCols = SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[`希望_${eq}`] === '○').map(normalizeEquipmentName);
                         if (fromOldCols.length > 0) return fromOldCols;
                         // さらに旧形式: 必須設備セル（スペース/セミコロン区切り）
                         const legacy = row.RequiredEquipment || row['必須設備'];
@@ -159,7 +160,12 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
 
                 // グルーピングして必要教室数を算出
                 const grouped = new Map<string, Subject>();
-                rawSubjects.forEach(s => {
+                const normalizedSubjects = rawSubjects.map(s => ({
+                    ...s,
+                    requiredEquipment: sanitizeSubjectEquipmentList(s.requiredEquipment),
+                    mandatoryEquipment: sanitizeSubjectEquipmentList(s.mandatoryEquipment)
+                }));
+                normalizedSubjects.forEach(s => {
                     const key = `${s.code}-${s.term}-${s.day}-${s.period}`;
                     if (grouped.has(key)) {
                         const existing = grouped.get(key)!;

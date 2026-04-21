@@ -19,6 +19,7 @@ import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, m
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
+import { sanitizeSubjectEquipmentList } from './utils/equipmentVisibility';
 
 // Cloud Sync
 import { CloudConnectionModal } from './components/CloudConnectionModal';
@@ -124,12 +125,8 @@ const normalizeSubject = (value: unknown): Subject | null => {
       : undefined,
     requiresProjector: Boolean(raw.requiresProjector),
     requiresMovable: Boolean(raw.requiresMovable),
-    requiredEquipment: Array.isArray(raw.requiredEquipment)
-      ? raw.requiredEquipment.filter((item): item is string => typeof item === 'string').map(normalizeEquipmentName)
-      : undefined,
-    mandatoryEquipment: Array.isArray(raw.mandatoryEquipment)
-      ? raw.mandatoryEquipment.filter((item): item is string => typeof item === 'string').map(normalizeEquipmentName)
-      : undefined,
+    requiredEquipment: sanitizeSubjectEquipmentList(raw.requiredEquipment),
+    mandatoryEquipment: sanitizeSubjectEquipmentList(raw.mandatoryEquipment),
     isContinuous: Boolean(raw.isContinuous),
     linkedSubjectId: typeof raw.linkedSubjectId === 'string' ? raw.linkedSubjectId : undefined,
     priority: typeof raw.priority === 'number' ? raw.priority : 1,
@@ -381,7 +378,7 @@ function App() {
       if (cloudData) {
         if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
           setClassrooms(normalizeClassrooms(cloudData.classrooms));
-          setSubjects(cloudData.subjects);
+          setSubjects(normalizeSubjects(cloudData.subjects));
           setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
           setAllocationSettings(migrateAllocationRules(cloudData.settings));
           setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
@@ -1040,7 +1037,7 @@ function App() {
                     const data = await refreshData();
                     if (data) {
                       if (data.classrooms) setClassrooms(data.classrooms);
-                      if (data.subjects) setSubjects(data.subjects);
+                      if (data.subjects) setSubjects(normalizeSubjects(data.subjects));
                       if (data.allocations) setAllocations(normalizeAllocationsForPhase6(data.allocations));
                       if (data.settings?.length) setAllocationSettings(migrateAllocationRules(data.settings));
                       if (data.equipmentSettings) setEquipmentSettings(migrateEquipmentSettings(data.equipmentSettings));

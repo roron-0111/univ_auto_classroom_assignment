@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
 import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST, matchesEquipmentRequirement } from '../types';
+import { isHiddenEquipment } from '../utils/equipmentVisibility';
 import { checkConstraints } from '../utils/validation';
 import { AlertTriangle } from 'lucide-react';
 
@@ -480,6 +481,7 @@ export const TimeTableGrid = ({
                   <div style={{ fontSize: '0.7em', color: '#666', display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '6px' }}>
                     {displayConfig.highlightedEquipment
                       .filter(e => e !== '可動' && e !== '固定')
+                      .filter(e => !isHiddenEquipment(e))
                       .map(e => {
                         const has = room.equipment.includes(e);
                         const s = getEquipmentStyle(e);

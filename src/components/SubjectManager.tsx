@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST, ROOM_TYPE_LABELS } from '../types';
+import { DAY_LABELS, BUILDINGS, TERM_LABELS, ROOM_TYPE_LABELS } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
+import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
 
 function equipValue(
     eq: string,
@@ -226,8 +227,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     const smRH = (k: SMColKey) => <div onMouseDown={smDrag(k)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }} />;
 
     const availableEquipment = useMemo(() => {
-        const set = new Set<string>(EQUIPMENT_LIST);
-        classrooms.forEach(c => c.equipment.forEach(e => set.add(e)));
+        const set = new Set<string>(SUBJECT_EQUIPMENT_CHOICES);
+        classrooms.forEach(c => filterVisibleRoomEquipment(c.equipment).forEach(e => set.add(e)));
         return Array.from(set);
     }, [classrooms]);
 
@@ -371,7 +372,12 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
             alert('その授業IDは既に存在します。');
             return;
         }
-        onUpdate([...subjects, editForm as Subject]);
+        const sanitized = {
+            ...editForm,
+            requiredEquipment: (editForm.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
+            mandatoryEquipment: (editForm.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
+        } as Subject;
+        onUpdate([...subjects, sanitized]);
         setIsAdding(false);
         setEditForm({});
     };
@@ -415,8 +421,13 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         if (e.target.files && e.target.files[0]) {
             try {
                 const data = await parseSubjectCSV(e.target.files[0]);
+                const sanitized = data.map(subject => ({
+                    ...subject,
+                    requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
+                    mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
+                }));
                 if (confirm(`${data.length}件の授業データを読み込みます。既存のデータは上書きされ、割り当てもリセットされます。よろしいですか？`)) {
-                    onUpdate(data);
+                    onUpdate(sanitized);
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);
@@ -507,7 +518,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                             '過去教室': s.previousRooms?.join(', ') || '',
                                         };
                                         // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
-                                        EQUIPMENT_LIST.forEach(eq => {
+                                        SUBJECT_EQUIPMENT_CHOICES.forEach(eq => {
                                             baseRow[eq] = equipValue(eq, s.requiresMovable, s.requiresProjector, s.mandatoryEquipment, s.requiredEquipment);
                                         });
 
@@ -679,7 +690,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         {smShow('preferredRoomType') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.preferredRoomType === 'normal' ? '一般' : subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '-'}</td>}
                                         {smShow('requiredEquipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                                                {subject.requiredEquipment?.map(eq => (
+                                                {subject.requiredEquipment?.filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)).map(eq => (
                                                     <span key={eq} style={{ background: '#eee', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>{eq}</span>
                                                 ))}
                                                 {subject.requiresMovable && <span style={{ background: '#e1bee7', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>可動</span>}
