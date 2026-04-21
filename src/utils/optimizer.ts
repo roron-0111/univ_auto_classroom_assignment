@@ -1,358 +1,1115 @@
-import type { Classroom, Subject, Allocation, AllocationRule, OptimizerResult } from '../types';
-import { getTermsToMark, getComplementaryTerm } from '../types';
+import type {
+    Allocation,
+    AllocationRule,
+    AllocationRunOptions,
+    Classroom,
+    OptimizerResult,
+    RelocationResult,
+    RelocationMove,
+    RelocationPlacement,
+    PendingException,
+    Subject,
+    UnassignedInfo,
+    UnassignedReason
+} from '../types';
+import { getTermsToMark, type Term } from '../types';
+import { computeDifficulty } from './difficulty';
+import { buildApprovalKey } from './approvalKey';
+import { loadStreakMap } from './unassignedStreak';
 
-// 重み値は AllocationRule.weight を直接使用
+type EquipmentSettings = {
+    items: { [key: string]: { enabled: boolean; importance: number } };
+    strictLevel5: boolean;
+};
+
+type RelaxFlags = {
+    relaxTermConsistency: boolean;
+    relaxRoomType: boolean;
+};
+
+type Candidate = {
+    room: Classroom;
+    exceptions: Array<'term_split' | 'room_type_relaxed'>;
+    prefScores: number[];
+    surplusCapacity: number;
+};
+
+const TERM_PARTNERS: Partial<Record<Term, Term>> = {
+    spring: 'autumn',
+    autumn: 'spring',
+    spring_first: 'autumn_first',
+    autumn_first: 'spring_first',
+    spring_second: 'autumn_second',
+    autumn_second: 'spring_second'
+};
+
+const cloneAllocation = (allocation: Allocation): Allocation => ({
+    ...allocation,
+    exceptions: allocation.exceptions ? [...allocation.exceptions] : undefined
+});
+
+const getRuleMap = (rules: AllocationRule[]) => new Map(rules.map(rule => [rule.id, rule]));
+
+const getPrefRules = (ruleMap: Map<string, AllocationRule>) =>
+    [...ruleMap.values()]
+        .filter(rule => rule.tier === 'pref' && rule.enabled)
+        .sort((a, b) => a.order - b.order);
+
+const hasAnyProjector = (room: Classroom) => room.equipment.some(eq => eq.includes('PJ'));
+
+const getRelevantEquipmentSetting = (req: string, equipmentSettings?: EquipmentSettings) => {
+    if (!equipmentSettings) return [];
+    if (req === 'PJ') {
+        return ['PJ(中)', 'PJ(横)']
+            .map(key => ({ key, setting: equipmentSettings.items?.[key] }))
+            .filter(item => item.setting);
+    }
+    return [{ key: req, setting: equipmentSettings.items?.[req] }].filter(item => item.setting);
+};
+
+const getRequirementImportance = (req: string, equipmentSettings?: EquipmentSettings) => {
+    const entries = getRelevantEquipmentSetting(req, equipmentSettings);
+    if (entries.length === 0) return 3;
+    const enabledEntries = entries.filter(entry => entry.setting.enabled);
+    const source = enabledEntries.length > 0 ? enabledEntries : entries;
+    return Math.max(...source.map(entry => entry.setting.importance));
+};
+
+const matchesEquipment = (room: Classroom, req: string) => {
+    if (req === '可動') return room.isMovable;
+    if (req === 'PJ') return hasAnyProjector(room);
+    if (req === 'PJ(横)' || req === 'PJ(中)') {
+        return room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
+    }
+    return room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
+};
+
+const getRoomOccupiedKeys = (subject: Subject, classroomId: string) => {
+    const keys: string[] = [];
+    const start = subject.period;
+    const end = subject.endPeriod || subject.period;
+    const termsToMark = getTermsToMark(subject.term);
+    for (let p = start; p <= end; p++) {
+        termsToMark.forEach(term => keys.push(`${term}-${subject.day}-${p}-${classroomId}`));
+    }
+    return keys;
+};
+
+const markAllocation = (subject: Subject, allocation: Allocation, occupied: Set<string>) => {
+    getRoomOccupiedKeys(subject, allocation.classroomId).forEach(key => occupied.add(key));
+};
+
+const unmarkAllocation = (subject: Subject, allocation: Allocation, occupied: Set<string>) => {
+    getRoomOccupiedKeys(subject, allocation.classroomId).forEach(key => occupied.delete(key));
+};
+
+const findTermPartner = (subject: Subject, subjects: Subject[]) => {
+    if (subject.linkedSubjectId) {
+        const linked = subjects.find(s => s.id === subject.linkedSubjectId);
+        if (linked) return linked;
+    }
+
+    const oppositeTerm = TERM_PARTNERS[subject.term];
+    if (!oppositeTerm) return null;
+
+    return subjects.find(s =>
+        s.term === oppositeTerm &&
+        s.day === subject.day &&
+        s.period === subject.period &&
+        s.teacher === subject.teacher
+    ) || null;
+};
+
+const getAdjacentSameTeacherSubject = (subject: Subject, subjects: Subject[], direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+        return subjects.find(s =>
+            s.teacher === subject.teacher &&
+            s.day === subject.day &&
+            s.term === subject.term &&
+            (s.endPeriod || s.period) === subject.period - 1
+        ) || null;
+    }
+
+    return subjects.find(s =>
+        s.teacher === subject.teacher &&
+        s.day === subject.day &&
+        s.term === subject.term &&
+        s.period === (subject.endPeriod || subject.period) + 1
+    ) || null;
+};
+
+const getAllocatedRoom = (subjectId: string, allocations: Allocation[]) => {
+    const allocation = allocations.find(a => a.subjectId === subjectId);
+    return allocation?.classroomId || null;
+};
+
+const getRoomById = (roomId: string, classrooms: Classroom[]) =>
+    classrooms.find(room => room.id === roomId) || null;
+
+const getRequiredItems = (subject: Subject) => {
+    const requiredItems = new Set(subject.requiredEquipment || []);
+    if (subject.requiresProjector) requiredItems.add('PJ');
+    if (subject.requiresMovable) requiredItems.add('可動');
+    return [...requiredItems];
+};
+
+const getMandatoryItems = (subject: Subject) => subject.mandatoryEquipment || [];
+
+const isHardCandidate = (
+    room: Classroom,
+    subject: Subject,
+    occupied: Set<string>,
+    newAllocations: Allocation[],
+    equipmentSettings?: EquipmentSettings
+) => {
+    if (room.isExcluded) return false;
+
+    if (newAllocations.some(a => a.subjectId === subject.id && a.classroomId === room.id)) return false;
+
+    const roomKeys = getRoomOccupiedKeys(subject, room.id);
+    if (roomKeys.some(key => occupied.has(key))) return false;
+
+    if (room.capacity < subject.requiredCapacity) return false;
+
+    if (getMandatoryItems(subject).some(req => !matchesEquipment(room, req))) return false;
+
+    if (equipmentSettings?.strictLevel5) {
+        for (const req of getRequiredItems(subject)) {
+            const entries = getRelevantEquipmentSetting(req, equipmentSettings);
+            const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
+            if (!hasLevel5) continue;
+            if (!matchesEquipment(room, req)) return false;
+        }
+    }
+
+    return true;
+};
+
+const isNearCandidate = (
+    room: Classroom,
+    subject: Subject,
+    subjects: Subject[],
+    allocations: Allocation[],
+    relaxFlags: RelaxFlags
+) => {
+    const exceptions: Candidate['exceptions'] = [];
+
+    const termPartner = findTermPartner(subject, subjects);
+    if (termPartner) {
+        const partnerRoomId = getAllocatedRoom(termPartner.id, allocations);
+        if (partnerRoomId && partnerRoomId !== room.id) {
+            if (!relaxFlags.relaxTermConsistency) return null;
+            exceptions.push('term_split');
+        }
+    }
+
+    if (subject.preferredRoomType && subject.preferredRoomType !== room.type) {
+        if (!relaxFlags.relaxRoomType) return null;
+        exceptions.push('room_type_relaxed');
+    }
+
+    return exceptions;
+};
+
+const scoreTeacherContinuity = (room: Classroom, subject: Subject, subjects: Subject[], allocations: Allocation[], classrooms: Classroom[]) => {
+    const prevSubj = getAdjacentSameTeacherSubject(subject, subjects, 'prev');
+    const nextSubj = getAdjacentSameTeacherSubject(subject, subjects, 'next');
+
+    const prevRoomId = prevSubj ? getAllocatedRoom(prevSubj.id, allocations) : null;
+    const nextRoomId = nextSubj ? getAllocatedRoom(nextSubj.id, allocations) : null;
+
+    if (prevRoomId === room.id || nextRoomId === room.id) return 1;
+
+    const prevRoom = prevRoomId ? getRoomById(prevRoomId, classrooms) : null;
+    const nextRoom = nextRoomId ? getRoomById(nextRoomId, classrooms) : null;
+    const prevSameBuilding = prevRoom ? prevRoom.building === room.building : false;
+    const nextSameBuilding = nextRoom ? nextRoom.building === room.building : false;
+
+    if (prevSameBuilding || nextSameBuilding) return 0.5;
+    return 0;
+};
+
+const scoreEquipment = (room: Classroom, subject: Subject, equipmentSettings?: EquipmentSettings) => {
+    const requiredItems = getRequiredItems(subject);
+    if (requiredItems.length === 0) return 0;
+
+    let totalRequiredWeight = 0;
+    let satisfiedWeight = 0;
+
+    for (const req of requiredItems) {
+        const entries = getRelevantEquipmentSetting(req, equipmentSettings);
+        if (entries.length > 0 && entries.every(entry => !entry.setting.enabled)) continue;
+
+        const internalMultiplier = ['可動', 'BD', 'PJ(中)', 'PJ(横)', 'PJ'].includes(req) ? 2 : 1;
+        const importance = getRequirementImportance(req, equipmentSettings);
+        const weightedImportance = importance * internalMultiplier;
+        totalRequiredWeight += weightedImportance;
+
+        if (matchesEquipment(room, req)) {
+            satisfiedWeight += weightedImportance;
+        }
+    }
+
+    if (totalRequiredWeight === 0) return 0;
+    return satisfiedWeight / totalRequiredWeight;
+};
+
+const scoreCapacityFit = (room: Classroom, subject: Subject, ruleMap: Map<string, AllocationRule>) => {
+    const rule = ruleMap.get('capacity_fit');
+    const params = (rule?.params as { minRatio?: number; maxRatio?: number } | undefined) || {};
+    const minRatio = params.minRatio ?? 1.3;
+    const maxRatio = params.maxRatio ?? 3.3;
+    const ratio = room.capacity / subject.requiredCapacity;
+
+    if (ratio >= minRatio && ratio <= maxRatio) return 1;
+    if (ratio >= 1.0 && ratio < minRatio) return 0.5;
+    return 0.2;
+};
+
+const scoreBuildingPreference = (room: Classroom, subject: Subject) =>
+    subject.buildingPreference && room.building === subject.buildingPreference ? 1 : 0;
+
+const scorePreviousRoom = (room: Classroom, subject: Subject) =>
+    subject.previousRooms?.includes(room.name) ? 1 : 0;
+
+const getPrefScores = (
+    room: Classroom,
+    subject: Subject,
+    subjects: Subject[],
+    allocations: Allocation[],
+    classrooms: Classroom[],
+    ruleMap: Map<string, AllocationRule>,
+    equipmentSettings?: EquipmentSettings
+) => {
+    const prefRules = getPrefRules(ruleMap);
+    return prefRules.map(rule => {
+        switch (rule.id) {
+            case 'teacher_continuity':
+                return scoreTeacherContinuity(room, subject, subjects, allocations, classrooms);
+            case 'equipment':
+                return scoreEquipment(room, subject, equipmentSettings);
+            case 'capacity_fit':
+                return scoreCapacityFit(room, subject, ruleMap);
+            case 'building_preference':
+                return scoreBuildingPreference(room, subject);
+            case 'previous_room':
+                return scorePreviousRoom(room, subject);
+            default:
+                return 0;
+        }
+    });
+};
+
+const compareCandidates = (a: Candidate, b: Candidate) => {
+    const length = Math.max(a.prefScores.length, b.prefScores.length);
+    for (let i = 0; i < length; i++) {
+        const aScore = a.prefScores[i] ?? 0;
+        const bScore = b.prefScores[i] ?? 0;
+        if (aScore !== bScore) return bScore - aScore;
+    }
+
+    if (a.surplusCapacity !== b.surplusCapacity) {
+        return a.surplusCapacity - b.surplusCapacity;
+    }
+
+    if (a.room.capacity !== b.room.capacity) {
+        return a.room.capacity - b.room.capacity;
+    }
+
+    return a.room.name.localeCompare(b.room.name, 'ja');
+};
+
+const buildCandidate = (
+    room: Classroom,
+    subject: Subject,
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    ruleMap: Map<string, AllocationRule>,
+    occupied: Set<string>,
+    relaxFlags: RelaxFlags,
+    equipmentSettings?: EquipmentSettings
+): Candidate | null => {
+    if (!isHardCandidate(room, subject, occupied, allocations, equipmentSettings)) return null;
+
+    const exceptions = isNearCandidate(room, subject, subjects, allocations, relaxFlags);
+    if (!exceptions) return null;
+
+    const prefScores = getPrefScores(room, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings);
+    return {
+        room,
+        exceptions,
+        prefScores,
+        surplusCapacity: room.capacity - subject.requiredCapacity
+    };
+};
+
+const pickBestCandidate = (
+    subject: Subject,
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    occupied: Set<string>,
+    ruleMap: Map<string, AllocationRule>,
+    relaxFlags: RelaxFlags,
+    equipmentSettings?: EquipmentSettings
+) => {
+    const candidates = classrooms
+        .map(room => buildCandidate(room, subject, subjects, classrooms, allocations, ruleMap, occupied, relaxFlags, equipmentSettings))
+        .filter((candidate): candidate is Candidate => candidate !== null);
+
+    if (candidates.length === 0) return null;
+    candidates.sort(compareCandidates);
+    return candidates[0];
+};
+
+const classifyUnassigned = (
+    subject: Subject,
+    subjects: Subject[],
+    strictCandidatesCount: number,
+    termRelaxCandidatesCount: number,
+    roomRelaxCandidatesCount: number,
+    requiredRoomCountShort: boolean
+): { reason: UnassignedReason; detail?: string } => {
+    if (requiredRoomCountShort) {
+        return {
+            reason: 'U4_room_count_short',
+            detail: `必要教室数 ${subject.requiredRoomCount || 1} 室を満たせなかった`
+        };
+    }
+
+    if (strictCandidatesCount === 0) {
+        return {
+            reason: 'U1_no_hard_candidate',
+            detail: '絶対必須条件を満たす候補教室がない'
+        };
+    }
+
+    if (termRelaxCandidatesCount === 0 && findTermPartner(subject, subjects)) {
+        return {
+            reason: 'U3_term_split_blocked',
+            detail: '春秋同一教室の条件を満たせない'
+        };
+    }
+
+    if (subject.preferredRoomType) {
+        return {
+            reason: 'U2_room_type_blocked',
+            detail: '教室タイプ一致の候補がない'
+        };
+    }
+
+    if (roomRelaxCandidatesCount === 0) {
+        return {
+            reason: 'U2_room_type_blocked',
+            detail: '教室タイプ条件の例外配当でも成立しない'
+        };
+    }
+
+    return {
+        reason: 'U1_no_hard_candidate',
+        detail: '候補教室が見つからない'
+    };
+};
+
+const getAlternativeUnassignedReason = (exceptions: Array<'term_split' | 'room_type_relaxed'>): UnassignedReason =>
+    exceptions.includes('term_split') ? 'U3_term_split_blocked' : 'U2_room_type_blocked';
 
 export const runAutoAllocation = (
     subjects: Subject[],
     classrooms: Classroom[],
     currentAllocations: Allocation[] = [],
     rules: AllocationRule[] = [],
-    orderBonuses: number[] = [1.2, 1.1, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-    equipmentSettings?: {
-        items: { [key: string]: { enabled: boolean; importance: number } };
-        strictLevel5: boolean;
-    }
+    equipmentSettings?: EquipmentSettings,
+    runOptions: AllocationRunOptions = {}
 ): OptimizerResult => {
+    const ruleMap = getRuleMap(rules);
+    const roomTypeRule = ruleMap.get('room_type');
+    const termRule = ruleMap.get('term_consistency');
 
-    // ルールのMapを作成してアクセスしやすくする
-    const ruleMap = new Map(rules.map(r => [r.id, r]));
-    const isEnabled = (id: string) => ruleMap.get(id)?.enabled ?? false;
+    const occupied = new Set<string>();
+    const newAllocations: Allocation[] = currentAllocations.map(cloneAllocation);
+    const pendingExceptions: PendingException[] = [];
+    const streakMap = runOptions.ignoreStreakOnce ? new Map<string, number>() : (runOptions.streakMap || loadStreakMap());
 
-    // 順序ボーナスの取得（カスタム値を使用）
-    const getOrderBonus = (order: number): number => {
-        return orderBonuses[order - 1] ?? 1.0;
-    };
-
-    // 最終スコアを計算（基本重み × 順序ボーナス）
-    const getScore = (id: string): number => {
-        const rule = ruleMap.get(id);
-        if (!rule) return 10;
-        return Math.round(rule.weight * getOrderBonus(rule.order));
-    };
-
-    const occupied = new Set<string>(); // "term-day-period-classroomId"
-    const newAllocations: Allocation[] = [...currentAllocations];
-
-    // 既存割り当てで埋まっている箇所を記録
     currentAllocations.forEach(alloc => {
         const subj = subjects.find(s => s.id === alloc.subjectId);
-        if (subj) {
-            // 連続講時も考慮して埋める
-            const start = subj.period;
-            const end = subj.endPeriod || subj.period;
-            const termsToMark = getTermsToMark(subj.term);
-            for (let p = start; p <= end; p++) {
-                termsToMark.forEach(t => occupied.add(`${t}-${subj.day}-${p}-${alloc.classroomId}`));
-            }
-        }
+        if (!subj) return;
+        markAllocation(subj, alloc, occupied);
     });
 
-    // 優先度順にソート (科目自体の優先度のみ。同列は元の順序=CSV取込順を維持)
-    const sortedSubjects = [...subjects].sort((a, b) => {
-        return (b.priority || 1) - (a.priority || 1);
+    const sortedSubjects = [...subjects].map((subject, index) => ({
+        subject,
+        index,
+        difficulty: computeDifficulty(subject, subjects, classrooms, rules, equipmentSettings, streakMap)
+    })).sort((a, b) => {
+        const priorityDiff = (b.subject.priority || 1) - (a.subject.priority || 1);
+        if (priorityDiff !== 0) return priorityDiff;
+        const diffDiff = b.difficulty.score - a.difficulty.score;
+        if (diffDiff !== 0) return diffDiff;
+        const streakDiff = b.difficulty.lastUnassignedStreak - a.difficulty.lastUnassignedStreak;
+        if (streakDiff !== 0) return streakDiff;
+        return a.index - b.index;
     });
 
-    const unassigned: Subject[] = [];
+    const unassigned: UnassignedInfo[] = [];
 
-    for (const subject of sortedSubjects) {
-        const roomCount = subject.requiredRoomCount || 1;
+    for (const { subject } of sortedSubjects) {
+        const requiredRoomCount = subject.requiredRoomCount || 1;
+        const existingCount = newAllocations.filter(a => a.subjectId === subject.id).length;
+        if (existingCount >= requiredRoomCount) continue;
 
-        for (let i = 0; i < roomCount; i++) {
-            const currentAllocCount = newAllocations.filter(a => a.subjectId === subject.id).length;
-            if (currentAllocCount >= roomCount) break;
+        const addedThisRound: Allocation[] = [];
+        const addedOccupied: Array<{ allocation: Allocation; subject: Subject }> = [];
+        let remaining = requiredRoomCount - existingCount;
 
-            let bestClassroom: Classroom | null = null;
-            let bestScore = -1;
+        let strictCandidatesCount = 0;
+        let termRelaxCandidatesCount = 0;
+        let roomRelaxCandidatesCount = 0;
+        let failed = false;
 
-            for (const room of classrooms) {
-                // 教室が配当対象外に設定されている場合はスキップ
-                if (room.isExcluded) continue;
+        while (remaining > 0) {
+            const strictCandidate = pickBestCandidate(
+                subject,
+                subjects,
+                classrooms,
+                newAllocations,
+                occupied,
+                ruleMap,
+                { relaxTermConsistency: false, relaxRoomType: false },
+                equipmentSettings
+            );
 
-                // --- Hard Constraints (無視できない制約) ---
-
-                // 1. 同一科目が同一教室に重なるのを防止
-                if (newAllocations.some(a => a.subjectId === subject.id && a.classroomId === room.id)) continue;
-
-                // 2. 時間帯の競合チェック
-                let conflict = false;
-                const start = subject.period;
-                const end = subject.endPeriod || subject.period;
-                for (let p = start; p <= end; p++) {
-                    if (occupied.has(`${subject.term}-${subject.day}-${p}-${room.id}`)) {
-                        conflict = true;
-                        break;
-                    }
-                }
-                if (conflict) continue;
-
-                // 3. 基本的な収容人数
-                if (room.capacity < subject.requiredCapacity) continue;
-
-                // 4. 必須機材（mandatoryEquipment）の hard constraint
-                if (subject.mandatoryEquipment && subject.mandatoryEquipment.length > 0) {
-                    const missingMandatory = subject.mandatoryEquipment.some(req => {
-                        if (req === '可動') return !room.isMovable;
-                        if (req === 'PJ(横)' || req === 'PJ(中)') {
-                            return !room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
-                        }
-                        return !room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
-                    });
-                    if (missingMandatory) continue;
-                }
-
-                // 5. 機材要件 (Strict Level 5)
-                if (isEnabled('equipment') && equipmentSettings?.strictLevel5) {
-                    const requiredItems = subject.requiredEquipment || [];
-                    const allRequired = new Set(requiredItems);
-                    if (subject.requiresProjector) allRequired.add('PJ');
-                    if (subject.requiresMovable) allRequired.add('可動');
-
-                    let veto = false;
-                    for (const req of Array.from(allRequired)) {
-                        let settingsKey = req;
-                        if (req.includes('PJ')) settingsKey = 'PJ';
-
-                        const setting = equipmentSettings.items[settingsKey];
-                        if (setting && setting.enabled && setting.importance === 5) {
-                            // 重要度5に設定されている機材がない場合は不適合
-                            let hasEquip = false;
-                            if (req === '可動') {
-                                hasEquip = room.isMovable;
-                            } else {
-                                hasEquip = room.equipment.some(eq =>
-                                    eq === req || eq.includes(req) || req.includes(eq) ||
-                                    (req === 'PJ(横)' && eq === 'PJ(中)') || (req === 'PJ(中)' && eq === 'PJ(横)')
-                                );
-                            }
-                            if (!hasEquip) {
-                                veto = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (veto) continue;
-                }
-
-                // --- Scored Rules (Soft Constraints) ---
-                let score = 0;
-
-                // 機材要件スコアリング
-                if (isEnabled('equipment')) {
-                    const baseWeight = getScore('equipment');
-                    const requiredItems = subject.requiredEquipment || [];
-
-                    const allRequired = new Set(requiredItems);
-                    if (subject.requiresProjector) allRequired.add('PJ');
-                    if (subject.requiresMovable) allRequired.add('可動');
-
-                    if (allRequired.size > 0) {
-                        let totalRequiredWeight = 0;
-                        let satisfiedWeight = 0;
-
-                        for (const req of Array.from(allRequired)) {
-                            // 設定キーのマッチング
-                            let settingsKey = req;
-                            if (req.includes('PJ')) settingsKey = 'PJ';
-
-                            // 無効化チェック
-                            const setting = equipmentSettings?.items?.[settingsKey];
-                            if (setting && !setting.enabled) {
-                                continue;
-                            }
-
-                            // 内部倍率 (固定)
-                            const internalMultiplier = ['可動', 'BD', 'PJ(中)', 'PJ(横)', 'PJ'].includes(settingsKey) ? 2.0 : 1.0;
-                            const importance = setting?.importance ?? 3;
-                            const weightedImportance = importance * internalMultiplier;
-
-                            totalRequiredWeight += weightedImportance;
-
-                            // 可動の場合は room.isMovable もチェック
-                            let hasEquip = false;
-                            if (req === '可動') {
-                                hasEquip = room.isMovable;
-                            } else {
-                                hasEquip = room.equipment.some(eq =>
-                                    eq === req || eq.includes(req) || req.includes(eq) ||
-                                    (req === 'PJ(横)' && eq === 'PJ(中)') || (req === 'PJ(中)' && eq === 'PJ(横)')
-                                );
-                            }
-
-                            if (hasEquip) {
-                                satisfiedWeight += weightedImportance;
-                            }
-                        }
-
-                        if (totalRequiredWeight > 0) {
-                            // 達成率 (0.0〜1.0) に基づいてスコアを算出
-                            const matchingRatio = satisfiedWeight / totalRequiredWeight;
-                            score += Math.round(baseWeight * matchingRatio);
-                        }
-                    }
-                }
-
-                // 教室タイプマッチング
-                if (isEnabled('room_type') && subject.preferredRoomType === room.type) {
-                    score += getScore('room_type');
-                }
-
-                // 希望建物優先
-                if (isEnabled('building_preference') && subject.buildingPreference && room.building === subject.buildingPreference) {
-                    score += getScore('building_preference');
-                }
-
-                // 同一教員連続授業 (同じ建物・同じ教室)
-                if (isEnabled('teacher_continuity')) {
-                    const weight = getScore('teacher_continuity');
-                    // 直前の講時で同じ先生がどこにいるか探す（連続講時の endPeriod も考慮）
-                    const prevSubj = subjects.find(s =>
-                        s.teacher === subject.teacher &&
-                        s.day === subject.day &&
-                        (s.endPeriod || s.period) === subject.period - 1 &&
-                        s.term === subject.term
-                    );
-                    if (prevSubj) {
-                        const prevAlloc = newAllocations.find(a => a.subjectId === prevSubj.id);
-                        if (prevAlloc) {
-                            if (prevAlloc.classroomId === room.id) {
-                                score += weight; // 同じ教室なら満点
-                            } else {
-                                const prevRoom = classrooms.find(r => r.id === prevAlloc.classroomId);
-                                if (prevRoom && prevRoom.building === room.building) {
-                                    score += weight / 2; // 同じ建物なら半分
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 適切な教室サイズ (130-330%)
-                if (isEnabled('capacity_fit')) {
-                    const weight = getScore('capacity_fit');
-                    const params = (ruleMap.get('capacity_fit')?.params as any) || { minRatio: 1.3, maxRatio: 3.3 };
-                    const ratio = room.capacity / subject.requiredCapacity;
-                    if (ratio >= params.minRatio && ratio <= params.maxRatio) {
-                        score += weight;
-                    } else if (ratio >= 1.0 && ratio < params.minRatio) {
-                        score += weight / 2; // 近いサイズなら少し加点
-                    }
-                }
-
-                // 連続講時同室（全連続講時対応）
-                if (isEnabled('period_continuity')) {
-                    const weight = getScore('period_continuity');
-                    // 直前の講時の同じ教員の授業を探す
-                    const prevSubj = subjects.find(s =>
-                        s.teacher === subject.teacher &&
-                        s.day === subject.day &&
-                        (s.endPeriod || s.period) === subject.period - 1 &&
-                        s.term === subject.term
-                    );
-                    if (prevSubj) {
-                        const prevAlloc = newAllocations.find(a => a.subjectId === prevSubj.id);
-                        if (prevAlloc && prevAlloc.classroomId === room.id) {
-                            score += weight;
-                        }
-                    }
-                    // 直後の講時の同じ教員の授業も探す
-                    const nextSubj = subjects.find(s =>
-                        s.teacher === subject.teacher &&
-                        s.day === subject.day &&
-                        s.period === (subject.endPeriod || subject.period) + 1 &&
-                        s.term === subject.term
-                    );
-                    if (nextSubj) {
-                        const nextAlloc = newAllocations.find(a => a.subjectId === nextSubj.id);
-                        if (nextAlloc && nextAlloc.classroomId === room.id) {
-                            score += weight;
-                        }
-                    }
-                }
-
-                // 春秋同一配当
-                if (isEnabled('term_consistency')) {
-                    const weight = getScore('term_consistency');
-                    const termOpposites: Partial<Record<string, string>> = {
-                        spring: 'autumn', autumn: 'spring',
-                        spring_first: 'autumn_first', autumn_first: 'spring_first',
-                        spring_second: 'autumn_second', autumn_second: 'spring_second',
-                    };
-                    const oppositeTerm = termOpposites[subject.term] ?? null;
-                    if (oppositeTerm) {
-                        const partner = subjects.find(s =>
-                            s.teacher === subject.teacher &&
-                            s.day === subject.day &&
-                            s.period === subject.period &&
-                            s.term === oppositeTerm
-                        );
-                        if (partner) {
-                            const partnerAlloc = newAllocations.find(a => a.subjectId === partner.id);
-                            if (partnerAlloc && partnerAlloc.classroomId === room.id) {
-                                score += weight;
-                            }
-                        }
-                    }
-                }
-
-                // 過年度教室優先
-                if (isEnabled('previous_room') && subject.previousRooms && subject.previousRooms.length > 0) {
-                    const weight = getScore('previous_room');
-                    if (subject.previousRooms.includes(room.name)) {
-                        score += weight;
-                    }
-                }
-
-                // 前半・後半スタッキングボーナス（term_consistency が有効な場合のみ）
-                // 春学期前半と後半（または秋）は時間的に重ならないため同室配当を優先
-                if (isEnabled('term_consistency')) {
-                    const complementary = getComplementaryTerm(subject.term);
-                    if (complementary) {
-                        const hasComplement = newAllocations.some(a => {
-                            const s = subjects.find(sub => sub.id === a.subjectId);
-                            if (!s || s.term !== complementary || s.day !== subject.day || a.classroomId !== room.id) return false;
-                            const sStart = s.period;
-                            const sEnd = s.endPeriod || s.period;
-                            const tStart = subject.period;
-                            const tEnd = subject.endPeriod || subject.period;
-                            return sStart <= tEnd && tStart <= sEnd; // 期間が重なる（講時帯が同じ）
-                        });
-                        if (hasComplement) score += 60; // 同室スタック強ボーナス
-                    }
-                }
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestClassroom = room;
-                } else if (score === bestScore && bestClassroom) {
-                    // スコアが同じなら、より「無駄の少ない（定員が近い）」方を選ぶ
-                    if (room.capacity < bestClassroom.capacity) {
-                        bestClassroom = room;
-                    }
-                }
-            }
-
-            if (bestClassroom) {
-                newAllocations.push({
-                    subjectId: subject.id,
-                    classroomId: bestClassroom.id
-                });
-                const start = subject.period;
-                const end = subject.endPeriod || subject.period;
-                const termsToMarkNew = getTermsToMark(subject.term);
-                for (let p = start; p <= end; p++) {
-                    termsToMarkNew.forEach(t => occupied.add(`${t}-${subject.day}-${p}-${bestClassroom!.id}`));
-                }
+            let chosen = strictCandidate;
+            if (strictCandidate) {
+                strictCandidatesCount++;
             } else {
-                if (!unassigned.some(s => s.id === subject.id)) {
-                    unassigned.push(subject);
+                const termRelaxCandidate =
+                    termRule?.enabled
+                        ? pickBestCandidate(
+                            subject,
+                            subjects,
+                            classrooms,
+                            newAllocations,
+                            occupied,
+                            ruleMap,
+                            { relaxTermConsistency: true, relaxRoomType: false },
+                            equipmentSettings
+                        )
+                        : null;
+
+                if (termRelaxCandidate) {
+                    termRelaxCandidatesCount++;
+                    chosen = termRelaxCandidate;
+                } else {
+                    const roomRelaxCandidate =
+                        roomTypeRule?.enabled
+                            ? pickBestCandidate(
+                                subject,
+                                subjects,
+                                classrooms,
+                                newAllocations,
+                                occupied,
+                                ruleMap,
+                                { relaxTermConsistency: false, relaxRoomType: true },
+                                equipmentSettings
+                            )
+                            : null;
+
+                    if (roomRelaxCandidate) {
+                        roomRelaxCandidatesCount++;
+                        chosen = roomRelaxCandidate;
+                    }
                 }
+            }
+
+            if (!chosen) {
+                failed = true;
+                break;
+            }
+
+            const approvalKey = chosen.exceptions.length > 0
+                ? buildApprovalKey(subject.id, chosen.room.id, chosen.exceptions)
+                : null;
+            const allocation: Allocation = {
+                subjectId: subject.id,
+                classroomId: chosen.room.id,
+                exceptions: chosen.exceptions.length > 0 ? [...chosen.exceptions] : undefined,
+                exceptionApproved: chosen.exceptions.length > 0
+                    ? (!runOptions.dryRunExceptions || runOptions.approvedExceptions?.has(approvalKey!))
+                        ? true
+                        : undefined
+                    : undefined
+            };
+
+            newAllocations.push(allocation);
+            addedThisRound.push(allocation);
+            addedOccupied.push({ allocation, subject });
+            markAllocation(subject, allocation, occupied);
+
+            if (runOptions.dryRunExceptions && chosen.exceptions.length > 0) {
+                const key = buildApprovalKey(subject.id, chosen.room.id, chosen.exceptions);
+                if (!runOptions.approvedExceptions?.has(key)) {
+                    pendingExceptions.push({
+                        subject,
+                        classroomId: chosen.room.id,
+                        exceptions: [...chosen.exceptions],
+                        alternativeUnassignedReason: getAlternativeUnassignedReason(chosen.exceptions)
+                    });
+                }
+            }
+
+            remaining -= 1;
+        }
+
+        if (failed || remaining > 0) {
+            while (addedOccupied.length > 0) {
+                const item = addedOccupied.pop()!;
+                unmarkAllocation(item.subject, item.allocation, occupied);
+                const idx = newAllocations.lastIndexOf(item.allocation);
+                if (idx >= 0) newAllocations.splice(idx, 1);
+            }
+
+            const reasonInfo = classifyUnassigned(
+                subject,
+                subjects,
+                strictCandidatesCount,
+                termRelaxCandidatesCount,
+                roomRelaxCandidatesCount,
+                remaining > 0 && addedThisRound.length > 0
+            );
+
+            if (!unassigned.some(item => item.subject.id === subject.id)) {
+                unassigned.push({
+                    subject,
+                    reason: reasonInfo.reason,
+                    detail: reasonInfo.detail
+                });
             }
         }
     }
 
     return {
         allocations: newAllocations,
-        unassignedSubjects: unassigned
+        unassigned,
+        pendingExceptions: pendingExceptions.length > 0 ? pendingExceptions : undefined
+    };
+};
+
+export const resolveExceptions = (
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    rules: AllocationRule[],
+    equipmentSettings?: EquipmentSettings
+): { allocations: Allocation[]; resolved: Array<{ subjectId: string; from: string; to: string }> } => {
+    const ruleMap = getRuleMap(rules);
+    const result = allocations.map(cloneAllocation);
+    const resolved: Array<{ subjectId: string; from: string; to: string }> = [];
+    const occupied = new Set<string>();
+
+    result.forEach(alloc => {
+        const subj = subjects.find(s => s.id === alloc.subjectId);
+        if (!subj) return;
+        markAllocation(subj, alloc, occupied);
+    });
+
+    const exceptionalAllocations = result.filter(a => a.exceptions && a.exceptions.length > 0 && !a.exceptionApproved);
+
+    for (const alloc of exceptionalAllocations) {
+        const subject = subjects.find(s => s.id === alloc.subjectId);
+        if (!subject) continue;
+
+        unmarkAllocation(subject, alloc, occupied);
+
+        const candidate = pickBestCandidate(
+            subject,
+            subjects,
+            classrooms,
+            result,
+            occupied,
+            ruleMap,
+            { relaxTermConsistency: false, relaxRoomType: false },
+            equipmentSettings
+        );
+
+        if (candidate && candidate.exceptions.length === 0) {
+            resolved.push({ subjectId: subject.id, from: alloc.classroomId, to: candidate.room.id });
+            alloc.classroomId = candidate.room.id;
+            alloc.exceptions = undefined;
+            alloc.exceptionApproved = undefined;
+            markAllocation(subject, alloc, occupied);
+        } else {
+            markAllocation(subject, alloc, occupied);
+        }
+    }
+
+    return { allocations: result, resolved };
+};
+
+type RelocationSearchState = {
+    allocations: Allocation[];
+    occupied: Set<string>;
+    moves: RelocationMove[];
+    placed: RelocationPlacement[];
+    cost: number;
+};
+
+const cloneRelocationState = (state: RelocationSearchState): RelocationSearchState => ({
+    allocations: state.allocations.map(cloneAllocation),
+    occupied: new Set(state.occupied),
+    moves: state.moves.map(move => ({ ...move })),
+    placed: state.placed.map(item => ({ ...item })),
+    cost: state.cost
+});
+
+const preferenceScore = (scores: number[]) =>
+    scores.reduce((total, score, index) => total + score * Math.pow(0.5, index), 0);
+
+const isHardRoomEligible = (
+    room: Classroom,
+    subject: Subject,
+    equipmentSettings?: EquipmentSettings
+) => {
+    if (room.isExcluded) return false;
+    if (room.capacity < subject.requiredCapacity) return false;
+    if (getMandatoryItems(subject).some(req => !matchesEquipment(room, req))) return false;
+
+    if (equipmentSettings?.strictLevel5) {
+        for (const req of getRequiredItems(subject)) {
+            const entries = getRelevantEquipmentSetting(req, equipmentSettings);
+            const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
+            if (!hasLevel5) continue;
+            if (!matchesEquipment(room, req)) return false;
+        }
+    }
+
+    return true;
+};
+
+const buildRelocationCandidate = (
+    room: Classroom,
+    subject: Subject,
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    ruleMap: Map<string, AllocationRule>,
+    equipmentSettings?: EquipmentSettings,
+    allowedExceptions: Array<'term_split' | 'room_type_relaxed'> = []
+): Candidate | null => {
+    if (!isHardRoomEligible(room, subject, equipmentSettings)) return null;
+
+    const exceptions = isNearCandidate(room, subject, subjects, allocations, {
+        relaxTermConsistency: true,
+        relaxRoomType: true
+    });
+    if (!exceptions) return null;
+
+    const allowed = new Set(allowedExceptions);
+    if (!exceptions.every(exception => allowed.has(exception))) return null;
+
+    return {
+        room,
+        exceptions,
+        prefScores: getPrefScores(room, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings),
+        surplusCapacity: room.capacity - subject.requiredCapacity
+    };
+};
+
+const getRelocationCandidates = (
+    subject: Subject,
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    ruleMap: Map<string, AllocationRule>,
+    equipmentSettings?: EquipmentSettings,
+    bannedRoomIds: Set<string> = new Set(),
+    allowedExceptions: Array<'term_split' | 'room_type_relaxed'> = []
+) =>
+    classrooms
+        .map(room => (bannedRoomIds.has(room.id) ? null : buildRelocationCandidate(room, subject, subjects, classrooms, allocations, ruleMap, equipmentSettings, allowedExceptions)))
+        .filter((candidate): candidate is Candidate => candidate !== null)
+        .sort(compareCandidates);
+
+const getBlockersForRoom = (
+    subject: Subject,
+    room: Classroom,
+    allocations: Allocation[],
+    subjects: Subject[]
+) => {
+    const targetKeys = new Set(getRoomOccupiedKeys(subject, room.id));
+    return allocations.filter(allocation => {
+        if (allocation.subjectId === subject.id) return false;
+        if (allocation.classroomId !== room.id) return false;
+        const blockerSubject = subjects.find(s => s.id === allocation.subjectId);
+        if (!blockerSubject) return false;
+        return getRoomOccupiedKeys(blockerSubject, allocation.classroomId).some(key => targetKeys.has(key));
+    });
+};
+
+const addAllocationToState = (
+    state: RelocationSearchState,
+    subject: Subject,
+    roomId: string,
+    exceptions?: Array<'term_split' | 'room_type_relaxed'>
+) => {
+    const allocation: Allocation = {
+        subjectId: subject.id,
+        classroomId: roomId,
+        exceptions: exceptions && exceptions.length > 0 ? [...exceptions] : undefined
+    };
+    state.allocations.push(allocation);
+    markAllocation(subject, allocation, state.occupied);
+};
+
+const removeAllocationFromState = (
+    state: RelocationSearchState,
+    subject: Subject,
+    roomId: string
+) => {
+    const index = state.allocations.findIndex(a => a.subjectId === subject.id && a.classroomId === roomId);
+    if (index < 0) return false;
+    const allocation = state.allocations[index];
+    if (allocation.isLocked) return false;
+    unmarkAllocation(subject, allocation, state.occupied);
+    state.allocations.splice(index, 1);
+    return true;
+};
+
+const buildRelocationState = (subjects: Subject[], allocations: Allocation[]) => {
+    const occupied = new Set<string>();
+    allocations.forEach(alloc => {
+        const subject = subjects.find(s => s.id === alloc.subjectId);
+        if (!subject) return;
+        markAllocation(subject, alloc, occupied);
+    });
+
+    const state: RelocationSearchState = {
+        allocations: allocations.map(cloneAllocation),
+        occupied,
+        moves: [],
+        placed: [],
+        cost: 0
+    };
+
+    return state;
+};
+
+const moveCost = (
+    subject: Subject,
+    fromRoom: Classroom,
+    toRoom: Classroom,
+    subjects: Subject[],
+    allocations: Allocation[],
+    classrooms: Classroom[],
+    ruleMap: Map<string, AllocationRule>,
+    equipmentSettings?: EquipmentSettings
+) => {
+    const fromScore = preferenceScore(getPrefScores(fromRoom, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings));
+    const toScore = preferenceScore(getPrefScores(toRoom, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings));
+    const priorityWeight = Math.max(1, subject.priority || 1);
+    return Math.max(0, fromScore - toScore) * priorityWeight;
+};
+
+const placementBenefit = (
+    subject: Subject,
+    room: Classroom,
+    subjects: Subject[],
+    allocations: Allocation[],
+    classrooms: Classroom[],
+    ruleMap: Map<string, AllocationRule>,
+    equipmentSettings?: EquipmentSettings
+) => {
+    const score = preferenceScore(getPrefScores(room, subject, subjects, allocations, classrooms, ruleMap, equipmentSettings));
+    return Math.max(1, subject.priority || 1) * 2 + score;
+};
+
+const attemptRelocationPlacement = (
+    subject: Subject,
+    room: Classroom,
+    state: RelocationSearchState,
+    subjects: Subject[],
+    classrooms: Classroom[],
+    ruleMap: Map<string, AllocationRule>,
+    depthRemaining: number,
+    context: { isRoot?: boolean; fromRoomId?: string; exceptions?: Array<'term_split' | 'room_type_relaxed'> },
+    bannedRoomIds: Set<string>,
+    visited: Set<string>,
+    equipmentSettings?: EquipmentSettings
+): RelocationSearchState | null => {
+    if (!isHardRoomEligible(room, subject, equipmentSettings)) return null;
+    if (state.allocations.some(allocation => allocation.subjectId === subject.id && allocation.classroomId === room.id)) return null;
+
+    const visitKey = `${subject.id}__${room.id}`;
+    const nextVisited = context.isRoot ? visited : new Set(visited);
+    if (!context.isRoot) {
+        if (visited.has(visitKey)) return null;
+        nextVisited.add(visitKey);
+    }
+
+    const blockers = getBlockersForRoom(subject, room, state.allocations, subjects);
+    if (blockers.length === 0) {
+        const nextState = cloneRelocationState(state);
+        addAllocationToState(nextState, subject, room.id, context.exceptions);
+        if (context.fromRoomId) {
+            const fromRoom = getRoomById(context.fromRoomId, classrooms);
+            if (fromRoom) {
+                nextState.moves.push({ subjectId: subject.id, fromRoomId: context.fromRoomId, toRoomId: room.id });
+                nextState.cost += moveCost(subject, fromRoom, room, subjects, nextState.allocations, classrooms, ruleMap, equipmentSettings);
+            }
+        } else if (context.isRoot) {
+            nextState.placed.push({ subjectId: subject.id, roomId: room.id });
+        }
+        return nextState;
+    }
+
+    if (depthRemaining <= 0) return null;
+
+    const blockerCandidates = blockers
+        .map(allocation => {
+            const blockerSubject = subjects.find(s => s.id === allocation.subjectId);
+            const currentExceptions = allocation.exceptions || [];
+            const candidateCount = blockerSubject
+                ? allocation.isLocked
+                    ? 0
+                    : getRelocationCandidates(
+                    blockerSubject,
+                    subjects,
+                    classrooms,
+                    state.allocations.filter(a => !(a.subjectId === allocation.subjectId && a.classroomId === allocation.classroomId)),
+                    ruleMap,
+                    equipmentSettings,
+                    new Set([room.id, allocation.classroomId, ...bannedRoomIds]),
+                    currentExceptions
+                ).length
+                : 0;
+            return { allocation, blockerSubject, candidateCount, currentExceptions };
+        })
+        .sort((a, b) => {
+            if (a.candidateCount !== b.candidateCount) return a.candidateCount - b.candidateCount;
+            return (b.blockerSubject?.priority || 1) - (a.blockerSubject?.priority || 1);
+        });
+
+    let bestState: RelocationSearchState | null = null;
+    let bestCost = Number.POSITIVE_INFINITY;
+
+    for (const blocker of blockerCandidates) {
+        if (!blocker.blockerSubject) continue;
+
+        const workingState = cloneRelocationState(state);
+        const removed = removeAllocationFromState(workingState, blocker.blockerSubject, blocker.allocation.classroomId);
+        if (!removed) continue;
+
+        const excludeRooms = new Set([room.id, blocker.allocation.classroomId, ...bannedRoomIds]);
+        const relocationChoices = getRelocationCandidates(
+            blocker.blockerSubject,
+            subjects,
+            classrooms,
+            workingState.allocations,
+            ruleMap,
+            equipmentSettings,
+            excludeRooms,
+            blocker.currentExceptions
+        ).slice(0, 5);
+
+        const fromRoom = getRoomById(blocker.allocation.classroomId, classrooms);
+        const filteredChoices = fromRoom
+            ? relocationChoices.filter(candidate => {
+                const fromScore = scoreTeacherContinuity(fromRoom, blocker.blockerSubject!, subjects, workingState.allocations, classrooms);
+                const toScore = scoreTeacherContinuity(candidate.room, blocker.blockerSubject!, subjects, workingState.allocations, classrooms);
+                return !(fromScore >= 1 && toScore < 1);
+            })
+            : relocationChoices;
+
+        for (const candidate of filteredChoices) {
+            const branch = cloneRelocationState(workingState);
+            const moved = attemptRelocationPlacement(
+                blocker.blockerSubject,
+                candidate.room,
+                branch,
+                subjects,
+                classrooms,
+                ruleMap,
+                depthRemaining - 1,
+                { fromRoomId: blocker.allocation.classroomId, exceptions: candidate.exceptions },
+                new Set([...bannedRoomIds, room.id, blocker.allocation.classroomId]),
+                nextVisited,
+                equipmentSettings
+            );
+
+            if (!moved) continue;
+
+            const cleared = attemptRelocationPlacement(
+                subject,
+                room,
+                moved,
+                subjects,
+                classrooms,
+                ruleMap,
+                depthRemaining,
+                context,
+                bannedRoomIds,
+                nextVisited,
+                equipmentSettings
+            );
+
+            if (!cleared) continue;
+            if (cleared.cost < bestCost) {
+                bestState = cleared;
+                bestCost = cleared.cost;
+            }
+        }
+    }
+
+    return bestState;
+};
+
+const finalizeRelocationUnassigned = (
+    subject: Subject,
+    originalReason: UnassignedReason,
+    remainingCount: number
+): UnassignedInfo => {
+    const convertedReason =
+        originalReason === 'U1_no_hard_candidate' || originalReason === 'U4_room_count_short'
+            ? 'U5_swap_failed'
+            : originalReason;
+
+    const detail = remainingCount > 0
+        ? `交換配当ではあと ${remainingCount} 室不足です`
+        : '交換配当でも解消できませんでした';
+
+    return {
+        subject,
+        reason: convertedReason,
+        detail
+    };
+};
+
+export const relocateForUnassigned = (
+    subjects: Subject[],
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    unassigned: UnassignedInfo[],
+    rules: AllocationRule[],
+    equipmentSettings?: EquipmentSettings,
+    options?: { maxDepth?: 1 | 2; timeoutMs?: number }
+): RelocationResult => {
+    const ruleMap = getRuleMap(rules);
+    const maxDepth = options?.maxDepth ?? 2;
+    const timeoutMs = options?.timeoutMs ?? 30000;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+    let state = buildRelocationState(subjects, allocations);
+    const moves: RelocationMove[] = [];
+    const placed: RelocationPlacement[] = [];
+    const unresolved: UnassignedInfo[] = [];
+
+    const reasonOrder: UnassignedReason[] = [
+        'U4_room_count_short',
+        'U1_no_hard_candidate',
+        'U3_term_split_blocked',
+        'U2_room_type_blocked',
+        'U5_swap_failed'
+    ];
+
+    const orderedUnassigned = [...unassigned].sort((a, b) => {
+        const reasonDiff = reasonOrder.indexOf(a.reason) - reasonOrder.indexOf(b.reason);
+        if (reasonDiff !== 0) return reasonDiff;
+        const priorityDiff = (b.subject.priority || 1) - (a.subject.priority || 1);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.subject.id.localeCompare(b.subject.id);
+    });
+
+    for (const item of orderedUnassigned) {
+        const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt;
+        if (elapsed > timeoutMs) {
+            unresolved.push(finalizeRelocationUnassigned(item.subject, item.reason, item.subject.requiredRoomCount || 1));
+            continue;
+        }
+
+        const requiredRoomCount = item.subject.requiredRoomCount || 1;
+        const currentCount = state.allocations.filter(allocation => allocation.subjectId === item.subject.id).length;
+        let remainingCount = Math.max(0, requiredRoomCount - currentCount);
+
+        if (remainingCount === 0) continue;
+
+        while (remainingCount > 0) {
+            const candidateRooms = getRelocationCandidates(
+                item.subject,
+                subjects,
+                classrooms,
+                state.allocations,
+                ruleMap,
+                equipmentSettings
+            ).slice(0, 5);
+
+            let bestBranch: RelocationSearchState | null = null;
+            let bestNet = Number.NEGATIVE_INFINITY;
+
+            for (const candidate of candidateRooms) {
+                const branch = cloneRelocationState(state);
+                const relocated = attemptRelocationPlacement(
+                    item.subject,
+                    candidate.room,
+                    branch,
+                    subjects,
+                    classrooms,
+                    ruleMap,
+                    maxDepth,
+                    { isRoot: true },
+                    new Set(),
+                    new Set(),
+                    equipmentSettings
+                );
+
+                if (!relocated) continue;
+
+                const benefit = placementBenefit(
+                    item.subject,
+                    candidate.room,
+                    subjects,
+                    relocated.allocations,
+                    classrooms,
+                    ruleMap,
+                    equipmentSettings
+                );
+                const net = benefit - relocated.cost;
+                if (net > bestNet) {
+                    bestNet = net;
+                    bestBranch = relocated;
+                }
+            }
+
+            if (!bestBranch || bestNet <= 0) break;
+
+            state = bestBranch;
+            state.moves.forEach(move => {
+                if (!moves.some(existing => existing.subjectId === move.subjectId && existing.fromRoomId === move.fromRoomId && existing.toRoomId === move.toRoomId)) {
+                    moves.push(move);
+                }
+            });
+            state.placed.forEach(item => {
+                if (!placed.some(existing => existing.subjectId === item.subjectId && existing.roomId === item.roomId)) {
+                    placed.push(item);
+                }
+            });
+
+            const nextCount = state.allocations.filter(allocation => allocation.subjectId === item.subject.id).length;
+            const nextRemaining = Math.max(0, requiredRoomCount - nextCount);
+            if (nextRemaining === remainingCount) break;
+            remainingCount = nextRemaining;
+        }
+
+        if (remainingCount > 0) {
+            unresolved.push(finalizeRelocationUnassigned(item.subject, item.reason, remainingCount));
+        }
+    }
+
+    return {
+        allocations: state.allocations,
+        unassigned: unresolved,
+        moves,
+        placed,
+        unresolved
     };
 };

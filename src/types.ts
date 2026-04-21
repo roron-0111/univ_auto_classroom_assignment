@@ -92,6 +92,8 @@ export interface Allocation {
     classroomId: string;
     // メタデータ（手動変更されたか等）
     isLocked?: boolean;
+    exceptions?: Array<'term_split' | 'room_type_relaxed'>;
+    exceptionApproved?: boolean;
 }
 
 export const DAY_LABELS: Record<DayOfWeek, string> = {
@@ -170,22 +172,20 @@ export const getEquipmentStyle = (name: string) => {
     return IMPORTANT_EQUIPMENT_COLORS[name] || { bg: '#f5f5f5', text: '#666', border: '#ddd' };
 };
 
-export type RuleSeverity = 'mandatory' | 'high' | 'mid' | 'low' | 'lowest';
+export type RuleTier = 'hard' | 'near' | 'pref';
 
 export interface AllocationRule {
     id: string;
     name: string;
     description: string;
+    tier: RuleTier;
     enabled: boolean;
-    severity: RuleSeverity;
     order: number;
-    weight: number; // 0-100 の重み値
     params?: Record<string, any>;
 }
 
 export interface AllocationSettings {
     rules: AllocationRule[];
-    orderBonuses: number[]; // 順位ごとの倍率（例: [1.2, 1.1, 1.0]）
     equipmentSettings?: {
         items: {
             [key: string]: {
@@ -197,80 +197,112 @@ export interface AllocationSettings {
     };
 }
 
-export const DEFAULT_ORDER_BONUSES = [2.0, 1.5, 1.3, 1.2, 1.1, 1.0, 1.0, 1.0]; // 急勾配：1位=必須、2-5位=できるだけ、6-8位=ベター
-
 export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
+    {
+        id: 'no_overlap',
+        name: '時間重複なし',
+        description: '同一時限・同一教室の重複配当をしない',
+        tier: 'hard',
+        enabled: true,
+        order: 0
+    },
     {
         id: 'period_continuity',
         name: '連続講時同室',
-        description: '連続する講時の授業を同じ教室に配当（必須）',
+        description: '連続する講時の授業を同じ教室に配当',
+        tier: 'hard',
         enabled: true,
-        severity: 'mandatory',
-        order: 1,
-        weight: 100
+        order: 0
+    },
+    {
+        id: 'capacity_min',
+        name: '定員不足なし',
+        description: '受講想定人数未満の教室には配当しない',
+        tier: 'hard',
+        enabled: true,
+        order: 0
+    },
+    {
+        id: 'mandatory_equipment',
+        name: '必須機材一致',
+        description: '必須指定機材が欠ける教室には配当しない',
+        tier: 'hard',
+        enabled: true,
+        order: 0
+    },
+    {
+        id: 'excluded_room',
+        name: '配当対象外除外',
+        description: '教室管理で対象外設定された教室は除外する',
+        tier: 'hard',
+        enabled: true,
+        order: 0
+    },
+    {
+        id: 'term_consistency',
+        name: '春秋同一教室',
+        description: '春秋ペア科目は同じ教室を使用',
+        tier: 'near',
+        enabled: true,
+        order: 0,
+        params: {
+            relaxable: true
+        }
     },
     {
         id: 'room_type',
         name: '教室タイプマッチング',
         description: '講義→一般教室、ゼミ→ゼミ室、PC→PC教室',
-        enabled: true,
-        severity: 'high',
-        order: 2,
-        weight: 90
-    },
-    {
-        id: 'equipment',
-        name: '機材要件',
-        description: '機材ごとの重要度設定を反映',
-        enabled: true,
-        severity: 'high',
-        order: 3,
-        weight: 85
-    },
-    {
-        id: 'capacity_fit',
-        name: '適切な教室サイズ',
-        description: '教室定員÷受講者数=1.3〜3.3倍が理想',
-        enabled: true,
-        severity: 'mid',
-        order: 4,
-        weight: 70
-    },
-    {
-        id: 'building_preference',
-        name: '建物希望',
-        description: '指定された建物内の教室を優先',
-        enabled: true,
-        severity: 'mid',
-        order: 5,
-        weight: 60
+        tier: 'near',
+        enabled: false,
+        order: 0,
+        params: {
+            relaxable: true
+        }
     },
     {
         id: 'teacher_continuity',
         name: '同一教員連続授業',
         description: '同じ教員の連続講時を同じ教室に',
+        tier: 'pref',
         enabled: true,
-        severity: 'mid',
-        order: 6,
-        weight: 40
+        order: 1
+    },
+    {
+        id: 'equipment',
+        name: '希望機材充足',
+        description: '機材ごとの重要度設定を反映',
+        tier: 'pref',
+        enabled: true,
+        order: 2
+    },
+    {
+        id: 'capacity_fit',
+        name: '適切な教室サイズ',
+        description: '教室定員÷受講者数が適正範囲に近いほど優先',
+        tier: 'pref',
+        enabled: true,
+        order: 3,
+        params: {
+            minRatio: 1.3,
+            maxRatio: 3.3
+        }
+    },
+    {
+        id: 'building_preference',
+        name: '建物希望',
+        description: '指定された建物内の教室を優先',
+        tier: 'pref',
+        enabled: true,
+        order: 4
     },
     {
         id: 'previous_room',
         name: '過年度教室優先',
         description: '過年度に使用した教室を優先',
+        tier: 'pref',
         enabled: true,
-        severity: 'low',
-        order: 7,
-        weight: 30
-    },
-    {
-        id: 'term_consistency',
-        name: '春秋同一配当',
-        description: '春学期と秋学期で同じ教室を使用',
-        enabled: true,
-        severity: 'low',
-        order: 8,
-        weight: 25
+        order: 5
     }
 ];
 
@@ -293,14 +325,48 @@ export const DEFAULT_EQUIPMENT_SETTINGS = {
     strictLevel5: false
 };
 
+export type UnassignedReason =
+    | 'U1_no_hard_candidate'
+    | 'U2_room_type_blocked'
+    | 'U3_term_split_blocked'
+    | 'U4_room_count_short'
+    | 'U5_swap_failed';
+
+export interface UnassignedInfo {
+    subject: Subject;
+    reason: UnassignedReason;
+    detail?: string;
+}
+
+export interface PendingException {
+    subject: Subject;
+    classroomId: string;
+    exceptions: Array<'term_split' | 'room_type_relaxed'>;
+    alternativeUnassignedReason: UnassignedReason;
+}
+
+export interface AllocationRunOptions {
+    equipmentSettings?: {
+        items: { [key: string]: { enabled: boolean; importance: number } };
+        strictLevel5: boolean;
+    };
+    dryRunExceptions?: boolean;
+    streakMap?: Map<string, number>;
+    ignoreStreakOnce?: boolean;
+    approvedExceptions?: Set<string>;
+}
+
 export interface OptimizerResult {
     allocations: Allocation[];
-    unassignedSubjects: Subject[];
+    unassigned: UnassignedInfo[];
+}
+
+export interface OptimizerResult {
+    pendingExceptions?: PendingException[];
 }
 
 export interface AllocationOptions {
     rules: AllocationRule[];
-    orderBonuses: number[];
     priorities: number[];           // 選択された優先度
     terms: Term[];                  // 配当期
     days: DayOfWeek[];              // 曜日
@@ -312,4 +378,88 @@ export interface AllocationOptions {
         strictLevel5: boolean;
     }; // 機材設定
 }
+
+export interface AllocationOptions {
+    confirmExceptions: boolean;
+}
+
+export interface AllocationOptions {
+    ignoreStreakOnce?: boolean;
+}
+
+export interface RelocationMove {
+    subjectId: string;
+    fromRoomId: string;
+    toRoomId: string;
+}
+
+export interface RelocationPlacement {
+    subjectId: string;
+    roomId: string;
+}
+
+export interface RelocationResult {
+    allocations: Allocation[];
+    unassigned: UnassignedInfo[];
+    moves: RelocationMove[];
+    placed: RelocationPlacement[];
+    unresolved: UnassignedInfo[];
+}
+
+const cloneParams = (params?: Record<string, any>) => {
+    if (!params) return undefined;
+    return { ...params };
+};
+
+const isLegacyRule = (rule: any): rule is Record<string, any> => {
+    return rule && typeof rule === 'object' && typeof rule.id === 'string';
+};
+
+export const migrateAllocationRules = (oldRules: any[] | undefined): AllocationRule[] => {
+    const savedRules = Array.isArray(oldRules) ? oldRules.filter(isLegacyRule) : [];
+    const savedById = new Map(savedRules.map(rule => [rule.id, rule]));
+
+    return DEFAULT_ALLOCATION_RULES.map(def => {
+        const saved = savedById.get(def.id);
+        if (!saved) {
+            return {
+                ...def,
+                params: cloneParams(def.params)
+            };
+        }
+
+        if (def.tier === 'hard') {
+            return {
+                ...def,
+                enabled: true,
+                params: cloneParams(def.params)
+            };
+        }
+
+        if (def.tier === 'near') {
+            const nextEnabled =
+                def.id === 'term_consistency'
+                    ? (typeof saved.enabled === 'boolean' ? saved.enabled : def.enabled)
+                    : def.enabled;
+
+            return {
+                ...def,
+                enabled: nextEnabled,
+                params: cloneParams(def.params)
+            };
+        }
+
+        const nextEnabled = typeof saved.enabled === 'boolean' ? saved.enabled : def.enabled;
+        const nextParams = {
+            ...cloneParams(def.params),
+            ...cloneParams(saved.params)
+        };
+
+        return {
+            ...def,
+            enabled: nextEnabled,
+            params: Object.keys(nextParams).length > 0 ? nextParams : undefined
+        };
+    });
+};
 

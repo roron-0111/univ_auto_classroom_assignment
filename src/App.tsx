@@ -1,25 +1,31 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
-import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building } from './types';
+import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult } from './types';
 import { BUILDINGS, DAY_LABELS, CAMPUSES } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
-import { UnassignedList } from './components/UnassignedList';
+import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
 import { ClassroomManager } from './components/ClassroomManager';
 import { DisplaySettings } from './components/DisplaySettings';
-import { runAutoAllocation } from './utils/optimizer';
+import { runAutoAllocation, relocateForUnassigned, resolveExceptions } from './utils/optimizer';
 import { SubjectManager } from './components/SubjectManager';
 import { SubjectEditModal } from './components/SubjectEditModal';
 import { ClassroomEditModal } from './components/ClassroomEditModal';
 import { AllocationRuleSettings } from './components/AllocationRuleSettings';
-import { DEFAULT_ALLOCATION_RULES, DEFAULT_ORDER_BONUSES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST } from './types';
+import { AllocationResultModal } from './components/AllocationResultModal';
+import { ExceptionReviewModal } from './components/ExceptionReviewModal';
+import { RelocationPreviewModal } from './components/RelocationPreviewModal';
+import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules } from './types';
 import type { AllocationOptions } from './types';
+import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
+import { buildApprovalKey } from './utils/approvalKey';
 
 // Cloud Sync
 import { CloudConnectionModal } from './components/CloudConnectionModal';
 import { useAuth } from './utils/useAuth';
 import { useCloudSync } from './utils/useCloudSync';
 import type { CloudData } from './types_cloud';
+import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocation } from './utils/unassignedStreak';
 
 // Icons
 import {
@@ -29,6 +35,28 @@ import {
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
+type AutoAllocationSummary = {
+  targetCount: number;
+  preservedCount: number;
+  newlyAllocatedCount: number;
+  unassigned: UnassignedInfo[];
+  difficultyTop10: DifficultyEntry[];
+};
+
+type PendingAllocationBatch = {
+  result: OptimizerResult;
+  targetCount: number;
+  preservedCount: number;
+  pendingExceptions: PendingException[];
+  attemptedSubjects: Subject[];
+  difficultyTop10: DifficultyEntry[];
+};
+
+type PendingRelocationBatch = {
+  result: RelocationResult;
+  sourceUnassigned: UnassignedInfo[];
+};
+
 
 // ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ（半角）→ タッチディスプレイ（全角）の正規化
 const normalizeClassrooms = (rooms: Classroom[]): Classroom[] =>
@@ -36,6 +64,16 @@ const normalizeClassrooms = (rooms: Classroom[]): Classroom[] =>
     ...r,
     equipment: r.equipment.map(eq => eq === 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' ? 'タッチディスプレイ' : eq)
   }));
+
+const normalizeAllocationForPhase6 = (allocation: Allocation): Allocation => ({
+  ...allocation,
+  exceptionApproved: allocation.exceptions && allocation.exceptions.length > 0
+    ? (allocation.exceptionApproved ?? true)
+    : undefined
+});
+
+const normalizeAllocationsForPhase6 = (allocations: Allocation[]) =>
+  allocations.map(normalizeAllocationForPhase6);
 
 function App() {
   // Auth & Cloud Sync
@@ -67,7 +105,7 @@ function App() {
   const [allocations, setAllocations] = useState<Allocation[]>(() => {
     try {
       const saved = localStorage.getItem('allocations');
-      return saved ? JSON.parse(saved) : [];
+      return saved ? normalizeAllocationsForPhase6(JSON.parse(saved)) : [];
     } catch { return []; }
   });
 
@@ -82,19 +120,21 @@ function App() {
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
   const [showRuleSettings, setShowRuleSettings] = useState(false);
   const [showExtraPeriods, setShowExtraPeriods] = useState(false);
+  const [lastUnassigned, setLastUnassigned] = useState<UnassignedInfo[]>([]);
+  const [autoAllocationSummary, setAutoAllocationSummary] = useState<AutoAllocationSummary | null>(null);
+  const [pendingAllocationBatch, setPendingAllocationBatch] = useState<PendingAllocationBatch | null>(null);
+  const [pendingRelocationBatch, setPendingRelocationBatch] = useState<PendingRelocationBatch | null>(null);
+  const [showExceptionReviewModal, setShowExceptionReviewModal] = useState(false);
+  const [showRelocationPreviewModal, setShowRelocationPreviewModal] = useState(false);
+  const [resolvingExceptions, setResolvingExceptions] = useState(false);
+  const [relocating, setRelocating] = useState(false);
+  const [streakRevision, setStreakRevision] = useState(0);
 
   const [allocationSettings, setAllocationSettings] = useState<AllocationRule[]>(() => {
     try {
       const saved = localStorage.getItem('allocationSettings');
-      return saved ? JSON.parse(saved) : DEFAULT_ALLOCATION_RULES;
+      return migrateAllocationRules(saved ? JSON.parse(saved) : undefined);
     } catch { return DEFAULT_ALLOCATION_RULES; }
-  });
-
-  const [orderBonuses, setOrderBonuses] = useState<number[]>(() => {
-    try {
-      const saved = localStorage.getItem('orderBonuses');
-      return saved ? JSON.parse(saved) : DEFAULT_ORDER_BONUSES;
-    } catch { return DEFAULT_ORDER_BONUSES; }
   });
 
   const [equipmentSettings, setEquipmentSettings] = useState<{
@@ -151,6 +191,10 @@ function App() {
   useEffect(() => { localStorage.setItem('allocationSettings', JSON.stringify(allocationSettings)); }, [allocationSettings]);
   useEffect(() => { localStorage.setItem('equipmentSettings', JSON.stringify(equipmentSettings)); }, [equipmentSettings]);
   useEffect(() => { localStorage.setItem('displayConfig', JSON.stringify(displayConfig)); }, [displayConfig]);
+  useEffect(() => {
+    pruneStreakMap(subjects);
+    setStreakRevision(v => v + 1);
+  }, [subjects]);
 
   // 自動保存の仕組み: ローカルの状態が変わった際、ログイン中ならクラウドにも保存
   useEffect(() => {
@@ -160,8 +204,7 @@ function App() {
         classrooms,
         allocations,
         settings: allocationSettings,
-        equipmentSettings,
-        orderBonuses
+        equipmentSettings
       };
 
       const timeoutId = setTimeout(() => {
@@ -170,7 +213,7 @@ function App() {
 
       return () => clearTimeout(timeoutId);
     }
-  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, orderBonuses, saveData]);
+  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, saveData]);
 
 
   // クラウドデータの旧フォーマット（フラット構造）を新フォーマットに移行
@@ -190,9 +233,8 @@ function App() {
         if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
           setClassrooms(normalizeClassrooms(cloudData.classrooms));
           setSubjects(cloudData.subjects);
-          setAllocations(cloudData.allocations);
-          setAllocationSettings(cloudData.settings?.length ? cloudData.settings : DEFAULT_ALLOCATION_RULES);
-          setOrderBonuses(cloudData.orderBonuses?.length ? cloudData.orderBonuses : DEFAULT_ORDER_BONUSES);
+          setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
+          setAllocationSettings(migrateAllocationRules(cloudData.settings));
           setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
 
           alert('クラウドデータをロードしました。');
@@ -207,8 +249,7 @@ function App() {
         classrooms,
         allocations,
         settings: allocationSettings,
-        equipmentSettings,
-        orderBonuses
+        equipmentSettings
       };
       await saveData(currentData);
       alert('現在のデータをクラウドに同期しました。');
@@ -225,6 +266,15 @@ function App() {
   }, [subjects, draggingSubjectId]);
   const editingSubject = subjects.find(s => s.id === editingSubjectId);
   const editingClassroom = classrooms.find(r => r.id === editingClassroomId);
+  const streakMapSnapshot = useMemo(() => loadStreakMap(), [streakRevision]);
+  const computeSubjectDifficulty = (subject: Subject) =>
+    computeDifficulty(subject, subjects, classrooms, allocationSettings, equipmentSettings, streakMapSnapshot);
+  const buildApprovedExceptionSet = (sourceAllocations: Allocation[]) =>
+    new Set(
+      sourceAllocations
+        .filter(allocation => allocation.exceptionApproved && allocation.exceptions && allocation.exceptions.length > 0)
+        .map(allocation => buildApprovalKey(allocation.subjectId, allocation.classroomId, allocation.exceptions!))
+    );
 
   const buildings = useMemo(() => {
     const list = Array.from(new Set(classrooms.map(c => c.building)));
@@ -340,9 +390,41 @@ function App() {
     });
   }, [subjects, allocations]);
 
+  const unassignedWithReason = useMemo<UnassignedListItem[]>(() => {
+    const reasonMap = new Map<string, UnassignedInfo>();
+    lastUnassigned.forEach(info => {
+      reasonMap.set(info.subject.id, info);
+    });
+
+    return unassignedSubjectsAll.map(subject => {
+      const realId = subject._realId || subject.id;
+      const info = reasonMap.get(realId) || reasonMap.get(subject.id);
+      const difficulty = computeSubjectDifficulty(subject);
+      return {
+        ...subject,
+        reason: info?.reason,
+        reasonDetail: info?.detail,
+        difficultyScore: difficulty?.score,
+        difficultyDetail: difficulty ? formatDifficultySummary(difficulty) : undefined
+      };
+    });
+  }, [unassignedSubjectsAll, lastUnassigned, streakMapSnapshot, subjects, classrooms, allocationSettings, equipmentSettings]);
+
   const displayedUnassigned = useMemo(() => {
-    return unassignedSubjectsAll.filter(s => s.day === currentDay);
-  }, [unassignedSubjectsAll, currentDay]);
+    return unassignedWithReason.filter(s => s.day === currentDay);
+  }, [unassignedWithReason, currentDay]);
+
+  const pendingExceptionKey = (item: PendingException) => buildApprovalKey(item.subject.id, item.classroomId, item.exceptions);
+
+  const mergeUnassignedInfos = (items: UnassignedInfo[]) => {
+    const map = new Map<string, UnassignedInfo>();
+    items.forEach(item => {
+      if (!map.has(item.subject.id)) {
+        map.set(item.subject.id, item);
+      }
+    });
+    return Array.from(map.values());
+  };
 
 
   const handleDrop = (vSubjectId: string, classroomId: string, period: Period, term: Term) => {
@@ -403,8 +485,42 @@ function App() {
     setAllocations(prev => prev.filter(a => !(a.subjectId === subjectId && a.classroomId === classroomId)));
   };
 
+  const finalizeAutoAllocation = (
+    result: OptimizerResult,
+    targetCount: number,
+    preservedCount: number,
+    rejectedPending: PendingException[] = [],
+    attemptedSubjects: Subject[] = [],
+    difficultyTop10: DifficultyEntry[] = []
+  ) => {
+    const rejectedKeys = new Set(rejectedPending.map(pendingExceptionKey));
+    const nextAllocations = result.allocations.filter(a => !rejectedKeys.has(`${a.subjectId}__${a.classroomId}`));
+    const rejectedUnassigned = rejectedPending.map(item => ({
+      subject: item.subject,
+      reason: item.alternativeUnassignedReason,
+      detail: `例外候補(${item.exceptions.join(' / ')})を却下しました`
+    }));
+    const nextUnassigned = mergeUnassignedInfos([...result.unassigned, ...rejectedUnassigned]);
+
+    setAllocations(nextAllocations);
+    setLastUnassigned(nextUnassigned);
+    setAutoAllocationSummary({
+      targetCount,
+      preservedCount,
+      newlyAllocatedCount: nextAllocations.length - preservedCount,
+      unassigned: nextUnassigned,
+      difficultyTop10
+    });
+    setPendingAllocationBatch(null);
+    setShowExceptionReviewModal(false);
+    setPendingRelocationBatch(null);
+    setShowRelocationPreviewModal(false);
+    updateStreakAfterAllocation(attemptedSubjects, nextUnassigned);
+    setStreakRevision(v => v + 1);
+  };
+
   const handleAutoAllocate = (options: AllocationOptions) => {
-    const { rules: rulesToUse, orderBonuses: bonusesToUse, priorities, includeAllocated, includeUnassigned, equipmentSettings: equipmentToUse } = options;
+    const { rules: rulesToUse, priorities, includeAllocated, includeUnassigned, equipmentSettings: equipmentToUse } = options;
 
     // 対象科目をフィルタリング
     const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
@@ -446,17 +562,242 @@ function App() {
 
     // 既存配当から対象科目を除外
     const preservedAllocations = allocations.filter(a => !targetSubjects.some(s => s.id === a.subjectId));
+    const streakMap = loadStreakMap();
+    const approvedExceptions = buildApprovedExceptionSet(allocations);
+    const difficultyTop10 = buildDifficultyRanking(targetSubjects, classrooms, rulesToUse, equipmentToUse, streakMap);
 
-    const result = runAutoAllocation(targetSubjects, classrooms, preservedAllocations, rulesToUse, bonusesToUse, equipmentToUse);
-    setAllocations(result.allocations);
-
-    const newCount = result.allocations.length - preservedAllocations.length;
-    alert(`完了しました。\n対象: ${targetSubjects.length}件\n配当: ${newCount}件\n未配当: ${result.unassignedSubjects.length}件`);
+    const result = runAutoAllocation(
+      targetSubjects,
+      classrooms,
+      preservedAllocations,
+      rulesToUse,
+      equipmentToUse,
+      { streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
+    );
+    finalizeAutoAllocation(
+      result,
+      targetSubjects.length,
+      preservedAllocations.length,
+      [],
+      targetSubjects,
+      difficultyTop10
+    );
     setShowRuleSettings(false);
+    setPendingRelocationBatch(null);
+    setShowRelocationPreviewModal(false);
+  };
+
+  const handleAutoAllocatePhase3 = (options: AllocationOptions) => {
+    const {
+      rules: rulesToUse,
+      priorities,
+      includeAllocated,
+      includeUnassigned,
+      confirmExceptions,
+      equipmentSettings: equipmentToUse
+    } = options;
+
+    if (!confirmExceptions) {
+      handleAutoAllocate(options);
+      return;
+    }
+
+    const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
+    const targetSubjects = subjects.filter(s => {
+      if (!priorities.includes(s.priority || 1)) return false;
+      if (!options.terms.includes(s.term)) return false;
+      if (!options.days.includes(s.day)) return false;
+
+      const start = s.period;
+      const end = s.endPeriod || s.period;
+      for (let p = start; p <= end; p++) {
+        if (!options.periods.includes(p as Period)) return false;
+      }
+
+      const isAllocated = allocatedSubjectIds.has(s.id);
+      if (isAllocated && !includeAllocated) return false;
+      if (!isAllocated && !includeUnassigned) return false;
+      return true;
+    });
+
+    if (targetSubjects.length === 0) {
+      alert('対象となる科目がありません。');
+      return;
+    }
+
+    if (includeAllocated) {
+      const allocatedCount = targetSubjects.filter(s => allocatedSubjectIds.has(s.id)).length;
+      if (allocatedCount > 0 && !confirm(`既存配当を含む ${allocatedCount} 科目を再配当します。よろしいですか？`)) {
+        return;
+      }
+    }
+
+    const preservedAllocations = allocations.filter(a => !targetSubjects.some(s => s.id === a.subjectId));
+    const streakMap = loadStreakMap();
+    const approvedExceptions = buildApprovedExceptionSet(allocations);
+    const difficultyTop10 = buildDifficultyRanking(targetSubjects, classrooms, rulesToUse, equipmentToUse, streakMap);
+    const result = runAutoAllocation(
+      targetSubjects,
+      classrooms,
+      preservedAllocations,
+      rulesToUse,
+      equipmentToUse,
+      { dryRunExceptions: confirmExceptions, streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
+    );
+
+    if (confirmExceptions && result.pendingExceptions && result.pendingExceptions.length > 0) {
+      setAutoAllocationSummary(null);
+      setPendingAllocationBatch({
+        result,
+        targetCount: targetSubjects.length,
+        preservedCount: preservedAllocations.length,
+        pendingExceptions: result.pendingExceptions,
+        attemptedSubjects: targetSubjects,
+        difficultyTop10
+      });
+      setShowExceptionReviewModal(true);
+      setShowRuleSettings(false);
+      setPendingRelocationBatch(null);
+      setShowRelocationPreviewModal(false);
+      return;
+    }
+
+    finalizeAutoAllocation(
+      result,
+      targetSubjects.length,
+      preservedAllocations.length,
+      [],
+      targetSubjects,
+      difficultyTop10
+    );
+    setShowRuleSettings(false);
+  };
+
+  const handleConfirmExceptionReview = (approvedKeys: string[]) => {
+    if (!pendingAllocationBatch) return;
+
+    const approvedSet = new Set(approvedKeys);
+    const rejectedPending = pendingAllocationBatch.pendingExceptions.filter(item => !approvedSet.has(pendingExceptionKey(item)));
+    const approvedAllocationsResult: OptimizerResult = {
+      ...pendingAllocationBatch.result,
+      allocations: pendingAllocationBatch.result.allocations.map(allocation => {
+        if (!allocation.exceptions || allocation.exceptions.length === 0) return allocation;
+        const key = buildApprovalKey(allocation.subjectId, allocation.classroomId, allocation.exceptions);
+        return approvedSet.has(key)
+          ? { ...allocation, exceptionApproved: true }
+          : allocation;
+      })
+    };
+    finalizeAutoAllocation(
+      approvedAllocationsResult,
+      pendingAllocationBatch.targetCount,
+      pendingAllocationBatch.preservedCount,
+      rejectedPending,
+      pendingAllocationBatch.attemptedSubjects,
+      pendingAllocationBatch.difficultyTop10
+    );
+  };
+
+  const handleCancelExceptionReview = () => {
+    setPendingAllocationBatch(null);
+    setShowExceptionReviewModal(false);
+  };
+
+  const handleResolveCurrentExceptions = () => {
+    if (resolvingExceptions) return;
+    const exceptionCount = allocations.filter(a => a.exceptions && a.exceptions.length > 0 && !a.exceptionApproved).length;
+    if (exceptionCount === 0) return;
+
+    setResolvingExceptions(true);
+    try {
+      const result = resolveExceptions(subjects, classrooms, allocations, allocationSettings, equipmentSettings);
+      setAllocations(result.allocations);
+      setAutoAllocationSummary(null);
+      alert(`例外を再スキャンしました。\n解消: ${result.resolved.length}件\n未解消: ${exceptionCount - result.resolved.length}件`);
+    } finally {
+      setResolvingExceptions(false);
+    }
   };
 
   const handleReset = () => {
     if (confirm('割り当てをクリアしますか？')) setAllocations([]);
+  };
+
+  const handleResetUnassignedStreak = () => {
+    if (!confirm('未配当連続カウントをリセットしますか？')) return;
+    clearStreakMap();
+    setStreakRevision(v => v + 1);
+    alert('未配当連続カウントをリセットしました。');
+  };
+
+  const handleResetApprovedExceptions = () => {
+    if (!confirm('承認済み例外をすべて再確認対象に戻しますか？')) return;
+    setAllocations(prev => prev.map(allocation =>
+      allocation.exceptionApproved
+        ? { ...allocation, exceptionApproved: false }
+        : allocation
+    ));
+    alert('承認済み例外をすべて再確認対象に戻しました。');
+  };
+
+  const handleRelocate = () => {
+    if (relocating) return;
+
+    const sourceUnassigned = lastUnassigned.length > 0
+      ? lastUnassigned
+      : (autoAllocationSummary?.unassigned || []);
+
+    if (sourceUnassigned.length === 0) {
+      alert('再配置する未配当がありません。');
+      return;
+    }
+
+    setRelocating(true);
+    try {
+      const result = relocateForUnassigned(
+        subjects,
+        classrooms,
+        allocations,
+        sourceUnassigned,
+        allocationSettings,
+        equipmentSettings
+      );
+
+      if (result.moves.length === 0 && result.placed.length === 0) {
+        alert('再配置できる候補がありませんでした。');
+        return;
+      }
+
+      setPendingRelocationBatch({ result, sourceUnassigned });
+      setShowRelocationPreviewModal(true);
+    } finally {
+      setRelocating(false);
+    }
+  };
+
+  const handleConfirmRelocation = () => {
+    if (!pendingRelocationBatch) return;
+
+    const result = pendingRelocationBatch.result;
+    setAllocations(result.allocations);
+    setLastUnassigned(result.unassigned);
+    setAutoAllocationSummary({
+      targetCount: pendingRelocationBatch.sourceUnassigned.length,
+      preservedCount: result.allocations.length - result.placed.length,
+      newlyAllocatedCount: result.placed.length,
+      unassigned: result.unassigned,
+      difficultyTop10: []
+    });
+    const attemptedSubjects = pendingRelocationBatch.sourceUnassigned.map(item => item.subject);
+    updateStreakAfterAllocation(attemptedSubjects, result.unassigned);
+    setStreakRevision(v => v + 1);
+    setPendingRelocationBatch(null);
+    setShowRelocationPreviewModal(false);
+  };
+
+  const handleCancelRelocation = () => {
+    setPendingRelocationBatch(null);
+    setShowRelocationPreviewModal(false);
   };
 
   const handleCellClick = (classroomId: string, period: Period, term: Term) => {
@@ -543,10 +884,9 @@ function App() {
                     if (data) {
                       if (data.classrooms) setClassrooms(data.classrooms);
                       if (data.subjects) setSubjects(data.subjects);
-                      if (data.allocations) setAllocations(data.allocations);
-                      if (data.settings?.length) setAllocationSettings(data.settings);
+                      if (data.allocations) setAllocations(normalizeAllocationsForPhase6(data.allocations));
+                      if (data.settings?.length) setAllocationSettings(migrateAllocationRules(data.settings));
                       if (data.equipmentSettings) setEquipmentSettings(migrateEquipmentSettings(data.equipmentSettings));
-                      if (data.orderBonuses?.length) setOrderBonuses(data.orderBonuses);
                       alert('最新のデータを取得しました');
                     } else {
                       alert('保存されたデータが見つかりませんでした');
@@ -897,17 +1237,57 @@ function App() {
           showRuleSettings && (
             <AllocationRuleSettings
               settings={allocationSettings}
-              orderBonuses={orderBonuses}
               equipmentSettings={equipmentSettings}
               onSave={(options) => {
                 setAllocationSettings(options.rules);
-                setOrderBonuses(options.orderBonuses);
                 setEquipmentSettings(options.equipmentSettings);
-                localStorage.setItem('orderBonuses', JSON.stringify(options.orderBonuses));
                 localStorage.setItem('equipmentSettings', JSON.stringify(options.equipmentSettings)); // 念のため即時保存
-                handleAutoAllocate(options);
+                handleAutoAllocatePhase3(options);
               }}
               onClose={() => setShowRuleSettings(false)}
+              onResetUnassignedStreak={handleResetUnassignedStreak}
+              onResetApprovedExceptions={handleResetApprovedExceptions}
+            />
+          )
+        }
+
+        {
+          autoAllocationSummary && (
+            <AllocationResultModal
+              isOpen={!!autoAllocationSummary}
+              summary={autoAllocationSummary}
+              onClose={() => setAutoAllocationSummary(null)}
+              onResolveExceptions={handleResolveCurrentExceptions}
+              canResolveExceptions={allocations.some(a => (a.exceptions?.length || 0) > 0 && !a.exceptionApproved)}
+              resolvingExceptions={resolvingExceptions}
+              onRelocate={handleRelocate}
+              canRelocate={lastUnassigned.length > 0}
+              relocating={relocating}
+            />
+          )
+        }
+
+        {
+          showRelocationPreviewModal && pendingRelocationBatch && (
+            <RelocationPreviewModal
+              isOpen={showRelocationPreviewModal}
+              result={pendingRelocationBatch.result}
+              subjects={subjects}
+              classrooms={classrooms}
+              onConfirm={handleConfirmRelocation}
+              onCancel={handleCancelRelocation}
+            />
+          )
+        }
+
+        {
+          showExceptionReviewModal && pendingAllocationBatch && (
+            <ExceptionReviewModal
+              isOpen={showExceptionReviewModal}
+              exceptions={pendingAllocationBatch.pendingExceptions}
+              classrooms={classrooms}
+              onConfirm={handleConfirmExceptionReview}
+              onCancel={handleCancelExceptionReview}
             />
           )
         }

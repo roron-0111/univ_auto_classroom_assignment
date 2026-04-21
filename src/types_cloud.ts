@@ -13,5 +13,4 @@ export interface CloudData {
     allocations: Allocation[];
     settings: AllocationRule[];
     equipmentSettings: AllocationSettings['equipmentSettings'];
-    orderBonuses: number[];
 }
