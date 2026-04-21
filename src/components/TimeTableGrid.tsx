@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
-import { ROOM_TYPE_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, EQUIPMENT_LIST } from '../types';
+import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST } from '../types';
 import { checkConstraints } from '../utils/validation';
 import { detectViolations } from '../utils/violations';
 import { Users } from 'lucide-react';
@@ -220,9 +220,9 @@ export const TimeTableGrid = ({
               <span style={{
                 fontSize: '0.65em',
                 padding: '1px 4px',
-                background: (room && !typeOk) ? '#d32f2f' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
-                color: (room && !typeOk) ? '#fff' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
-                border: `1px solid ${(room && !typeOk) ? '#b71c1c' : subject.preferredRoomType === 'pc' ? IMPORTANT_EQUIPMENT_COLORS['PC'].border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
+                background: (room && !typeOk) ? '#d32f2f' : subject.preferredRoomType === 'pc' ? getImportantEquipmentStyle('PC').bg : subject.preferredRoomType === 'seminar' ? '#f3e5f5' : '#f5f5f5',
+                color: (room && !typeOk) ? '#fff' : subject.preferredRoomType === 'pc' ? getImportantEquipmentStyle('PC').text : subject.preferredRoomType === 'seminar' ? '#7b1fa2' : '#666',
+                border: `1px solid ${(room && !typeOk) ? '#b71c1c' : subject.preferredRoomType === 'pc' ? getImportantEquipmentStyle('PC').border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
                 borderRadius: '3px',
                 fontWeight: 'bold'
               }}>
@@ -233,9 +233,9 @@ export const TimeTableGrid = ({
 
             {!!subject.requiresMovable && (
               <span style={{
-                background: (room && !movOk) ? '#d32f2f' : IMPORTANT_EQUIPMENT_COLORS['可動'].bg,
-                color: (room && !movOk) ? '#fff' : IMPORTANT_EQUIPMENT_COLORS['可動'].text,
-                border: `1px solid ${(room && !movOk) ? '#b71c1c' : IMPORTANT_EQUIPMENT_COLORS['可動'].border}`,
+                background: (room && !movOk) ? '#d32f2f' : getImportantEquipmentStyle('可動').bg,
+                color: (room && !movOk) ? '#fff' : getImportantEquipmentStyle('可動').text,
+                border: `1px solid ${(room && !movOk) ? '#b71c1c' : getImportantEquipmentStyle('可動').border}`,
                 padding: '1px 4px',
                 borderRadius: '3px',
                 fontSize: '0.65em',
@@ -465,9 +465,9 @@ export const TimeTableGrid = ({
                           {ROOM_TYPE_LABELS[room.type]}
                         </span>
                         <span style={{
-                          background: room.isMovable ? IMPORTANT_EQUIPMENT_COLORS['可動'].bg : IMPORTANT_EQUIPMENT_COLORS['固定'].bg,
-                          color: room.isMovable ? IMPORTANT_EQUIPMENT_COLORS['可動'].text : IMPORTANT_EQUIPMENT_COLORS['固定'].text,
-                          border: `1px solid ${room.isMovable ? IMPORTANT_EQUIPMENT_COLORS['可動'].border : IMPORTANT_EQUIPMENT_COLORS['固定'].border}`,
+                          background: room.isMovable ? getImportantEquipmentStyle('可動').bg : getImportantEquipmentStyle('固定').bg,
+                          color: room.isMovable ? getImportantEquipmentStyle('可動').text : getImportantEquipmentStyle('固定').text,
+                          border: `1px solid ${room.isMovable ? getImportantEquipmentStyle('可動').border : getImportantEquipmentStyle('固定').border}`,
                           padding: '1px 3px',
                           borderRadius: '2px',
                           fontSize: '0.65em',

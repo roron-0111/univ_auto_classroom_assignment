@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
-import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
+import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
 import { Users, AlertTriangle } from 'lucide-react';
 
 export type UnassignedListItem = Subject & {
@@ -53,7 +53,7 @@ export const UnassignedList = ({
 }: Props) => {
   const roomTypeStyle: Record<string, { bg: string; text: string; border: string }> = {
     normal: { bg: '#f5f5f5', text: '#666', border: '#ddd' },
-    pc: IMPORTANT_EQUIPMENT_COLORS['PC'],
+    pc: getImportantEquipmentStyle('PC'),
     seminar: { bg: '#f3e5f5', text: '#7b1fa2', border: '#e1bee7' }
   };
 
@@ -453,9 +453,9 @@ export const UnassignedList = ({
                 {!!subject.requiresMovable && (
                   <span style={{
                     fontSize: '0.65em', padding: '1px 4px',
-                    background: IMPORTANT_EQUIPMENT_COLORS['移動'].bg,
-                    color: IMPORTANT_EQUIPMENT_COLORS['移動'].text,
-                    border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS['移動'].border}`,
+                    background: getImportantEquipmentStyle('可動').bg,
+                    color: getImportantEquipmentStyle('可動').text,
+                    border: `1px solid ${getImportantEquipmentStyle('可動').border}`,
                     borderRadius: '3px', fontWeight: 'bold'
                   }}>
                     移動

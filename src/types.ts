@@ -172,6 +172,19 @@ export const getEquipmentStyle = (name: string) => {
     return IMPORTANT_EQUIPMENT_COLORS[name] || { bg: '#f5f5f5', text: '#666', border: '#ddd' };
 };
 
+const IMPORTANT_EQUIPMENT_ALIASES: Record<string, string> = {
+    可動: '可動',
+    移動: '可動',
+    固定: '固定',
+    movable: '可動',
+    fixed: '固定'
+};
+
+export const getImportantEquipmentStyle = (name: string) => {
+    const canonical = IMPORTANT_EQUIPMENT_ALIASES[name] || name;
+    return IMPORTANT_EQUIPMENT_COLORS[canonical] || { bg: '#f5f5f5', text: '#666', border: '#ddd' };
+};
+
 export type RuleTier = 'hard' | 'near' | 'pref';
 
 export interface AllocationRule {

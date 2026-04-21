@@ -3,7 +3,7 @@ import type { Classroom } from '../types';
 import { ROOM_TYPE_LABELS, BUILDINGS, EQUIPMENT_LIST } from '../types';
 import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { parseClassroomCSV, exportToCSV } from '../utils/csvParser';
-import { getEquipmentStyle, IMPORTANT_EQUIPMENT_COLORS } from '../types';
+import { getEquipmentStyle, getImportantEquipmentStyle } from '../types';
 import { ClassroomEditModal } from './ClassroomEditModal';
 
 const MultiSelectFilter = ({
@@ -516,9 +516,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
                                         {crShow('equipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                 <span style={{
-                                                    background: IMPORTANT_EQUIPMENT_COLORS[room.isMovable ? '可動' : '固定'].bg,
-                                                    color: IMPORTANT_EQUIPMENT_COLORS[room.isMovable ? '可動' : '固定'].text,
-                                                    border: `1px solid ${IMPORTANT_EQUIPMENT_COLORS[room.isMovable ? '可動' : '固定'].border}`,
+                                                    background: getImportantEquipmentStyle(room.isMovable ? '可動' : '固定').bg,
+                                                    color: getImportantEquipmentStyle(room.isMovable ? '可動' : '固定').text,
+                                                    border: `1px solid ${getImportantEquipmentStyle(room.isMovable ? '可動' : '固定').border}`,
                                                     padding: '2px 8px', borderRadius: '4px', fontSize: '0.8em', fontWeight: 'bold'
                                                 }}>
                                                     {room.isMovable ? '可動' : '固定'}
