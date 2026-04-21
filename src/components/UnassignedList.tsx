@@ -66,6 +66,7 @@ export const UnassignedList = ({
   const [isDayOpen, setIsDayOpen] = useState(false);
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isDeptOpen, setIsDeptOpen] = useState(false);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const periodPatterns = useMemo(() => {
     const found = subjects.map(s =>
@@ -121,7 +122,15 @@ export const UnassignedList = ({
     e.preventDefault();
   };
 
+  const getDropIndexFromEvent = (e: React.DragEvent, index: number) => {
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+  };
+
   const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDropIndex(null);
+
     const dragType = e.dataTransfer.getData('dragType');
     if (dragType !== 'assign') return;
 
@@ -139,7 +148,8 @@ export const UnassignedList = ({
     const fromIndex = Number(fromIndexStr);
     const next = [...displaySubjects];
     const [moved] = next.splice(fromIndex, 1);
-    next.splice(index, 0, moved);
+    const insertIndex = fromIndex < index ? Math.max(0, index - 1) : index;
+    next.splice(insertIndex, 0, moved);
 
     const seen = new Set<string>();
     const reordered = next.filter(item => {
@@ -153,8 +163,28 @@ export const UnassignedList = ({
   };
 
   const handleDragEnd = () => {
+    setDropIndex(null);
     onDragEnd?.();
   };
+
+  const renderDropIndicator = () => (
+    <div
+      style={{
+        marginBottom: '10px',
+        padding: '5px 8px',
+        border: '1px dashed #64b5f6',
+        borderRadius: '6px',
+        background: '#e3f2fd',
+        color: '#1565c0',
+        fontSize: '0.72rem',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        userSelect: 'none'
+      }}
+    >
+      ここに移動
+    </div>
+  );
 
   const FilterDropdown = ({
     label,
@@ -386,10 +416,21 @@ export const UnassignedList = ({
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{ flex: 1, overflowY: 'auto' }}
+        onDragOver={e => {
+          handleDragOver(e);
+          if (e.currentTarget === e.target) {
+            setDropIndex(displaySubjects.length);
+          }
+        }}
+        onDrop={e => handleDrop(e, displaySubjects.length)}
+      >
         {displaySubjects.map((subject, index) => {
           const realId = subject._realId || subject.id;
           return (
+            <>
+              {dropIndex === index && renderDropIndicator()}
             <div
               key={`${realId}-${index}`}
               draggable
@@ -404,7 +445,11 @@ export const UnassignedList = ({
                 onDragStart?.(subject.id);
               }}
               onDragEnd={handleDragEnd}
-              onDrop={e => handleDrop(e, index)}
+              onDragOver={e => {
+                handleDragOver(e);
+                setDropIndex(getDropIndexFromEvent(e, index));
+              }}
+              onDrop={e => handleDrop(e, dropIndex === null ? index : dropIndex)}
               style={{
                 padding: '8px 10px',
                 background: '#fff',
@@ -412,7 +457,6 @@ export const UnassignedList = ({
                 borderRadius: '6px',
                 cursor: 'grab',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                marginBottom: '10px',
                 position: 'relative'
               }}
             >
@@ -538,8 +582,11 @@ export const UnassignedList = ({
                 </div>
               </div>
             </div>
+            </>
           );
         })}
+
+        {dropIndex === displaySubjects.length && renderDropIndicator()}
 
         {subjects.length === 0 && (
           <div
