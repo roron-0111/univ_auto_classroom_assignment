@@ -2,7 +2,6 @@ import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
 import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST } from '../types';
 import { checkConstraints } from '../utils/validation';
-import { detectViolations } from '../utils/violations';
 import { Users } from 'lucide-react';
 
 interface Props {
@@ -81,7 +80,6 @@ export const TimeTableGrid = ({
 
   const renderSubjectCard = (subject: Subject, room?: Classroom, allocation?: Allocation) => {
     const exceptions = allocation?.exceptions || [];
-    const violations = room && displayConfig.showViolationAlerts ? detectViolations(subject, room) : [];
     const typeOk = !room || !subject.preferredRoomType || subject.preferredRoomType === room.type;
     const movOk = !room || !subject.requiresMovable || room.isMovable;
     const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
@@ -192,28 +190,6 @@ export const TimeTableGrid = ({
           </div>
         )}
 
-        {violations.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
-            {violations.map((violation, index) => (
-              <span
-                key={`${violation.type}-${index}`}
-                aria-label={violation.message}
-                style={{
-                  fontSize: '0.62em',
-                  padding: '1px 4px',
-                  borderRadius: '3px',
-                  background: violation.severity === 'error' ? '#ffebee' : '#eef2ff',
-                  color: violation.severity === 'error' ? '#c62828' : '#1d4ed8',
-                  border: `1px solid ${violation.severity === 'error' ? '#ef9a9a' : '#c7d2fe'}`,
-                  fontWeight: 'bold'
-                }}
-              >
-                ×
-              </span>
-            ))}
-          </div>
-        )}
-
         {displayConfig.showRequirementTags && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '2px', marginBottom: '4px' }}>
             {subject.preferredRoomType && (
@@ -227,7 +203,6 @@ export const TimeTableGrid = ({
                 fontWeight: 'bold'
               }}>
                 {ROOM_TYPE_LABELS[subject.preferredRoomType]}
-                {room && !typeOk ? '×' : ''}
               </span>
             )}
 
@@ -241,7 +216,7 @@ export const TimeTableGrid = ({
                 fontSize: '0.65em',
                 fontWeight: 'bold'
               }}>
-                可動{room && !movOk ? '×' : ''}
+                可動
               </span>
             )}
 
@@ -259,7 +234,7 @@ export const TimeTableGrid = ({
                   fontSize: '0.65em',
                   fontWeight: isMandatory ? 'bold' : 'normal'
                 }}>
-                  {eq}{room && !ok ? '×' : ''}
+                  {eq}
                 </span>
               );
             })}
@@ -274,7 +249,7 @@ export const TimeTableGrid = ({
                 fontSize: '0.65em',
                 fontWeight: 'bold'
               }}>
-                {subject.buildingPreference}{room && !bldOk ? '×' : ''}
+                {subject.buildingPreference}
               </span>
             )}
           </div>
@@ -307,11 +282,11 @@ export const TimeTableGrid = ({
                 </span>
               );
             })()}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '2px',
-              background: (room && room.capacity < subject.requiredCapacity) ? '#d32f2f' : '#f5f5f5',
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                background: (room && room.capacity < subject.requiredCapacity) ? '#d32f2f' : '#f5f5f5',
               padding: '1px 4px',
               borderRadius: '3px',
               fontSize: '0.65rem',
@@ -320,7 +295,7 @@ export const TimeTableGrid = ({
               flexShrink: 0
             }}>
               <Users size={10} color={(room && room.capacity < subject.requiredCapacity) ? '#fff' : '#666'} />
-              <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}{room && room.capacity < subject.requiredCapacity ? '×' : ''}</span>
+              <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}</span>
             </div>
           </div>
           <button
