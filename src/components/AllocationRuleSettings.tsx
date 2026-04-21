@@ -276,26 +276,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                         </div>
                     </section>
 
-                    <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#37474f' }}>希望条件</div>
-                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>上から順に比較します。春秋同一教室は通年を除き、建物希望より前に扱います。</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {prefRules.map(rule => (
-                                <label key={rule.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', background: '#f9fbfc', borderRadius: '8px', border: '1px solid #e0e0e0', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={rule.enabled}
-                                        onChange={() => handleToggle(rule.id)}
-                                        style={{ marginTop: '2px' }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: 'bold', color: '#263238' }}>{rule.name}</div>
-                                        <div style={{ fontSize: '0.78rem', color: '#607d8b' }}>{rule.description}</div>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-                    </section>
                 </div>
 
                 <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px', marginBottom: '24px' }}>

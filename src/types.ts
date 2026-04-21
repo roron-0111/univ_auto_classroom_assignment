@@ -257,7 +257,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     {
         id: 'term_consistency',
         name: '春秋同一教室',
-        description: 'linkedSubjectId を優先し、未指定時は同じ教員コード・曜日・講時の春秋科目を対象にする（通年は対象外、教員コードが9始まりの暫定コードは対象外）',
+        description: '同じ教員コード・曜日・講時の春秋科目を対象にする（通年は一つの科目のため対象外、教員コードが9始まりの暫定コードも対象外）',
         tier: 'pref',
         enabled: true,
         order: 4
