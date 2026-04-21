@@ -132,7 +132,7 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
                       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{item.subject.name}</div>
                       <div style={{ fontSize: '0.82rem', color: '#475569' }}>
                         {item.subject.teacher} / {item.subject.day} {item.subject.period}
-                        {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}限 / {room?.name || item.classroomId}
+                        {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}講時 / {room?.name || item.classroomId}
                       </div>
                       <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '6px' }}>
                         例外: {item.exceptions.join(' / ')}

@@ -335,12 +335,12 @@ export const UnassignedList = ({
           <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="講時"
-              options={periodPatterns.map(p => ({ value: p, label: `${p}限` }))}
+              options={periodPatterns.map(p => ({ value: p, label: `${p}講時` }))}
               selected={selectedPeriods}
               onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
               isOpen={isPeriodOpen}
               setIsOpen={setIsPeriodOpen}
-              getLabel={(val: string) => `${val}限`}
+              getLabel={(val: string) => `${val}講時`}
             />
           </div>
 
@@ -433,7 +433,7 @@ export const UnassignedList = ({
                     {subject.teacher} ({subject.faculty})
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                    {TERM_LABELS[subject.term]} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}限
+                    {TERM_LABELS[subject.term]} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}講時
                   </div>
                 </div>
               </div>

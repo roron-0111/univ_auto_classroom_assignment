@@ -411,7 +411,7 @@ export const TimeTableGrid = ({
               }).length;
               return (
                 <th key={p} style={{ background: '#f5f5f5', padding: '8px', border: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 101, fontSize: '0.85em' }}>
-                  {p}限{count > 0 ? ` (${count})` : ''}
+                  {p}講時{count > 0 ? ` (${count})` : ''}
                 </th>
               );
             })}

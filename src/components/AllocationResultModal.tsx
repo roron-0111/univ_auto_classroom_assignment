@@ -203,7 +203,7 @@ export const AllocationResultModal = ({
                           <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>{item.subject.name}</div>
                           <div style={{ fontSize: '0.82rem', color: '#475569' }}>
                             {item.subject.teacher} / {item.subject.department} / {item.subject.day} {item.subject.period}
-                            {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}限
+                            {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}講時
                           </div>
                         </div>
                         <div style={{

@@ -1285,7 +1285,7 @@ function App() {
                   <button onClick={() => setPickingCell(null)} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>✕</button>
                 </div>
                 <div style={{ marginBottom: '10px', color: '#666', fontSize: '0.9em' }}>
-                  {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}限 ({pickingCell.term === 'spring' ? '春' : '秋'})
+                  {classrooms.find(r => r.id === pickingCell.room)?.name} - {pickingCell.period}講時 ({pickingCell.term === 'spring' ? '春' : '秋'})
                 </div>
                 {displayedUnassigned.filter(s => {
                     const springGroup = ['spring', 'spring_first', 'spring_second'];
