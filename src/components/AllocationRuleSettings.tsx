@@ -119,7 +119,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </button>
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#333' }}>配当ルール設定</h2>
-                        <div style={{ fontSize: '0.78rem', color: '#777' }}>Phase7: 必須条件は固定、希望条件は上から順に比較します</div>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -257,7 +256,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 'bold', color: '#37474f' }}>
                             <Lock size={16} /> 必須
@@ -276,45 +275,47 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                         </div>
                     </section>
 
-                </div>
-
-                <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px', marginBottom: '24px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#37474f' }}>希望条件の順序</div>
-                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '16px' }}>上から順に比較します。加点の合計ではありません。</div>
+                    <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
+                        <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#555', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                希望条件の順序<span style={{ fontWeight: 'normal', fontSize: '0.75rem', color: '#888' }}>(優先度 1:強い, 5:弱い)</span>
+                            </div>
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {prefRules.map((rule, index) => (
                                 <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0', opacity: rule.enabled ? 1 : 0.6 }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    <button
-                                        disabled={index === 0}
-                                        onClick={() => handleMovePref(rule.id, 'up')}
-                                        style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', color: index === 0 ? '#eee' : '#999', padding: 0 }}
-                                    >
-                                        <ChevronUp size={18} />
-                                    </button>
-                                    <button
-                                        disabled={index === prefRules.length - 1}
-                                        onClick={() => handleMovePref(rule.id, 'down')}
-                                        style={{ background: 'none', border: 'none', cursor: index === prefRules.length - 1 ? 'default' : 'pointer', color: index === prefRules.length - 1 ? '#eee' : '#999', padding: 0 }}
-                                    >
-                                        <ChevronDown size={18} />
-                                    </button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <button
+                                            disabled={index === 0}
+                                            onClick={() => handleMovePref(rule.id, 'up')}
+                                            style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', color: index === 0 ? '#eee' : '#999', padding: 0 }}
+                                        >
+                                            <ChevronUp size={18} />
+                                        </button>
+                                        <button
+                                            disabled={index === prefRules.length - 1}
+                                            onClick={() => handleMovePref(rule.id, 'down')}
+                                            style={{ background: 'none', border: 'none', cursor: index === prefRules.length - 1 ? 'default' : 'pointer', color: index === prefRules.length - 1 ? '#eee' : '#999', padding: 0 }}
+                                        >
+                                            <ChevronDown size={18} />
+                                        </button>
+                                    </div>
+                                    <div style={{ width: '32px', textAlign: 'center', fontWeight: 'bold', color: '#78909c' }}>{index + 1}</div>
+                                    <input
+                                        type="checkbox"
+                                        checked={rule.enabled}
+                                        onChange={() => handleToggle(rule.id)}
+                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#263238', marginBottom: '4px' }}>{rule.name}</div>
+                                        <div style={{ fontSize: '0.82rem', color: '#607d8b' }}>{rule.description}</div>
+                                    </div>
                                 </div>
-                                <div style={{ width: '32px', textAlign: 'center', fontWeight: 'bold', color: '#78909c' }}>{index + 1}</div>
-                                <input
-                                    type="checkbox"
-                                    checked={rule.enabled}
-                                    onChange={() => handleToggle(rule.id)}
-                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#263238', marginBottom: '4px' }}>{rule.name}</div>
-                                    <div style={{ fontSize: '0.82rem', color: '#607d8b' }}>{rule.description}</div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
+                            ))}
+                        </div>
+                    </section>
+                </div>
 
                 <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                     <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
