@@ -12,7 +12,7 @@ import type {
     UnassignedInfo,
     UnassignedReason
 } from '../types';
-import { getTermsToMark } from '../types';
+import { getTermsToMark, matchesEquipmentRequirement, normalizeRequiredEquipmentName } from '../types';
 import { computeDifficulty } from './difficulty';
 import { buildApprovalKey } from './approvalKey';
 import { loadStreakMap } from './unassignedStreak';
@@ -42,11 +42,9 @@ const getPrefRules = (ruleMap: Map<string, AllocationRule>) =>
         .filter(rule => rule.tier === 'pref' && rule.enabled)
         .sort((a, b) => a.order - b.order);
 
-const hasAnyProjector = (room: Classroom) => room.equipment.some(eq => eq.includes('PJ'));
-
 const getRelevantEquipmentSetting = (req: string, equipmentSettings?: EquipmentSettings) => {
     if (!equipmentSettings) return [];
-    if (req === 'PJ') {
+    if (req === 'PJ' || req.startsWith('PJ')) {
         return ['PJ(中)', 'PJ(横)']
             .map(key => ({ key, setting: equipmentSettings.items?.[key] }))
             .filter(item => item.setting);
@@ -60,15 +58,6 @@ const getRequirementImportance = (req: string, equipmentSettings?: EquipmentSett
     const enabledEntries = entries.filter(entry => entry.setting.enabled);
     const source = enabledEntries.length > 0 ? enabledEntries : entries;
     return Math.max(...source.map(entry => entry.setting.importance));
-};
-
-const matchesEquipment = (room: Classroom, req: string) => {
-    if (req === '可動') return room.isMovable;
-    if (req === 'PJ') return hasAnyProjector(room);
-    if (req === 'PJ(横)' || req === 'PJ(中)') {
-        return room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
-    }
-    return room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
 };
 
 const getRoomOccupiedKeys = (subject: Subject, classroomId: string) => {
@@ -117,9 +106,13 @@ const getRoomById = (roomId: string, classrooms: Classroom[]) =>
     classrooms.find(room => room.id === roomId) || null;
 
 const getRequiredItems = (subject: Subject) => {
-    const requiredItems = new Set(subject.requiredEquipment || []);
-    if (subject.requiresProjector) requiredItems.add('PJ');
-    if (subject.requiresMovable) requiredItems.add('可動');
+    const requiredItems = new Set(
+        [
+            ...(subject.requiredEquipment || []),
+            ...(subject.requiresProjector ? ['PJ'] : []),
+            ...(subject.requiresMovable ? ['可動'] : [])
+        ].map(normalizeRequiredEquipmentName)
+    );
     return [...requiredItems];
 };
 
@@ -141,7 +134,7 @@ const isHardCandidate = (
 
     if (room.capacity < subject.requiredCapacity) return false;
 
-    if (getMandatoryItems(subject).some(req => !matchesEquipment(room, req))) return false;
+    if (getMandatoryItems(subject).some(req => !matchesEquipmentRequirement(room, req))) return false;
 
     if (subject.preferredRoomType && subject.preferredRoomType !== room.type) return false;
 
@@ -150,7 +143,7 @@ const isHardCandidate = (
             const entries = getRelevantEquipmentSetting(req, equipmentSettings);
             const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
             if (!hasLevel5) continue;
-            if (!matchesEquipment(room, req)) return false;
+            if (!matchesEquipmentRequirement(room, req)) return false;
         }
     }
 
@@ -207,7 +200,7 @@ const scoreEquipment = (room: Classroom, subject: Subject, equipmentSettings?: E
         const weightedImportance = importance * internalMultiplier;
         totalRequiredWeight += weightedImportance;
 
-        if (matchesEquipment(room, req)) {
+        if (matchesEquipmentRequirement(room, req)) {
             satisfiedWeight += weightedImportance;
         }
     }
@@ -582,14 +575,14 @@ const isHardRoomEligible = (
 ) => {
     if (room.isExcluded) return false;
     if (room.capacity < subject.requiredCapacity) return false;
-    if (getMandatoryItems(subject).some(req => !matchesEquipment(room, req))) return false;
+    if (getMandatoryItems(subject).some(req => !matchesEquipmentRequirement(room, req))) return false;
 
     if (equipmentSettings?.strictLevel5) {
         for (const req of getRequiredItems(subject)) {
             const entries = getRelevantEquipmentSetting(req, equipmentSettings);
             const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
             if (!hasLevel5) continue;
-            if (!matchesEquipment(room, req)) return false;
+            if (!matchesEquipmentRequirement(room, req)) return false;
         }
     }
 

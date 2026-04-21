@@ -1,4 +1,5 @@
 import type { Classroom, Subject } from '../types';
+import { matchesEquipmentRequirement } from '../types';
 
 export interface Violation {
     type: 'error' | 'warning';
@@ -15,7 +16,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
         });
     }
 
-    const hasAnyProjector = room.equipment.some(eq => eq.includes('PJ'));
+    const hasAnyProjector = room.equipment.some(eq => eq.startsWith('PJ'));
     if (subject.requiresProjector && !hasAnyProjector) {
         violations.push({
             type: 'error',
@@ -32,11 +33,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
 
     if (subject.mandatoryEquipment && subject.mandatoryEquipment.length > 0) {
         const missingMandatory = subject.mandatoryEquipment.filter(req => {
-            if (req === '可動') return !room.isMovable;
-            if (req === 'PJ(大)' || req === 'PJ(中)') {
-                return !room.equipment.some(eq => eq === 'PJ(大)' || eq === 'PJ(中)');
-            }
-            return !room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
+            return !matchesEquipmentRequirement(room, req);
         });
 
         if (missingMandatory.length > 0) {
@@ -49,11 +46,7 @@ export const checkConstraints = (subject: Subject, room: Classroom): Violation[]
 
     if (subject.requiredEquipment && subject.requiredEquipment.length > 0) {
         const missingDesired = subject.requiredEquipment.filter(req => {
-            if (req === '可動') return !room.isMovable;
-            if (req === 'PJ(大)' || req === 'PJ(中)') {
-                return !room.equipment.some(eq => eq === 'PJ(大)' || eq === 'PJ(中)');
-            }
-            return !room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
+            return !matchesEquipmentRequirement(room, req);
         });
 
         if (missingDesired.length > 0) {

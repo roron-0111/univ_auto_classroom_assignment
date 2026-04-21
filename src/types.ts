@@ -168,6 +168,22 @@ export const IMPORTANT_EQUIPMENT_COLORS: Record<string, { bg: string; text: stri
     '黒板': { bg: '#f8f1e8', text: '#8a5a2b', border: '#ead6bd' } // 薄茶
 };
 
+const PROJECTOR_EQUIPMENT = ['PJ(中)', 'PJ(横)'] as const;
+const isProjectorEquipment = (name: string) => PROJECTOR_EQUIPMENT.includes(name as typeof PROJECTOR_EQUIPMENT[number]);
+
+export const normalizeRequiredEquipmentName = (name: string) => {
+    if (name === 'PJ' || isProjectorEquipment(name)) return 'PJ';
+    return name;
+};
+
+export const matchesEquipmentRequirement = (room: Classroom, req: string) => {
+    if (req === '可動') return room.isMovable;
+    if (req === 'PJ' || req.startsWith('PJ')) {
+        return room.equipment.some(eq => eq.startsWith('PJ'));
+    }
+    return room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
+};
+
 export const getEquipmentStyle = (name: string) => {
     return IMPORTANT_EQUIPMENT_COLORS[name] || { bg: '#f5f5f5', text: '#666', border: '#ddd' };
 };

@@ -4,6 +4,7 @@ import { DAY_LABELS, BUILDINGS, TERM_LABELS, EQUIPMENT_LIST, ROOM_TYPE_LABELS } 
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
+import { normalizeRequiredEquipmentName } from '../types';
 
 function equipValue(
     eq: string,
@@ -12,17 +13,18 @@ function equipValue(
     mandatory?: string[],
     preferred?: string[]
 ): string {
-    const man = mandatory ?? [];
-    const pref = preferred ?? [];
-    const isPJ = eq === 'PJ(中)' || eq === 'PJ(横)';
-    const hasManPJ = man.some(e => e.includes('PJ'));
-    if (eq === '可動') {
-        if (requiresMovable) return '◎';
-    } else if (isPJ) {
-        if (requiresProjector && !hasManPJ && eq === 'PJ(中)') return '◎';
+    const man = (mandatory ?? []).map(normalizeRequiredEquipmentName);
+    const pref = (preferred ?? []).map(normalizeRequiredEquipmentName);
+    const normalizedEq = normalizeRequiredEquipmentName(eq);
+    const manHasProjector = man.some(item => item === 'PJ');
+    const prefHasProjector = pref.some(item => item === 'PJ');
+    if (requiresMovable && normalizedEq === '可動') return '◎';
+    if (normalizedEq === 'PJ') {
+        if (requiresProjector || manHasProjector) return '◎';
+        if (prefHasProjector) return '○';
     }
-    if (man.includes(eq)) return '◎';
-    if (pref.includes(eq)) return '○';
+    if (man.includes(normalizedEq)) return '◎';
+    if (pref.includes(normalizedEq)) return '○';
     return '';
 }
 

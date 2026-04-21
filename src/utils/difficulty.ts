@@ -1,4 +1,5 @@
 import type { AllocationRule, Classroom, Subject } from '../types';
+import { matchesEquipmentRequirement, normalizeRequiredEquipmentName } from '../types';
 import { findTermPartner } from './termPair';
 
 type EquipmentSettings = {
@@ -36,18 +37,9 @@ const WEIGHTS = {
   lastUnassignedStreak: 2
 } as const;
 
-const matchesEquipment = (room: Classroom, req: string) => {
-  if (req === '可動') return room.isMovable;
-  if (req === 'PJ') return room.equipment.some(eq => eq.includes('PJ'));
-  if (req === 'PJ(横)' || req === 'PJ(中)') {
-    return room.equipment.some(eq => eq === 'PJ(横)' || eq === 'PJ(中)');
-  }
-  return room.equipment.some(eq => eq === req || eq.includes(req) || req.includes(eq));
-};
-
 const getRelevantEquipmentSetting = (req: string, equipmentSettings?: EquipmentSettings) => {
   if (!equipmentSettings) return [];
-  if (req === 'PJ') {
+  if (req === 'PJ' || req.startsWith('PJ')) {
     return ['PJ(中)', 'PJ(横)']
       .map(key => ({ key, setting: equipmentSettings.items?.[key] }))
       .filter(item => item.setting);
@@ -63,15 +55,24 @@ const getRequirementImportance = (req: string, equipmentSettings?: EquipmentSett
   return Math.max(...source.map(entry => entry.setting.importance));
 };
 
+const getRequiredItems = (subject: Subject) =>
+  [...new Set(
+    [
+      ...(subject.requiredEquipment || []),
+      ...(subject.requiresProjector ? ['PJ'] : []),
+      ...(subject.requiresMovable ? ['可動'] : [])
+    ].map(normalizeRequiredEquipmentName)
+  )];
+
 const getStrictCandidateCount = (subject: Subject, classrooms: Classroom[], equipmentSettings?: EquipmentSettings) =>
   classrooms.filter(room =>
     !room.isExcluded &&
     room.capacity >= subject.requiredCapacity &&
-    (subject.mandatoryEquipment || []).every(req => matchesEquipment(room, req)) &&
-    (!equipmentSettings?.strictLevel5 || (subject.requiredEquipment || []).every(req => {
+    (subject.mandatoryEquipment || []).every(req => matchesEquipmentRequirement(room, req)) &&
+    (!equipmentSettings?.strictLevel5 || getRequiredItems(subject).every(req => {
       const entries = getRelevantEquipmentSetting(req, equipmentSettings);
       const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
-      return !hasLevel5 || matchesEquipment(room, req);
+      return !hasLevel5 || matchesEquipmentRequirement(room, req);
     }))
   ).length;
 
@@ -89,7 +90,7 @@ export const computeDifficulty = (
   const capacities = classrooms.map(room => room.capacity).sort((a, b) => a - b);
   const median = capacities.length > 0 ? capacities[Math.floor(capacities.length / 2)] : 1;
   const capacityPressure = Math.min(2, subject.requiredCapacity / Math.max(1, median));
-  const requiredEquipmentWeight = (subject.requiredEquipment || []).reduce((sum, req) => sum + getRequirementImportance(req, equipmentSettings), 0);
+  const requiredEquipmentWeight = getRequiredItems(subject).reduce((sum, req) => sum + getRequirementImportance(req, equipmentSettings), 0);
   const rareRoomTypeFlag = subject.preferredRoomType === 'pc' || subject.preferredRoomType === 'seminar';
   const continuityFlag = (subject.endPeriod || subject.period) > subject.period;
   const termPairFlag = !!findTermPartner(subject, subjects);

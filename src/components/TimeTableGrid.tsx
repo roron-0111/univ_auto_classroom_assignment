@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
-import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST } from '../types';
+import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST, matchesEquipmentRequirement } from '../types';
 import { checkConstraints } from '../utils/validation';
 import { AlertTriangle } from 'lucide-react';
 
@@ -246,7 +246,7 @@ export const TimeTableGrid = ({
             )}
 
             {sortedEq.map(eq => {
-              const ok = !room || room.equipment.includes(eq) || room.equipment.some(e => e.includes(eq) || eq.includes(e));
+              const ok = !room || matchesEquipmentRequirement(room, eq);
               const isMandatory = (subject.mandatoryEquipment || []).includes(eq);
               const style = getEquipmentStyle(eq);
               return (
