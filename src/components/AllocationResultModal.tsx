@@ -45,6 +45,14 @@ const REASON_META: Record<UnassignedReason, { label: string; color: string; bg: 
   U5_swap_failed: { label: '再調整失敗', color: '#6a1b9a', bg: '#f3e5f5', border: '#ce93d8' }
 };
 
+const getReasonMeta = (reason?: UnassignedReason) =>
+  (reason && REASON_META[reason]) || {
+    label: '未分類',
+    color: '#475569',
+    bg: '#f8fafc',
+    border: '#cbd5e1'
+  };
+
 export const AllocationResultModal = ({
   isOpen,
   summary,
@@ -59,6 +67,7 @@ export const AllocationResultModal = ({
   const reasonCounts = useMemo(() => {
     const counts = new Map<UnassignedReason, number>();
     summary?.unassigned.forEach(item => {
+      if (!item.reason) return;
       counts.set(item.reason, (counts.get(item.reason) || 0) + 1);
     });
     return counts;
@@ -178,7 +187,7 @@ export const AllocationResultModal = ({
               <h3 style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>未配当一覧</h3>
               <div style={{ display: 'grid', gap: '10px' }}>
                 {summary.unassigned.map(item => {
-                  const meta = REASON_META[item.reason];
+                  const meta = getReasonMeta(item.reason);
                   return (
                     <div
                       key={`${item.subject.id}-${item.reason}`}

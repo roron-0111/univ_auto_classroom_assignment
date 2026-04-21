@@ -19,6 +19,14 @@ const REASON_META: Record<UnassignedReason, { label: string; color: string; bg: 
   U5_swap_failed: { label: '交換失敗', color: '#6a1b9a', bg: '#f3e5f5', border: '#ce93d8' }
 };
 
+const getReasonMeta = (reason?: UnassignedReason) =>
+  (reason && REASON_META[reason]) || {
+    label: '未分類',
+    color: '#475569',
+    bg: '#f8fafc',
+    border: '#cbd5e1'
+  };
+
 export const RelocationPreviewModal = ({
   isOpen,
   result,
@@ -199,7 +207,7 @@ export const RelocationPreviewModal = ({
             ) : (
               <div style={{ display: 'grid', gap: '8px' }}>
                 {result.unresolved.map(item => {
-                  const meta = REASON_META[item.reason];
+                  const meta = getReasonMeta(item.reason);
                   return (
                     <div
                       key={`${item.subject.id}-${item.reason}`}
