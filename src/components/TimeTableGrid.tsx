@@ -293,7 +293,7 @@ export const TimeTableGrid = ({
                   border: `1px solid ${(room && room.capacity < subject.requiredCapacity) ? '#b71c1c' : '#ddd'}`,
                   flexShrink: 0
                 }}>
-                  <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}</span>
+                  <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}人</span>
                 </div>
           </div>
           <button

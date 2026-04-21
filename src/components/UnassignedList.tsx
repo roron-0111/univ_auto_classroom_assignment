@@ -173,7 +173,7 @@ export const UnassignedList = ({
     setIsOpen: (value: boolean) => void;
     getLabel: (value: any) => string;
   }) => (
-    <div style={{ position: 'relative', flex: 1, minWidth: '120px' }}>
+    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -190,7 +190,7 @@ export const UnassignedList = ({
           cursor: 'pointer'
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {selected.size === 0 ? label : Array.from(selected).map(getLabel).join(', ')}
         </span>
         <span style={{ fontSize: '0.6rem' }}>{isOpen ? '▲' : '▼'}</span>
@@ -287,8 +287,8 @@ export const UnassignedList = ({
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="配当期"
               options={[
@@ -308,7 +308,7 @@ export const UnassignedList = ({
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="開講学部"
               options={departments.map(d => ({ value: d, label: d }))}
@@ -320,7 +320,7 @@ export const UnassignedList = ({
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="曜日"
               options={Object.entries(DAY_LABELS).map(([val, label]) => ({ value: val, label: `${label}曜日` }))}
@@ -332,7 +332,7 @@ export const UnassignedList = ({
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="講時"
               options={periodPatterns.map(p => ({ value: p, label: `${p}限` }))}
