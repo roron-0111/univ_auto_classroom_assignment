@@ -32,14 +32,16 @@ const sortRules = (items: AllocationRule[]) =>
     });
 
 export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEquipment, onSave, onClose, onResetUnassignedStreak, onResetApprovedExceptions }: Props) => {
+    void onResetUnassignedStreak;
+    void onResetApprovedExceptions;
     const [rules, setRules] = useState<AllocationRule[]>(sortRules(settings));
     const [priorities, setPriorities] = useState<number[]>([1, 2, 3]);
     const [terms, setTerms] = useState<Term[]>(['spring', 'spring_first', 'spring_second', 'autumn', 'autumn_first', 'autumn_second', 'full_year']);
     const [days, setDays] = useState<DayOfWeek[]>(['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
     const [periods, setPeriods] = useState<Period[]>([1, 2, 3, 4, 5, 6, 7]);
     const [allocationMode, setAllocationMode] = useState<'incremental' | 'shuffle'>('incremental');
-    const [confirmExceptions, setConfirmExceptions] = useState(false);
-    const [ignoreStreakOnce, setIgnoreStreakOnce] = useState(false);
+    const confirmExceptions = false;
+    const ignoreStreakOnce = false;
     const [equipmentSettings, setEquipmentSettings] = useState(initialEquipment || DEFAULT_EQUIPMENT_SETTINGS);
 
     const handleToggle = (id: string) => {
@@ -147,9 +149,9 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                         🛠️ 配当基本設定
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当期:</span>
-                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当期:</span>
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                                 {(Object.keys(TERM_LABELS) as Term[]).map(id => (
                                     <label key={id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                                         <input
@@ -250,86 +252,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                             </div>
                         </div>
 
-                        <label style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            color: '#37474f',
-                            background: '#fff',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            padding: '8px 12px',
-                            width: 'fit-content'
-                        }}>
-                            <input
-                                type="checkbox"
-                                checked={confirmExceptions}
-                                onChange={e => setConfirmExceptions(e.target.checked)}
-                            />
-                            例外配当を実行前に確認する
-                        </label>
-
-                        <label style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            color: '#37474f',
-                            background: '#fff',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            padding: '8px 12px',
-                            width: 'fit-content'
-                        }}>
-                            <input
-                                type="checkbox"
-                                checked={ignoreStreakOnce}
-                                onChange={e => setIgnoreStreakOnce(e.target.checked)}
-                            />
-                            今回は未配当連続カウントを無視する
-                        </label>
-
-                        {onResetUnassignedStreak && (
-                            <button
-                                type="button"
-                                onClick={onResetUnassignedStreak}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #cbd5e1',
-                                    background: '#fff',
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    fontSize: '0.85rem',
-                                    width: 'fit-content'
-                                }}
-                            >
-                                未配当連続カウントをリセット
-                            </button>
-                        )}
-
-                        {onResetApprovedExceptions && (
-                            <button
-                                type="button"
-                                onClick={onResetApprovedExceptions}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #cbd5e1',
-                                    background: '#fff',
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                    fontSize: '0.85rem',
-                                    width: 'fit-content'
-                                }}
-                            >
-                                承認済み例外を再確認対象に戻す
-                            </button>
-                        )}
-
                         <div style={{ marginTop: '10px', padding: '10px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '1rem' }}>⚠️</span>
                             <span><strong>※注意:</strong> 「教室管理」で配当対象外になっている教室には、自動配当時に科目が配当されません。</span>
@@ -358,7 +280,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
 
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#37474f' }}>準必須</div>
-                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>候補が0件のときだけ、許可されたものを例外的に緩和します。</div>
+                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '12px' }}>候補が0件のときだけ、条件を緩める順番に従って再探索します。春秋同一教室を先に、教室タイプマッチングを次に見直します。</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {nearRules.map(rule => (
                                 <label key={rule.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', background: '#f9fbfc', borderRadius: '8px', border: '1px solid #e0e0e0', cursor: 'pointer' }}>
@@ -371,9 +293,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                                     <div>
                                         <div style={{ fontWeight: 'bold', color: '#263238' }}>{rule.name}</div>
                                         <div style={{ fontSize: '0.78rem', color: '#607d8b' }}>{rule.description}</div>
-                                        <div style={{ fontSize: '0.72rem', color: rule.enabled ? '#2e7d32' : '#999', marginTop: '4px' }}>
-                                            {rule.enabled ? '例外配当を許可' : '例外配当を許可しない'}
-                                        </div>
                                     </div>
                                 </label>
                             ))}
@@ -383,10 +302,10 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
 
                 <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px', marginBottom: '24px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#37474f' }}>希望条件</div>
-                    <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '16px' }}>上から順に比較します。加点の合計ではありません。</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {prefRules.map((rule, index) => (
-                            <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0', opacity: rule.enabled ? 1 : 0.6 }}>
+                        <div style={{ fontSize: '0.8rem', color: '#607d8b', marginBottom: '16px' }}>上から順に比較します。加点の合計ではありません。</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {prefRules.map((rule, index) => (
+                                <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#fafafa', borderRadius: '8px', border: '1px solid #e0e0e0', opacity: rule.enabled ? 1 : 0.6 }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                     <button
                                         disabled={index === 0}
@@ -413,9 +332,6 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#263238', marginBottom: '4px' }}>{rule.name}</div>
                                     <div style={{ fontSize: '0.82rem', color: '#607d8b' }}>{rule.description}</div>
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: rule.enabled ? '#2e7d32' : '#999', whiteSpace: 'nowrap' }}>
-                                    {rule.enabled ? '比較対象' : '無効'}
                                 </div>
                             </div>
                         ))}
@@ -446,7 +362,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
 
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                         gap: '8px',
                         width: '100%',
                         boxSizing: 'border-box'

@@ -256,7 +256,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     {
         id: 'term_consistency',
         name: '春秋同一教室',
-        description: '春秋ペア科目は同じ教室を使用',
+        description: 'linkedSubjectId を優先し、未指定時は同じ教員・曜日・講時の春秋科目を自動で同一教室扱いにする',
         tier: 'near',
         enabled: true,
         order: 0,
@@ -267,7 +267,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     {
         id: 'room_type',
         name: '教室タイプマッチング',
-        description: '講義→一般教室、ゼミ→ゼミ室、PC→PC教室',
+        description: '候補が0件のときだけ、教室タイプ不一致を例外的に許可する',
         tier: 'near',
         enabled: false,
         order: 0,
