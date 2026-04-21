@@ -65,15 +65,25 @@ const normalizeClassrooms = (rooms: Classroom[]): Classroom[] =>
     equipment: r.equipment.map(eq => eq === 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' ? 'タッチディスプレイ' : eq)
   }));
 
-const normalizeAllocationForPhase6 = (allocation: Allocation): Allocation => ({
-  ...allocation,
-  exceptionApproved: allocation.exceptions && allocation.exceptions.length > 0
-    ? (allocation.exceptionApproved ?? true)
-    : undefined
-});
+const normalizeAllocationForPhase6 = (allocation: unknown): Allocation | null => {
+  if (!allocation || typeof allocation !== 'object') return null;
+  const value = allocation as Allocation;
+  const exceptions = Array.isArray(value.exceptions)
+    ? value.exceptions.filter((item): item is 'term_split' | 'room_type_relaxed' => item === 'term_split' || item === 'room_type_relaxed')
+    : undefined;
+  return {
+    ...value,
+    exceptions,
+    exceptionApproved: exceptions && exceptions.length > 0
+      ? (value.exceptionApproved ?? true)
+      : undefined
+  };
+};
 
-const normalizeAllocationsForPhase6 = (allocations: Allocation[]) =>
-  allocations.map(normalizeAllocationForPhase6);
+const normalizeAllocationsForPhase6 = (allocations: unknown) =>
+  Array.isArray(allocations)
+    ? allocations.map(normalizeAllocationForPhase6).filter((item): item is Allocation => item !== null)
+    : [];
 
 function App() {
   // Auth & Cloud Sync
@@ -272,8 +282,8 @@ function App() {
   const buildApprovedExceptionSet = (sourceAllocations: Allocation[]) =>
     new Set(
       sourceAllocations
-        .filter(allocation => allocation.exceptionApproved && allocation.exceptions && allocation.exceptions.length > 0)
-        .map(allocation => buildApprovalKey(allocation.subjectId, allocation.classroomId, allocation.exceptions!))
+        .filter(allocation => allocation.exceptionApproved && Array.isArray(allocation.exceptions) && allocation.exceptions.length > 0)
+        .map(allocation => buildApprovalKey(allocation.subjectId, allocation.classroomId, allocation.exceptions))
     );
 
   const buildings = useMemo(() => {
