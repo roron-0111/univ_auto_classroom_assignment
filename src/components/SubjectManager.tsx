@@ -188,7 +188,18 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         return smColDefaults();
     });
     const [showColSettings, setShowColSettings] = useState(false);
+    const smColSettingsRef = useRef<HTMLDivElement>(null);
     useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
+    useEffect(() => {
+        if (!showColSettings) return;
+        const handler = (event: MouseEvent) => {
+            if (smColSettingsRef.current && !smColSettingsRef.current.contains(event.target as Node)) {
+                setShowColSettings(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showColSettings]);
     const smShow = (k: SMColKey) => !colConfig[k].hidden;
     const smW = (k: SMColKey) => `${colConfig[k].width}px`;
     const smToggle = (k: SMColKey) => setColConfig(c => ({ ...c, [k]: { ...c[k], hidden: !c[k].hidden } }));
@@ -526,7 +537,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     <Download size={18} /> CSVエクスポート
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
-                                <div style={{ position: 'relative' }}>
+                                <div ref={smColSettingsRef} style={{ position: 'relative' }}>
                                     <button onClick={() => setShowColSettings(s => !s)} style={{
                                         display: 'flex', gap: '6px', alignItems: 'center', background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                     }}>列設定</button>
