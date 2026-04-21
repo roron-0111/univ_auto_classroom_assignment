@@ -197,6 +197,7 @@ export const TimeTableGrid = ({
             {violations.map((violation, index) => (
               <span
                 key={`${violation.type}-${index}`}
+                aria-label={violation.message}
                 style={{
                   fontSize: '0.62em',
                   padding: '1px 4px',
@@ -206,9 +207,8 @@ export const TimeTableGrid = ({
                   border: `1px solid ${violation.severity === 'error' ? '#ef9a9a' : '#c7d2fe'}`,
                   fontWeight: 'bold'
                 }}
-                title={violation.message}
               >
-                {violation.message}
+                ×
               </span>
             ))}
           </div>
