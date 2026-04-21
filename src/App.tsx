@@ -1267,10 +1267,6 @@ function App() {
                   <span>制約違反（定員・機材不足等）</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <AlertTriangle size={14} color="#ef6c00" />
-                  <span>警告（建物・タイプ希望等）</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ padding: '0 4px', background: '#fff3e0', border: '1px solid #ff9800', color: '#ff9800', borderRadius: '4px', fontSize: '0.9em', fontWeight: 'bold' }}>条件×</div>
                   <span>不一致（建物・タイプ希望等）</span>
                 </div>

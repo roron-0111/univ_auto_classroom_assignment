@@ -86,7 +86,6 @@ export const TimeTableGrid = ({
     const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
     const markMismatch = (label: string, mismatch: boolean) => (mismatch ? `${label}×` : label);
     const showViolationIcon = displayConfig.showViolationAlerts && violations.length > 0;
-    const hasErrorViolation = violations.some(v => v.type === 'error');
     const violationTitle = violations.map(v => v.message).join(' / ');
 
     const allEqSet = new Set([...(subject.mandatoryEquipment || []), ...(subject.requiredEquipment || [])]);
@@ -140,9 +139,9 @@ export const TimeTableGrid = ({
                 width: '18px',
                 height: '18px',
                 borderRadius: '50%',
-                background: hasErrorViolation ? '#ffebee' : '#fff8e1',
-                color: hasErrorViolation ? '#d32f2f' : '#ef6c00',
-                border: `1px solid ${hasErrorViolation ? '#ef9a9a' : '#ffcc80'}`
+                background: '#ffebee',
+                color: '#d32f2f',
+                border: '1px solid #ef9a9a'
               }}
             >
               <AlertTriangle size={12} />
