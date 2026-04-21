@@ -201,7 +201,7 @@ export const TimeTableGrid = ({
                 border: `1px solid ${(room && !typeOk) ? '#b71c1c' : subject.preferredRoomType === 'pc' ? getImportantEquipmentStyle('PC').border : subject.preferredRoomType === 'seminar' ? '#e1bee7' : '#ddd'}`,
                 borderRadius: '3px',
                 fontWeight: 'bold'
-              }}>
+              }} title={(room && !typeOk) ? '教室タイプ不一致' : undefined}>
                 {markMismatch(ROOM_TYPE_LABELS[subject.preferredRoomType], !!room && !typeOk)}
               </span>
             )}
@@ -277,7 +277,7 @@ export const TimeTableGrid = ({
                   borderRadius: '3px',
                   fontWeight: 'bold',
                   whiteSpace: 'nowrap'
-                }}>
+                }} title={(room && room.capacity < subject.requiredCapacity) ? '定員不足' : undefined}>
                   {currentCount}/{requiredCount}室
                 </span>
               );
@@ -293,7 +293,7 @@ export const TimeTableGrid = ({
                   border: `1px solid ${(room && room.capacity < subject.requiredCapacity) ? '#b71c1c' : '#ddd'}`,
                   flexShrink: 0
                 }}>
-                  <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}人</span>
+                  <span style={{ fontWeight: 'bold' }}>{markMismatch(`${subject.requiredCapacity}人`, !!room && room.capacity < subject.requiredCapacity)}</span>
                 </div>
           </div>
           <button
