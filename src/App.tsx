@@ -47,6 +47,7 @@ const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
   showViolationAlerts: true,
   highlightedEquipment: []
 };
+const SHOW_DISPLAY_SETTINGS_BUTTON = false;
 
 const isTerm = (value: unknown): value is Term =>
   value === 'spring' || value === 'spring_first' || value === 'spring_second' ||
@@ -1085,9 +1086,11 @@ function App() {
           <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <BookOpen size={16} /> 授業管理
           </button>
-          <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <Eye size={16} /> 表示設定
-          </button>
+          {SHOW_DISPLAY_SETTINGS_BUTTON && (
+            <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+              <Eye size={16} /> 表示設定
+            </button>
+          )}
         </div>
       </header>
 
@@ -1264,6 +1267,10 @@ function App() {
                   <span>制約違反（定員・機材不足等）</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <AlertTriangle size={14} color="#ef6c00" />
+                  <span>警告（建物・タイプ希望等）</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ padding: '0 4px', background: '#fff3e0', border: '1px solid #ff9800', color: '#ff9800', borderRadius: '4px', fontSize: '0.9em', fontWeight: 'bold' }}>条件×</div>
                   <span>不一致（建物・タイプ希望等）</span>
                 </div>
@@ -1379,7 +1386,7 @@ function App() {
 
         {/* Display Settings Overlay */}
         {
-          showDisplaySettings && (
+          (SHOW_DISPLAY_SETTINGS_BUTTON && showDisplaySettings) && (
             <DisplaySettings
               config={displayConfig}
               availableEquipment={allEquipment}
