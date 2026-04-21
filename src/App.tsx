@@ -34,6 +34,123 @@ import {
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
+  showCapacity: true,
+  showExamCapacity: true,
+  showRoomType: true,
+  subjectMainDisplay: 'name',
+  showSubInfo: true,
+  showPreviousRooms: true,
+  showRequirementTags: true,
+  showAllocationProgress: true,
+  showContinuityHighlight: true,
+  showViolationAlerts: true,
+  highlightedEquipment: []
+};
+
+const isTerm = (value: unknown): value is Term =>
+  value === 'spring' || value === 'spring_first' || value === 'spring_second' ||
+  value === 'autumn' || value === 'autumn_first' || value === 'autumn_second' ||
+  value === 'full_year';
+
+const isDayOfWeek = (value: unknown): value is DayOfWeek =>
+  value === 'mon' || value === 'tue' || value === 'wed' ||
+  value === 'thu' || value === 'fri' || value === 'sat';
+
+const isPeriod = (value: unknown): value is Period =>
+  value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7;
+
+const normalizeDisplayConfig = (value: unknown): DisplayConfig => {
+  if (!value || typeof value !== 'object') return DEFAULT_DISPLAY_CONFIG;
+  const raw = value as Partial<DisplayConfig> & { highlightedEquipment?: unknown };
+  return {
+    ...DEFAULT_DISPLAY_CONFIG,
+    ...raw,
+    highlightedEquipment: Array.isArray(raw.highlightedEquipment)
+      ? raw.highlightedEquipment.filter((item): item is string => typeof item === 'string')
+      : DEFAULT_DISPLAY_CONFIG.highlightedEquipment
+  };
+};
+
+const normalizeClassroom = (value: unknown): Classroom | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<Classroom> & { equipment?: unknown };
+  const equipment = Array.isArray(raw.equipment)
+    ? raw.equipment.filter((item): item is string => typeof item === 'string')
+    : [];
+  if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
+  return {
+    id: raw.id,
+    name: raw.name,
+    building: typeof raw.building === 'string' ? raw.building : '未設定',
+    capacity: typeof raw.capacity === 'number' ? raw.capacity : 0,
+    examCapacity: typeof raw.examCapacity === 'number' ? raw.examCapacity : undefined,
+    type: raw.type === 'normal' || raw.type === 'pc' || raw.type === 'seminar' || raw.type === 'other' ? raw.type : 'other',
+    isMovable: Boolean(raw.isMovable),
+    equipment,
+    isExcluded: Boolean(raw.isExcluded)
+  };
+};
+
+const normalizeSubject = (value: unknown): Subject | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<Subject> & {
+    previousRooms?: unknown;
+    requiredEquipment?: unknown;
+    mandatoryEquipment?: unknown;
+  };
+  if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
+  return {
+    id: raw.id,
+    code: typeof raw.code === 'string' ? raw.code : '',
+    name: raw.name,
+    teacher: typeof raw.teacher === 'string' ? raw.teacher : '',
+    faculty: typeof raw.faculty === 'string' ? raw.faculty : '',
+    department: typeof raw.department === 'string' ? raw.department : '',
+    term: isTerm(raw.term) ? raw.term : 'spring',
+    day: isDayOfWeek(raw.day) ? raw.day : 'mon',
+    period: isPeriod(raw.period) ? raw.period : 1,
+    endPeriod: isPeriod(raw.endPeriod) ? raw.endPeriod : undefined,
+    requiredCapacity: typeof raw.requiredCapacity === 'number' ? raw.requiredCapacity : 0,
+    campus: typeof raw.campus === 'string' ? raw.campus : '',
+    previousRooms: Array.isArray(raw.previousRooms)
+      ? raw.previousRooms.filter((item): item is string => typeof item === 'string')
+      : undefined,
+    preferredRoomType: raw.preferredRoomType === 'normal' || raw.preferredRoomType === 'pc' || raw.preferredRoomType === 'seminar'
+      ? raw.preferredRoomType
+      : undefined,
+    requiresProjector: Boolean(raw.requiresProjector),
+    requiresMovable: Boolean(raw.requiresMovable),
+    requiredEquipment: Array.isArray(raw.requiredEquipment)
+      ? raw.requiredEquipment.filter((item): item is string => typeof item === 'string')
+      : undefined,
+    mandatoryEquipment: Array.isArray(raw.mandatoryEquipment)
+      ? raw.mandatoryEquipment.filter((item): item is string => typeof item === 'string')
+      : undefined,
+    isContinuous: Boolean(raw.isContinuous),
+    linkedSubjectId: typeof raw.linkedSubjectId === 'string' ? raw.linkedSubjectId : undefined,
+    priority: typeof raw.priority === 'number' ? raw.priority : 1,
+    buildingPreference: typeof raw.buildingPreference === 'string' ? raw.buildingPreference : undefined,
+    requiredRoomCount: typeof raw.requiredRoomCount === 'number' && raw.requiredRoomCount > 0 ? raw.requiredRoomCount : 1,
+    _realId: typeof raw._realId === 'string' ? raw._realId : undefined
+  };
+};
+
+const normalizeSubjects = (value: unknown): Subject[] => {
+  if (!Array.isArray(value)) return mockSubjects;
+  const items = value.map(normalizeSubject).filter((item): item is Subject => item !== null);
+  return items.length > 0 ? items : mockSubjects;
+};
+
+const normalizeEquipmentSettings = (value: unknown) => {
+  if (!value || typeof value !== 'object') return DEFAULT_EQUIPMENT_SETTINGS;
+  const raw = value as { items?: unknown; strictLevel5?: unknown };
+  const items = raw.items && typeof raw.items === 'object' && !Array.isArray(raw.items) ? raw.items as { [key: string]: { enabled: boolean; importance: number } } : DEFAULT_EQUIPMENT_SETTINGS.items;
+  return {
+    items,
+    strictLevel5: Boolean(raw.strictLevel5)
+  };
+};
 
 type AutoAllocationSummary = {
   targetCount: number;
@@ -103,13 +220,18 @@ function App() {
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     try {
       const saved = localStorage.getItem('classrooms');
-      return saved ? normalizeClassrooms(JSON.parse(saved)) : mockClassrooms;
+      if (!saved) return mockClassrooms;
+      const parsed = JSON.parse(saved);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map(normalizeClassroom).filter((item): item is Classroom => item !== null)
+        : [];
+      return normalized.length > 0 ? normalizeClassrooms(normalized) : mockClassrooms;
     } catch { return mockClassrooms; }
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     try {
       const saved = localStorage.getItem('subjects');
-      return saved ? JSON.parse(saved) : mockSubjects;
+      return saved ? normalizeSubjects(JSON.parse(saved)) : mockSubjects;
     } catch { return mockSubjects; }
   });
   const [allocations, setAllocations] = useState<Allocation[]>(() => {
@@ -154,16 +276,7 @@ function App() {
     const saved = localStorage.getItem('equipmentSettings');
     if (!saved) return DEFAULT_EQUIPMENT_SETTINGS;
     try {
-      const parsed = JSON.parse(saved);
-      // 新しいネスト構造（itemsプロパティあり）かチェック
-      if (parsed && typeof parsed === 'object' && 'items' in parsed) {
-        return parsed;
-      }
-      // 旧構造（フラットなオブジェクト）からの移行
-      return {
-        items: parsed,
-        strictLevel5: false
-      };
+      return normalizeEquipmentSettings(JSON.parse(saved));
     } catch {
       return DEFAULT_EQUIPMENT_SETTINGS;
     }
@@ -172,21 +285,9 @@ function App() {
   const [displayConfig, setDisplayConfig] = useState<DisplayConfig>(() => {
     try {
       const saved = localStorage.getItem('displayConfig');
-      if (saved) return JSON.parse(saved);
+      if (saved) return normalizeDisplayConfig(JSON.parse(saved));
     } catch { /* fall through to default */ }
-    return {
-      showCapacity: true,
-      showExamCapacity: true,
-      showRoomType: true,
-      subjectMainDisplay: 'name',
-      showSubInfo: true,
-      showPreviousRooms: true,
-      showRequirementTags: true,
-      showAllocationProgress: true,
-      showContinuityHighlight: true,
-      showViolationAlerts: true,
-      highlightedEquipment: []
-    };
+    return DEFAULT_DISPLAY_CONFIG;
   });
 
   const [pickingCell, setPickingCell] = useState<{ room: string; period: Period; term: Term } | null>(null);
