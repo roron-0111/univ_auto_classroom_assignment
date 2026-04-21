@@ -29,7 +29,7 @@ export const detectViolations = (subject: Subject, room: Classroom): Violation[]
     violations.push({
       type: 'excluded_room',
       severity: 'error',
-      message: '配当対象外教室です'
+      message: '使用不可'
     });
   }
 
@@ -37,7 +37,7 @@ export const detectViolations = (subject: Subject, room: Classroom): Violation[]
     violations.push({
       type: 'capacity_short',
       severity: 'error',
-      message: `定員不足 (${room.capacity} < ${subject.requiredCapacity})`
+      message: '定員不足'
     });
   }
 
@@ -46,7 +46,7 @@ export const detectViolations = (subject: Subject, room: Classroom): Violation[]
       violations.push({
         type: 'mandatory_equipment_missing',
         severity: 'error',
-        message: `必須機材不足: ${req}`
+        message: '必須機材不足'
       });
     }
   }
@@ -55,7 +55,7 @@ export const detectViolations = (subject: Subject, room: Classroom): Violation[]
     violations.push({
       type: 'room_type_mismatch',
       severity: 'info',
-      message: `教室タイプ不一致 (${subject.preferredRoomType} -> ${room.type})`
+      message: '教室タイプ不一致'
     });
   }
 
@@ -63,7 +63,7 @@ export const detectViolations = (subject: Subject, room: Classroom): Violation[]
     violations.push({
       type: 'building_mismatch',
       severity: 'info',
-      message: `建物希望不一致 (${subject.buildingPreference} 以外)`
+      message: '建物希望不一致'
     });
   }
 
