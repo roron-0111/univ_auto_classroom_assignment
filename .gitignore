@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+node_modules/.tmp/
 
 # Build output
 dist/
@@ -27,3 +28,4 @@ npm-debug.log*
 # Claude / Agent
 .agent/
 .claude/
+.claude.bak/
