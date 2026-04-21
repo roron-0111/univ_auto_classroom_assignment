@@ -159,13 +159,13 @@ export const IMPORTANT_EQUIPMENT_COLORS: Record<string, { bg: string; text: stri
     'TV': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' }, // グレー
     'カーテン': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     'タッチディスプレイ': { bg: '#fff3e0', text: '#e65100', border: '#ffe0b2' }, // オレンジ
-    'ブラインド': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
-    'マイク': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
+    'ブラインド': { bg: '#f3f8fd', text: '#315a7d', border: '#cfe0f1' }, // 薄青
+    'マイク': { bg: '#f7f0ff', text: '#6b3fa0', border: '#dbc9f3' }, // 薄紫
     'モニター': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
     '可動': { bg: '#f3e5f5', text: '#4a148c', border: '#e1bee7' }, // 紫
     '固定': { bg: '#e0f7fa', text: '#006064', border: '#b2ebf2' }, // ティール
-    '白板': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' },
-    '黒板': { bg: '#f5f5f5', text: '#616161', border: '#e0e0e0' }
+    '白板': { bg: '#f1fbf7', text: '#2f6f59', border: '#cbe9da' }, // 薄緑
+    '黒板': { bg: '#f8f1e8', text: '#8a5a2b', border: '#ead6bd' } // 薄茶
 };
 
 export const getEquipmentStyle = (name: string) => {

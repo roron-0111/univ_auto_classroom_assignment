@@ -344,15 +344,22 @@ export const UnassignedList = ({
             />
           </div>
 
-          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flexWrap: 'nowrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flexWrap: 'nowrap' }}>
+          <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+              alignItems: 'center',
+              gap: '4px',
+              minWidth: 0
+            }}>
               <input
                 type="number"
                 value={capacityMin}
                 onChange={e => setCapacityMin(e.target.value)}
                 placeholder="人数(以上)"
                 style={{
-                  width: '88px',
+                  width: '100%',
+                  minWidth: 0,
                   fontSize: '0.75rem',
                   padding: '4px 6px',
                   borderRadius: '4px',
@@ -366,7 +373,8 @@ export const UnassignedList = ({
                 onChange={e => setCapacityMax(e.target.value)}
                 placeholder="人数(以下)"
                 style={{
-                  width: '88px',
+                  width: '100%',
+                  minWidth: 0,
                   fontSize: '0.75rem',
                   padding: '4px 6px',
                   borderRadius: '4px',
