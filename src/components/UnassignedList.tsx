@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
 import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
-import { Users, AlertTriangle } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 export type UnassignedListItem = Subject & {
   _realId?: string;
@@ -420,25 +420,12 @@ export const UnassignedList = ({
                     whiteSpace: 'nowrap',
                     fontWeight: 'bold'
                   }}>
-                    {reason.short}
+                    ×
                   </span>
                 )}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '6px', marginBottom: '4px' }}>
-                {reason && (
-                  <span style={{
-                    fontSize: '0.65em',
-                    padding: '1px 4px',
-                    color: reason.color,
-                    background: reason.bg,
-                    border: `1px solid ${reason.border}`,
-                    borderRadius: '3px',
-                    fontWeight: 'bold'
-                  }}>
-                    {reason.label}
-                  </span>
-                )}
                 {subject.preferredRoomType && (
                   <span style={{
                     fontSize: '0.65em', padding: '1px 4px',
@@ -490,20 +477,6 @@ export const UnassignedList = ({
                   });
                 })()}
               </div>
-
-              {subject.reasonDetail && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '0.72rem',
-                  color: '#666',
-                  marginBottom: '4px'
-                }}>
-                  <AlertTriangle size={12} color={reason?.color || '#999'} />
-                  <span>{subject.reasonDetail}</span>
-                </div>
-              )}
 
               <div style={{
                 fontSize: '0.65em',
