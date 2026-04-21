@@ -2,7 +2,6 @@ import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
 import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST } from '../types';
 import { checkConstraints } from '../utils/validation';
-import { Users } from 'lucide-react';
 
 interface Props {
   day: DayOfWeek;
@@ -83,6 +82,7 @@ export const TimeTableGrid = ({
     const typeOk = !room || !subject.preferredRoomType || subject.preferredRoomType === room.type;
     const movOk = !room || !subject.requiresMovable || room.isMovable;
     const bldOk = !room || !subject.buildingPreference || subject.buildingPreference === room.building;
+    const markMismatch = (label: string, mismatch: boolean) => (mismatch ? `${label}×` : label);
 
     const allEqSet = new Set([...(subject.mandatoryEquipment || []), ...(subject.requiredEquipment || [])]);
     allEqSet.delete('可動');
@@ -202,7 +202,7 @@ export const TimeTableGrid = ({
                 borderRadius: '3px',
                 fontWeight: 'bold'
               }}>
-                {ROOM_TYPE_LABELS[subject.preferredRoomType]}
+                {markMismatch(ROOM_TYPE_LABELS[subject.preferredRoomType], !!room && !typeOk)}
               </span>
             )}
 
@@ -216,7 +216,7 @@ export const TimeTableGrid = ({
                 fontSize: '0.65em',
                 fontWeight: 'bold'
               }}>
-                可動
+                {markMismatch('可動', !!room && !movOk)}
               </span>
             )}
 
@@ -232,9 +232,9 @@ export const TimeTableGrid = ({
                   padding: '1px 4px',
                   borderRadius: '3px',
                   fontSize: '0.65em',
-                  fontWeight: isMandatory ? 'bold' : 'normal'
-                }}>
-                  {eq}
+                fontWeight: isMandatory ? 'bold' : 'normal'
+              }}>
+                  {markMismatch(eq, !!room && !ok)}
                 </span>
               );
             })}
@@ -249,7 +249,7 @@ export const TimeTableGrid = ({
                 fontSize: '0.65em',
                 fontWeight: 'bold'
               }}>
-                {subject.buildingPreference}
+                {markMismatch(subject.buildingPreference, !!room && !bldOk)}
               </span>
             )}
           </div>
@@ -282,21 +282,19 @@ export const TimeTableGrid = ({
                 </span>
               );
             })()}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                background: (room && room.capacity < subject.requiredCapacity) ? '#d32f2f' : '#f5f5f5',
-              padding: '1px 4px',
-              borderRadius: '3px',
-              fontSize: '0.65rem',
-              color: (room && room.capacity < subject.requiredCapacity) ? '#fff' : '#444',
-              border: `1px solid ${(room && room.capacity < subject.requiredCapacity) ? '#b71c1c' : '#ddd'}`,
-              flexShrink: 0
-            }}>
-              <Users size={10} color={(room && room.capacity < subject.requiredCapacity) ? '#fff' : '#666'} />
-              <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}</span>
-            </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: (room && room.capacity < subject.requiredCapacity) ? '#d32f2f' : '#f5f5f5',
+                  padding: '1px 4px',
+                  borderRadius: '3px',
+                  fontSize: '0.65rem',
+                  color: (room && room.capacity < subject.requiredCapacity) ? '#fff' : '#444',
+                  border: `1px solid ${(room && room.capacity < subject.requiredCapacity) ? '#b71c1c' : '#ddd'}`,
+                  flexShrink: 0
+                }}>
+                  <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}</span>
+                </div>
           </div>
           <button
             onClick={(e) => {

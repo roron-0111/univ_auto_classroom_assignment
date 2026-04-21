@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
 import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
-import { Users } from 'lucide-react';
 
 export type UnassignedListItem = Subject & {
   _realId?: string;
@@ -38,7 +37,7 @@ const REASON_ORDER: UnassignedReason[] = [
 ];
 
 const toSubject = (item: UnassignedListItem): Subject => {
-  const { _realId, reason, reasonDetail, ...subject } = item;
+  const { _realId, reason, ...subject } = item;
   return subject;
 };
 
@@ -61,12 +60,12 @@ export const UnassignedList = ({
   const [selectedDays, setSelectedDays] = useState<Set<DayOfWeek>>(new Set());
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
   const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(new Set());
-  const [selectedReasons, setSelectedReasons] = useState<Set<UnassignedReason>>(new Set());
+  const [capacityMin, setCapacityMin] = useState('');
+  const [capacityMax, setCapacityMax] = useState('');
   const [isTermOpen, setIsTermOpen] = useState(false);
   const [isDayOpen, setIsDayOpen] = useState(false);
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isDeptOpen, setIsDeptOpen] = useState(false);
-  const [isReasonOpen, setIsReasonOpen] = useState(false);
 
   const periodPatterns = useMemo(() => {
     const found = subjects.map(s =>
@@ -85,15 +84,9 @@ export const UnassignedList = ({
 
   const departments = useMemo(() => Array.from(new Set(subjects.map(s => s.department))).sort(), [subjects]);
 
-  const availableReasons = useMemo(() => {
-    const set = new Set<UnassignedReason>();
-    subjects.forEach(item => {
-      if (item.reason) set.add(item.reason);
-    });
-    return REASON_ORDER.filter(r => set.has(r));
-  }, [subjects]);
-
   const filteredSubjects = useMemo(() => {
+    const min = capacityMin.trim() === '' ? null : Number(capacityMin);
+    const max = capacityMax.trim() === '' ? null : Number(capacityMax);
     return subjects.filter(s => {
       if (selectedTerms.size > 0 && !selectedTerms.has(s.term)) return false;
       if (selectedDays.size > 0 && !selectedDays.has(s.day)) return false;
@@ -102,10 +95,11 @@ export const UnassignedList = ({
         if (!selectedPeriods.has(pattern)) return false;
       }
       if (selectedDepartments.size > 0 && !selectedDepartments.has(s.department)) return false;
-      if (selectedReasons.size > 0 && (!s.reason || !selectedReasons.has(s.reason))) return false;
+      if (min !== null && Number.isFinite(min) && s.requiredCapacity < min) return false;
+      if (max !== null && Number.isFinite(max) && s.requiredCapacity > max) return false;
       return true;
     });
-  }, [subjects, selectedTerms, selectedDays, selectedPeriods, selectedDepartments, selectedReasons]);
+  }, [subjects, selectedTerms, selectedDays, selectedPeriods, selectedDepartments, capacityMin, capacityMax]);
 
   const displaySubjects = useMemo(() => {
     return [...filteredSubjects].sort((a, b) => {
@@ -269,14 +263,15 @@ export const UnassignedList = ({
       <div style={{ borderBottom: '1px solid #ddd', paddingBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h3 style={{ margin: 0, fontSize: '1rem', color: '#333' }}>未配当 ({displaySubjects.length})</h3>
-          {(selectedTerms.size > 0 || selectedDays.size > 0 || selectedPeriods.size > 0 || selectedDepartments.size > 0 || selectedReasons.size > 0) && (
+          {(selectedTerms.size > 0 || selectedDays.size > 0 || selectedPeriods.size > 0 || selectedDepartments.size > 0 || capacityMin.trim() !== '' || capacityMax.trim() !== '') && (
             <button
               onClick={() => {
                 setSelectedTerms(new Set());
                 setSelectedDays(new Set());
                 setSelectedPeriods(new Set());
                 setSelectedDepartments(new Set());
-                setSelectedReasons(new Set());
+                setCapacityMin('');
+                setCapacityMax('');
               }}
               style={{
                 background: '#eee',
@@ -292,10 +287,10 @@ export const UnassignedList = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
             <FilterDropdown
-              label="すべての学期"
+              label="配当期"
               options={[
                 { value: 'spring', label: '春学期' },
                 { value: 'spring_first', label: '春学期前半' },
@@ -311,29 +306,11 @@ export const UnassignedList = ({
               setIsOpen={setIsTermOpen}
               getLabel={(val: string) => TERM_LABELS[val as Term] || val}
             />
-            <FilterDropdown
-              label="すべての曜日"
-              options={Object.entries(DAY_LABELS).map(([val, label]) => ({ value: val, label: `${label}曜日` }))}
-              selected={selectedDays}
-              onToggle={(val: string) => toggleFilter(selectedDays, setSelectedDays, val as DayOfWeek)}
-              isOpen={isDayOpen}
-              setIsOpen={setIsDayOpen}
-              getLabel={(val: string) => DAY_LABELS[val as DayOfWeek]}
-            />
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
             <FilterDropdown
-              label="すべての時間帯"
-              options={periodPatterns.map(p => ({ value: p, label: `${p}限` }))}
-              selected={selectedPeriods}
-              onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
-              isOpen={isPeriodOpen}
-              setIsOpen={setIsPeriodOpen}
-              getLabel={(val: string) => `${val}限`}
-            />
-            <FilterDropdown
-              label="すべての学部"
+              label="開講学部"
               options={departments.map(d => ({ value: d, label: d }))}
               selected={selectedDepartments}
               onToggle={(val: string) => toggleFilter(selectedDepartments, setSelectedDepartments, val)}
@@ -343,16 +320,61 @@ export const UnassignedList = ({
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
             <FilterDropdown
-              label="すべての理由"
-              options={availableReasons.map(reason => ({ value: reason, label: `${REASON_META[reason].short} ${REASON_META[reason].label}` }))}
-              selected={selectedReasons}
-              onToggle={(val: string) => toggleFilter(selectedReasons, setSelectedReasons, val as UnassignedReason)}
-              isOpen={isReasonOpen}
-              setIsOpen={setIsReasonOpen}
-              getLabel={(val: string) => `${REASON_META[val as UnassignedReason].short}`}
+              label="曜日"
+              options={Object.entries(DAY_LABELS).map(([val, label]) => ({ value: val, label: `${label}曜日` }))}
+              selected={selectedDays}
+              onToggle={(val: string) => toggleFilter(selectedDays, setSelectedDays, val as DayOfWeek)}
+              isOpen={isDayOpen}
+              setIsOpen={setIsDayOpen}
+              getLabel={(val: string) => DAY_LABELS[val as DayOfWeek]}
             />
+          </div>
+
+          <div style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+            <FilterDropdown
+              label="講時"
+              options={periodPatterns.map(p => ({ value: p, label: `${p}限` }))}
+              selected={selectedPeriods}
+              onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
+              isOpen={isPeriodOpen}
+              setIsOpen={setIsPeriodOpen}
+              getLabel={(val: string) => `${val}限`}
+            />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ fontSize: '0.75rem', color: '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>履修者数</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+              <input
+                type="number"
+                value={capacityMin}
+                onChange={e => setCapacityMin(e.target.value)}
+                placeholder="以上"
+                style={{
+                  width: '72px',
+                  fontSize: '0.75rem',
+                  padding: '4px 6px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc'
+                }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#666' }}>〜</span>
+              <input
+                type="number"
+                value={capacityMax}
+                onChange={e => setCapacityMax(e.target.value)}
+                placeholder="以下"
+                style={{
+                  width: '72px',
+                  fontSize: '0.75rem',
+                  padding: '4px 6px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc'
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -360,13 +382,11 @@ export const UnassignedList = ({
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {displaySubjects.map((subject, index) => {
           const realId = subject._realId || subject.id;
-          const reason = subject.reason ? REASON_META[subject.reason] : null;
           return (
             <div
               key={`${realId}-${index}`}
               draggable
               title={[
-                subject.reasonDetail,
                 subject.difficultyDetail ? `困難度 ${subject.difficultyScore?.toFixed(1) ?? ''}` : null,
                 subject.difficultyDetail
               ].filter(Boolean).join(' / ')}
@@ -381,7 +401,7 @@ export const UnassignedList = ({
               style={{
                 padding: '8px 10px',
                 background: '#fff',
-                border: `1px solid ${reason?.border || '#ddd'}`,
+                border: `1px solid ${subject.reason ? REASON_META[subject.reason].border : '#ddd'}`,
                 borderRadius: '6px',
                 cursor: 'grab',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
@@ -409,20 +429,6 @@ export const UnassignedList = ({
                     {TERM_LABELS[subject.term]} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}限
                   </div>
                 </div>
-                {reason && (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '2px 6px',
-                    borderRadius: '999px',
-                    color: reason.color,
-                    background: reason.bg,
-                    border: `1px solid ${reason.border}`,
-                    whiteSpace: 'nowrap',
-                    fontWeight: 'bold'
-                  }}>
-                    ×
-                  </span>
-                )}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', marginTop: '6px', marginBottom: '4px' }}>
@@ -437,23 +443,11 @@ export const UnassignedList = ({
                     {ROOM_TYPE_LABELS[subject.preferredRoomType]}
                   </span>
                 )}
-                {!!subject.requiresMovable && (
-                  <span style={{
-                    fontSize: '0.65em', padding: '1px 4px',
-                    background: getImportantEquipmentStyle('可動').bg,
-                    color: getImportantEquipmentStyle('可動').text,
-                    border: `1px solid ${getImportantEquipmentStyle('可動').border}`,
-                    borderRadius: '3px', fontWeight: 'bold'
-                  }}>
-                    移動
-                  </span>
-                )}
                 {(() => {
                   const allEqSet = new Set([
                     ...(subject.mandatoryEquipment || []),
                     ...(subject.requiredEquipment || [])
                   ]);
-                  allEqSet.delete('移動');
                   const sortedEq = [
                     ...EQUIPMENT_LIST.filter(e => allEqSet.has(e)),
                     ...Array.from(allEqSet).filter(e => !EQUIPMENT_LIST.includes(e))
@@ -526,7 +520,6 @@ export const UnassignedList = ({
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
                   background: '#f5f5f5',
                   padding: '2px 6px',
                   borderRadius: '4px',
@@ -534,7 +527,6 @@ export const UnassignedList = ({
                   color: '#444',
                   border: '1px solid #ddd'
                 }}>
-                  <Users size={12} color="#666" />
                   <span style={{ fontWeight: 'bold' }}>{subject.requiredCapacity}人</span>
                 </div>
               </div>
