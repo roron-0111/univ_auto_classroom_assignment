@@ -66,6 +66,19 @@ type CRColKey = typeof CR_COL_DEFS[number]['key'];
 type CRColConfig = Record<CRColKey, { width: number; hidden: boolean }>;
 const crColDefaults = (): CRColConfig => Object.fromEntries(CR_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as CRColConfig;
 
+const mergeClassroomsById = (existing: Classroom[], imported: Classroom[]) => {
+    const next = [...existing];
+    imported.forEach(room => {
+        const index = next.findIndex(item => item.id === room.id);
+        if (index >= 0) {
+            next[index] = room;
+        } else {
+            next.push(room);
+        }
+    });
+    return next;
+};
+
 export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
@@ -230,7 +243,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
             try {
                 const data = await parseClassroomCSV(e.target.files[0]);
                 if (confirm(`${data.length}件の教室データを読み込みます。既存のデータは上書きされます。よろしいですか？`)) {
-                    onUpdate(data);
+                    onUpdate(mergeClassroomsById(classrooms, data));
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);

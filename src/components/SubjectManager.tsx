@@ -181,6 +181,21 @@ type SMColKey = typeof SM_COL_DEFS[number]['key'];
 type SMColConfig = Record<SMColKey, { width: number; hidden: boolean }>;
 const smColDefaults = (): SMColConfig => Object.fromEntries(SM_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as SMColConfig;
 
+const mergeSubjectsByCode = (existing: Subject[], imported: Subject[]) => {
+    const next = [...existing];
+    imported.forEach(subject => {
+        const key = (subject.code || '').trim() || subject.id;
+        const index = next.findIndex(item => ((item.code || '').trim() || item.id) === key);
+        if (index >= 0) {
+            const current = next[index];
+            next[index] = { ...current, ...subject, id: current.id };
+        } else {
+            next.push(subject);
+        }
+    });
+    return next;
+};
+
 export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, onClose }: Props) => {
     const [editingSubjectModal, setEditingSubjectModal] = useState<Subject | null>(null);
     const [editForm, setEditForm] = useState<Partial<Subject>>({});
@@ -426,8 +441,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                     requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
                     mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
                 }));
-                if (confirm(`${data.length}件の授業データを読み込みます。既存のデータは上書きされ、割り当てもリセットされます。よろしいですか？`)) {
-                    onUpdate(sanitized);
+                if (confirm(`${data.length}件の授業データを読み込みます。コードが一致する授業は上書きし、一致しないものは追加します。よろしいですか？`)) {
+                    onUpdate(mergeSubjectsByCode(subjects, sanitized));
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);
