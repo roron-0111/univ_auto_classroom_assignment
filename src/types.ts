@@ -10,6 +10,12 @@ export const TERM_LABELS: Record<Term, string> = {
     full_year: '通年'
 };
 
+export const getTermLabel = (term: string | null | undefined) => {
+    if (!term) return '未定';
+    return TERM_LABELS[term as Term] || term;
+};
+
+
 /** 配当時、このtermのスロットが占有されたとき、競合キーとしてマークするterm一覧 */
 export const getTermsToMark = (term: Term): Term[] => {
     switch (term) {
@@ -102,6 +108,12 @@ export const DAY_LABELS: Record<DayOfWeek, string> = {
     mon: '月', tue: '火', wed: '水', thu: '木', fri: '金', sat: '土'
 };
 
+export const getDayLabel = (day: string | null | undefined) => {
+    if (!day) return '未定';
+    return DAY_LABELS[day as DayOfWeek] || day;
+};
+
+
 export const PERIOD_LABELS: Record<Period, string> = {
     1: '1-2',
     2: '3-4',
@@ -111,6 +123,14 @@ export const PERIOD_LABELS: Record<Period, string> = {
     6: 'N1-N2',
     7: 'N3-N4'
 };
+
+export const getPeriodLabel = (period: number | string | null | undefined) => {
+    if (period === null || period === undefined || period === '') return '未定';
+    const numeric = Number(period);
+    if (!Number.isFinite(numeric) || numeric <= 0) return '未定';
+    return PERIOD_LABELS[numeric as Period] || String(period);
+};
+
 
 export const ROOM_TYPE_LABELS: Record<Classroom['type'], string> = {
     normal: '一般',

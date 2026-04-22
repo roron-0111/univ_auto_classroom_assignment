@@ -1,6 +1,6 @@
 ﻿import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek } from '../types';
-import { DAY_LABELS, BUILDINGS, TERM_LABELS, ROOM_TYPE_LABELS, normalizeCampusLabel } from '../types';
+import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
@@ -377,7 +377,10 @@ export const SubjectManager = ({
             if (aStart !== bStart) return aStart - bStart;
             return (aEnd || 0) - (bEnd || 0);
         });
-        return patterns.map(p => ({ value: p, label: `${p}講時` }));
+        return patterns.map(p => {
+            const label = getPeriodLabel(p);
+            return { value: p, label: label === '未定' ? '未定' : `${label}講時` };
+        });
     }, [subjects]);
 
     const handleEdit = (subject: Subject) => {
@@ -598,10 +601,10 @@ export const SubjectManager = ({
                                             '教員名': s.teacher,
                                             '開講学部': s.faculty,
                                             '管轄': s.department,
-                                            '配当期': TERM_LABELS[s.term] || s.term,
-                                            '曜日': DAY_LABELS[s.day],
-                                            '講時': s.period,
-                                            '終了講時': s.endPeriod || s.period,
+                                            '配当期': getTermLabel(s.term),
+                                            '曜日': getDayLabel(s.day),
+                                            '講時': getPeriodLabel(s.period),
+                                            '終了講時': getPeriodLabel(s.endPeriod || s.period),
                                             'キャンパス': s.campus,
                                             '履修者数': s.requiredCapacity,
                                             '優先度': s.priority,
@@ -746,9 +749,9 @@ export const SubjectManager = ({
                                         {smShow('teacher') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.teacher}</td>}
                                         {smShow('faculty') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.faculty}</td>}
                                         {smShow('department') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.department}</td>}
-                                        {smShow('term') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{TERM_LABELS[subject.term] || subject.term}</td>}
-                                        {smShow('day') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{DAY_LABELS[subject.day]}</td>}
-                                        {smShow('period') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.period}{subject.endPeriod && subject.endPeriod !== subject.period ? `-${subject.endPeriod}` : ''}</td>}
+                                        {smShow('term') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{getTermLabel(subject.term)}</td>}
+                                        {smShow('day') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{getDayLabel(subject.day)}</td>}
+                                        {smShow('period') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{getPeriodLabel(subject.period)}{subject.endPeriod && subject.endPeriod !== subject.period ? `-${getPeriodLabel(subject.endPeriod)}` : ''}</td>}
                                         {smShow('campus') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.campus}</td>}
                                         {smShow('requiredCapacity') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.requiredCapacity}名</td>}
                                         {smShow('priority') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.priority}</td>}

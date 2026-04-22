@@ -196,7 +196,8 @@ export const SubjectEditModal = ({
             <h4 style={{ ...sectionTitleStyle, color: '#2e7d32' }}>開講条件・配当</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
               <label style={requiredLabelStyle}>配当期</label>
-              <select value={form.term} onChange={e => setForm({ ...form, term: e.target.value as Term })} style={inputStyle}>
+              <select value={form.term || ''} onChange={e => setForm({ ...form, term: e.target.value as Term })} style={inputStyle}>
+                <option value="">未定</option>
                 <option value="spring">春学期</option>
                 <option value="spring_first">春前半</option>
                 <option value="spring_second">春後半</option>
@@ -207,14 +208,16 @@ export const SubjectEditModal = ({
               </select>
 
               <label style={requiredLabelStyle}>曜日</label>
-              <select value={form.day} onChange={e => setForm({ ...form, day: e.target.value as DayOfWeek })} style={inputStyle}>
+              <select value={form.day || ''} onChange={e => setForm({ ...form, day: e.target.value as DayOfWeek })} style={inputStyle}>
+                <option value="">未定</option>
                 {Object.entries(DAY_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
 
               <label style={requiredLabelStyle}>講時</label>
-              <select value={form.period} onChange={e => setForm({ ...form, period: Number(e.target.value) as Period })} style={inputStyle}>
+              <select value={form.period || ''} onChange={e => setForm({ ...form, period: Number(e.target.value) as Period })} style={inputStyle}>
+                <option value="">未定</option>
                 {[1, 2, 3, 4, 5, 6, 7].map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}

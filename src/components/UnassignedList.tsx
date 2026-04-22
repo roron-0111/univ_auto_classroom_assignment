@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
-import { DAY_LABELS, TERM_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST } from '../types';
+import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
 
 export type UnassignedListItem = Subject & {
   _realId?: string;
@@ -165,7 +165,7 @@ export const UnassignedList = ({
     const found = subjects.map(s =>
       s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`
     );
-    return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
+        return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
       const aIsMulti = a.includes('-');
       const bIsMulti = b.includes('-');
       if (aIsMulti !== bIsMulti) return aIsMulti ? 1 : -1;
@@ -338,7 +338,7 @@ export const UnassignedList = ({
               onToggle={(val: string) => toggleFilter(selectedTerms, setSelectedTerms, val as Term)}
               isOpen={isTermOpen}
               setIsOpen={setIsTermOpen}
-              getLabel={(val: string) => TERM_LABELS[val as Term] || val}
+              getLabel={(val: string) => getTermLabel(val)}
             />
           </div>
 
@@ -362,19 +362,22 @@ export const UnassignedList = ({
               onToggle={(val: string) => toggleFilter(selectedDays, setSelectedDays, val as DayOfWeek)}
               isOpen={isDayOpen}
               setIsOpen={setIsDayOpen}
-              getLabel={(val: string) => DAY_LABELS[val as DayOfWeek]}
+              getLabel={(val: string) => getDayLabel(val)}
             />
           </div>
 
           <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="講時"
-              options={periodPatterns.map(p => ({ value: p, label: `${p}講時` }))}
+              options={periodPatterns.map(p => ({ value: p, label: `${getPeriodLabel(p)}講時` }))}
               selected={selectedPeriods}
               onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
               isOpen={isPeriodOpen}
               setIsOpen={setIsPeriodOpen}
-              getLabel={(val: string) => `${val}講時`}
+              getLabel={(val: string) => {
+                const label = getPeriodLabel(val);
+                return label === '未定' ? '未定' : `${label}講時`;
+              }}
             />
           </div>
 
@@ -485,7 +488,7 @@ export const UnassignedList = ({
                     {subject.teacher} ({subject.faculty})
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                    {TERM_LABELS[subject.term]} {DAY_LABELS[subject.day]} {subject.period}{subject.endPeriod && subject.endPeriod > subject.period ? `-${subject.endPeriod}` : ''}講時
+                    {getTermLabel(subject.term)} {getDayLabel(subject.day)} {getPeriodLabel(subject.period)}{subject.endPeriod && subject.endPeriod > subject.period ? `-${getPeriodLabel(subject.endPeriod)}` : ''}講時
                   </div>
                 </div>
               </div>
