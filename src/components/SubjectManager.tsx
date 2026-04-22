@@ -512,7 +512,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                     ))}
                                                 </div>
                                                 <div style={{ marginBottom: '4px' }}>機材･設備：◎=必須 ○=希望</div>
-                                                <div style={{ marginBottom: '4px' }}>列情報は本ページと必ず合わせること</div>
+                                                <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
                                         )}
                                     </div>
