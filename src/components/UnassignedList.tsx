@@ -381,7 +381,7 @@ export const UnassignedList = ({
           <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+              gridTemplateColumns: 'minmax(0, 1fr) 18px minmax(0, 1fr)',
               alignItems: 'center',
               gap: '4px',
               minWidth: 0
@@ -394,13 +394,15 @@ export const UnassignedList = ({
                 style={{
                   width: '100%',
                   minWidth: 0,
+                  boxSizing: 'border-box',
+                  height: '30px',
                   fontSize: '0.75rem',
                   padding: '4px 6px',
                   borderRadius: '4px',
                   border: '1px solid #ccc'
                 }}
               />
-              <span style={{ fontSize: '0.75rem', color: '#666' }}>〜</span>
+              <span style={{ fontSize: '0.75rem', color: '#666', textAlign: 'center' }}>〜</span>
               <input
                 type="number"
                 value={capacityMax}
@@ -409,6 +411,8 @@ export const UnassignedList = ({
                 style={{
                   width: '100%',
                   minWidth: 0,
+                  boxSizing: 'border-box',
+                  height: '30px',
                   fontSize: '0.75rem',
                   padding: '4px 6px',
                   borderRadius: '4px',
