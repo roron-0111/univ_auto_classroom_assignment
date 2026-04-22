@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, Check } from 'lucide-react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, getEquipmentStyle } from '../types';
+import { SUBJECT_EQUIPMENT_CHOICES } from '../utils/equipmentVisibility';
 
 interface Props {
   subject: Subject;
@@ -9,23 +10,10 @@ interface Props {
   currentCampusLabel: string;
   facultyOptions: string[];
   departmentOptions: string[];
+  title?: string;
   onSave: (updated: Subject) => void;
   onClose: () => void;
 }
-
-const EQUIPMENT_CHOICES = [
-  'PJ(中)',
-  'PJ(横)',
-  'タッチディスプレイ',
-  'BD',
-  '黒板',
-  '白板',
-  'マイク',
-  'ブラインド',
-  'PC',
-  '可動',
-  '固定'
-];
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -35,12 +23,35 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box'
 };
 
+const requiredLabelStyle: React.CSSProperties = {
+  color: '#b91c1c',
+  fontWeight: 700
+};
+
+const labelStyle: React.CSSProperties = {
+  fontWeight: 600
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: '1rem',
+  fontWeight: 700
+};
+
+const checkboxLabelStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  cursor: 'pointer'
+};
+
 export const SubjectEditModal = ({
   subject,
   availableEquipment,
   currentCampusLabel,
   facultyOptions,
   departmentOptions,
+  title = '授業情報の編集',
   onSave,
   onClose
 }: Props) => {
@@ -49,14 +60,20 @@ export const SubjectEditModal = ({
     campus: currentCampusLabel,
     faculty: subject.faculty || facultyOptions[0] || '',
     department: subject.department || departmentOptions[0] || '',
+    priority: subject.priority ?? 1,
     requiredEquipment: subject.requiredEquipment || [],
     mandatoryEquipment: subject.mandatoryEquipment || [],
     previousRooms: subject.previousRooms || []
   });
 
+  const allowedEquipment = useMemo(
+    () => new Set<string>([...SUBJECT_EQUIPMENT_CHOICES, ...availableEquipment]),
+    [availableEquipment]
+  );
+
   const toggleListValue = (key: 'requiredEquipment' | 'mandatoryEquipment', value: string) => {
     setForm(prev => {
-      const current = (prev[key] || []) as string[];
+      const current = prev[key] || [];
       return {
         ...prev,
         [key]: current.includes(value) ? current.filter(v => v !== value) : [...current, value]
@@ -75,8 +92,9 @@ export const SubjectEditModal = ({
       campus: currentCampusLabel,
       faculty: form.faculty,
       department: form.department,
-      requiredEquipment: (form.requiredEquipment || []).filter(eq => EQUIPMENT_CHOICES.includes(eq)),
-      mandatoryEquipment: (form.mandatoryEquipment || []).filter(eq => EQUIPMENT_CHOICES.includes(eq)),
+      priority: form.priority ?? 1,
+      requiredEquipment: (form.requiredEquipment || []).filter(eq => allowedEquipment.has(eq)),
+      mandatoryEquipment: (form.mandatoryEquipment || []).filter(eq => allowedEquipment.has(eq)),
       previousRooms: form.previousRooms || []
     };
 
@@ -123,7 +141,7 @@ export const SubjectEditModal = ({
             borderBottom: '1px solid #e5e7eb'
           }}
         >
-          <h3 style={{ margin: 0, fontSize: '1.05rem' }}>授業情報の編集</h3>
+          <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{title}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }} aria-label="閉じる">
             <X />
           </button>
@@ -131,21 +149,21 @@ export const SubjectEditModal = ({
 
         <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <section style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <h4 style={{ margin: 0, color: '#1976d2' }}>基本情報</h4>
+            <h4 style={{ ...sectionTitleStyle, color: '#1976d2' }}>基本情報</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '10px', alignItems: 'center' }}>
-              <label>時間割コード</label>
+              <label style={requiredLabelStyle}>コード</label>
               <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} style={inputStyle} />
 
-              <label>時間割名称</label>
+              <label style={requiredLabelStyle}>時間割名称</label>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
 
-              <label>教員コード</label>
+              <label style={requiredLabelStyle}>教員コード</label>
               <input value={form.teacherCode || ''} onChange={e => setForm({ ...form, teacherCode: e.target.value })} style={inputStyle} />
 
-              <label>教員名</label>
+              <label style={requiredLabelStyle}>教員名</label>
               <input value={form.teacher} onChange={e => setForm({ ...form, teacher: e.target.value })} style={inputStyle} />
 
-              <label>開講学部</label>
+              <label style={requiredLabelStyle}>開講学部</label>
               <select value={form.faculty || ''} onChange={e => setForm({ ...form, faculty: e.target.value })} style={inputStyle}>
                 <option value="">(未選択)</option>
                 {facultyOptions.map(v => (
@@ -153,7 +171,7 @@ export const SubjectEditModal = ({
                 ))}
               </select>
 
-              <label>管轄</label>
+              <label style={requiredLabelStyle}>管轄</label>
               <select value={form.department || ''} onChange={e => setForm({ ...form, department: e.target.value })} style={inputStyle}>
                 <option value="">(未選択)</option>
                 {departmentOptions.map(v => (
@@ -161,10 +179,10 @@ export const SubjectEditModal = ({
                 ))}
               </select>
 
-              <label>キャンパス</label>
+              <label style={requiredLabelStyle}>キャンパス</label>
               <input value={currentCampusLabel} readOnly style={{ ...inputStyle, background: '#f7f7f7', color: '#666' }} />
 
-              <label>過年度教室</label>
+              <label>過去教室</label>
               <input
                 value={form.previousRooms?.join(', ') || ''}
                 onChange={e => setForm({ ...form, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
@@ -175,9 +193,9 @@ export const SubjectEditModal = ({
           </section>
 
           <section style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: '#fff', borderRadius: '8px', border: '1px solid #e3f2fd' }}>
-            <h4 style={{ margin: 0, color: '#2e7d32' }}>開講条件・配当</h4>
+            <h4 style={{ ...sectionTitleStyle, color: '#2e7d32' }}>開講条件・配当</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
-              <label>配当期</label>
+              <label style={requiredLabelStyle}>配当期</label>
               <select value={form.term} onChange={e => setForm({ ...form, term: e.target.value as Term })} style={inputStyle}>
                 <option value="spring">春学期</option>
                 <option value="spring_first">春前半</option>
@@ -188,42 +206,42 @@ export const SubjectEditModal = ({
                 <option value="full_year">通年</option>
               </select>
 
-              <label>曜日</label>
+              <label style={requiredLabelStyle}>曜日</label>
               <select value={form.day} onChange={e => setForm({ ...form, day: e.target.value as DayOfWeek })} style={inputStyle}>
                 {Object.entries(DAY_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
 
-              <label>講時</label>
+              <label style={requiredLabelStyle}>講時</label>
               <select value={form.period} onChange={e => setForm({ ...form, period: Number(e.target.value) as Period })} style={inputStyle}>
                 {[1, 2, 3, 4, 5, 6, 7].map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
 
-              <label>履修想定人数</label>
+              <label style={requiredLabelStyle}>履修想定人数</label>
               <input type="number" value={form.requiredCapacity} onChange={e => setForm({ ...form, requiredCapacity: Number(e.target.value) })} style={inputStyle} />
 
-              <label>優先度</label>
-              <select value={form.priority || 1} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} style={inputStyle}>
+              <label style={requiredLabelStyle}>優先度（1[低]～3[高]）</label>
+              <select value={form.priority ?? 1} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} style={inputStyle}>
                 {[1, 2, 3].map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
 
-              <label>必要教室数</label>
+              <label style={requiredLabelStyle}>必要教室数</label>
               <input type="number" min="1" value={form.requiredRoomCount || 1} onChange={e => setForm({ ...form, requiredRoomCount: Number(e.target.value) })} style={inputStyle} />
 
               <label>希望建物</label>
               <select value={form.buildingPreference || ''} onChange={e => setForm({ ...form, buildingPreference: e.target.value })} style={inputStyle}>
-                <option value="">(なし)</option>
+                <option value="">(未選択)</option>
                 {BUILDINGS.map(b => (
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>
 
-              <label>希望教室タイプ</label>
+              <label style={requiredLabelStyle}>希望教室タイプ</label>
               <select value={form.preferredRoomType || 'normal'} onChange={e => setForm({ ...form, preferredRoomType: e.target.value as Subject['preferredRoomType'] })} style={inputStyle}>
                 <option value="normal">一般</option>
                 <option value="pc">PC</option>
@@ -232,7 +250,7 @@ export const SubjectEditModal = ({
             </div>
 
             <div>
-              <label style={{ display: 'block', marginBottom: '8px' }}>機材・設備</label>
+              <label style={{ ...labelStyle, display: 'block', marginBottom: '8px' }}>機材・設備</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {availableEquipment.map(eq => {
                   const style = getEquipmentStyle(eq);
@@ -258,21 +276,21 @@ export const SubjectEditModal = ({
                 })}
               </div>
               <div style={{ marginTop: '10px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <label>
+                <label style={checkboxLabelStyle}>
                   <input
                     type="checkbox"
                     checked={!!form.requiresProjector}
                     onChange={e => setForm({ ...form, requiresProjector: e.target.checked })}
-                  />{' '}
-                  プロジェクター必須
+                  />
+                  <span>プロジェクター必須</span>
                 </label>
-                <label>
+                <label style={checkboxLabelStyle}>
                   <input
                     type="checkbox"
                     checked={!!form.requiresMovable}
                     onChange={e => setForm({ ...form, requiresMovable: e.target.checked })}
-                  />{' '}
-                  可動設備
+                  />
+                  <span>可動必須</span>
                 </label>
               </div>
             </div>

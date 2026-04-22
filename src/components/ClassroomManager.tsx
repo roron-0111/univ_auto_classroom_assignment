@@ -109,6 +109,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
+    const [classroomModalMode, setClassroomModalMode] = useState<'add' | 'edit' | null>(null);
     const [colConfig, setColConfig] = useState<CRColConfig>(() => parseCRColConfig(localStorage.getItem('crColConfig')));
     const [showColSettings, setShowColSettings] = useState(false);
     const crColSettingsRef = useRef<HTMLDivElement>(null);
@@ -218,6 +219,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     };
 
     const handleEdit = (room: Classroom) => {
+        setClassroomModalMode('edit');
         setEditingClassroom(room);
     };
 
@@ -254,7 +256,20 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     };
 
     const startAdding = () => {
-        setIsAdding(true);
+        setClassroomModalMode('add');
+        setIsAdding(false);
+        setEditingClassroom({
+            id: `c-${Date.now()}`,
+            name: '',
+            campus: currentCampusLabel,
+            building: BUILDINGS[0],
+            capacity: 50,
+            examCapacity: 25,
+            type: 'normal',
+            isMovable: false,
+            equipment: [],
+            isExcluded: false
+        });
         setEditForm({
             id: '',
             name: '',
@@ -635,15 +650,24 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                 <ClassroomEditModal
                     key={editingClassroom.id}
                     classroom={editingClassroom}
+                    title={classroomModalMode === 'add' ? '新規教室情報の作成' : '教室情報の編集'}
                     onSave={(updated) => {
                         const next = {
                             ...updated,
                             campus: normalizeCampusLabel(updated.campus || currentCampusLabel) || currentCampusLabel
                         };
-                        onUpdate(classrooms.map(r => r.id === updated.id ? next : r));
+                        if (classroomModalMode === 'add') {
+                            onUpdate([...classrooms, next]);
+                        } else {
+                            onUpdate(classrooms.map(r => r.id === updated.id ? next : r));
+                        }
                         setEditingClassroom(null);
+                        setClassroomModalMode(null);
                     }}
-                    onClose={() => setEditingClassroom(null)}
+                    onClose={() => {
+                        setEditingClassroom(null);
+                        setClassroomModalMode(null);
+                    }}
                 />
             )}
         </div>

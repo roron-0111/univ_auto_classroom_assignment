@@ -349,7 +349,7 @@ export const SubjectManager = ({
         day: 'mon',
         period: 1,
         requiredCapacity: 30,
-        priority: 2,
+        priority: 1,
         campus: currentCampusLabel,
         requiredEquipment: [],
         previousRooms: [],
@@ -813,6 +813,7 @@ export const SubjectManager = ({
                     currentCampusLabel={currentCampusLabel}
                     facultyOptions={facultyOptions}
                     departmentOptions={departmentOptions}
+                    title={subjectModalMode === 'add' ? '新規授業情報の作成' : '授業情報の編集'}
                     onSave={(updated) => {
                         if (subjectModalMode === 'add') {
                             onUpdate([...subjects, updated]);
