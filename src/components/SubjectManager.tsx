@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect, useMemo } from 'react';
-import type { Subject, Allocation, Classroom, Term, DayOfWeek } from '../types';
+import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
@@ -345,9 +345,9 @@ export const SubjectManager = ({
         teacher: '',
         faculty: facultyOptions[0] || '',
         department: departmentOptions[0] || '',
-        term: 'spring',
-        day: 'mon',
-        period: 1,
+        term: '' as Term,
+        day: '' as DayOfWeek,
+        period: 0 as Period,
         requiredCapacity: 30,
         priority: 1,
         campus: currentCampusLabel,
