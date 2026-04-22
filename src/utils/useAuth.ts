@@ -8,6 +8,16 @@ import {
     signOut
 } from 'firebase/auth';
 
+type AuthErrorLike = {
+    code?: unknown;
+};
+
+const getAuthErrorCode = (error: unknown) => {
+    if (!error || typeof error !== 'object') return '';
+    const code = (error as AuthErrorLike).code;
+    return typeof code === 'string' ? code : '';
+};
+
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -26,18 +36,19 @@ export const useAuth = () => {
 
         try {
             return await signInWithEmailAndPassword(auth, email, pass);
-        } catch (err: any) {
-            console.log("Login error code:", err.code);
+        } catch (err: unknown) {
+            const code = getAuthErrorCode(err);
+            console.log("Login error code:", code);
             // アカウントが存在しない、またはクレデンシャルが無効（新規）な場合は自動作成
             if (
-                err.code === 'auth/user-not-found' ||
-                err.code === 'auth/invalid-credential' ||
-                err.code === 'auth/wrong-password' ||
-                err.code === 'auth/invalid-email'
+                code === 'auth/user-not-found' ||
+                code === 'auth/invalid-credential' ||
+                code === 'auth/wrong-password' ||
+                code === 'auth/invalid-email'
             ) {
                 try {
                     return await createUserWithEmailAndPassword(auth, email, pass);
-                } catch (signupErr: any) {
+                } catch (signupErr: unknown) {
                     console.error("Signup error after login fail:", signupErr);
                     throw signupErr;
                 }

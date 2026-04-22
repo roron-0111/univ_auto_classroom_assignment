@@ -334,27 +334,6 @@ const classifyUnassigned = (
         };
     }
 
-    if (false) {
-        return {
-            reason: 'U3_term_split_blocked',
-            detail: '春秋同一教室の条件を満たせない'
-        };
-    }
-
-    if (false) {
-        return {
-            reason: 'U2_room_type_blocked',
-            detail: '教室タイプ一致の候補がない'
-        };
-    }
-
-    if (false) {
-        return {
-            reason: 'U2_room_type_blocked',
-            detail: '教室タイプ条件の例外配当でも成立しない'
-        };
-    }
-
     return {
         reason: 'U1_no_hard_candidate',
         detail: '候補教室が見つからない'

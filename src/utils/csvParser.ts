@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import type { Classroom, Subject, Term, DayOfWeek, Period } from '../types';
-import { normalizeEquipmentName } from '../types';
+import { normalizeEquipmentName, normalizeCampusLabel } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, sanitizeSubjectEquipmentList } from './equipmentVisibility';
 
 // Header definitions
@@ -24,6 +24,18 @@ export const SUBJECT_IMPORT_REQUIRED_COLUMNS: SubjectImportColumnDef[] = [
     { label: 'キャンパス', aliases: ['キャンパス', 'Campus'] },
     { label: '必要教室数', aliases: ['必要教室数', 'RequiredRoomCount'] },
     { label: 'タイプ', aliases: ['タイプ', '希望教室タイプ', 'PreferredRoomType'] },
+];
+
+export type ClassroomImportColumnDef = {
+    label: string;
+    aliases: string[];
+};
+
+export const CLASSROOM_IMPORT_REQUIRED_COLUMNS: ClassroomImportColumnDef[] = [
+    { label: '教室名', aliases: ['教室名', 'Name'] },
+    { label: 'キャンパス', aliases: ['キャンパス', 'Campus'] },
+    { label: '建物', aliases: ['建物', 'Building'] },
+    { label: '収容人数', aliases: ['収容人数', 'Capacity'] },
 ];
 
 const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim();
@@ -243,6 +255,94 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                 });
 
                 resolve(Array.from(grouped.values()));
+            },
+            error: (error) => reject(error),
+        });
+    });
+};
+
+export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
+    return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const rows = results.data as Record<string, string>[];
+                const headers = (results.meta.fields || []).map(normalizeCsvHeader).filter(Boolean);
+                const missingHeaders = CLASSROOM_IMPORT_REQUIRED_COLUMNS.filter(col => !hasCsvHeader(headers, col.aliases));
+                if (missingHeaders.length > 0) {
+                    reject(new Error(`必須列が不足しています: ${missingHeaders.map(col => col.label).join('、')}`));
+                    return;
+                }
+
+                const rowIssues: string[] = [];
+                rows.forEach((row, index) => {
+                    const missing = CLASSROOM_IMPORT_REQUIRED_COLUMNS.filter(col => !getCsvValue(row, col.aliases));
+                    const capacityValue = parseInt(getCsvValue(row, ['収容人数', 'Capacity']), 10);
+                    if ((!missing.some(col => col.label === '収容人数')) && (!Number.isFinite(capacityValue) || capacityValue <= 0)) {
+                        missing.push({ label: '収容人数', aliases: ['収容人数'] });
+                    }
+                    if (missing.length > 0) {
+                        rowIssues.push(`${index + 2}行目(${missing.map(col => col.label).join('、')})`);
+                    }
+                });
+                if (rowIssues.length > 0) {
+                    reject(new Error(`必須項目が不足している行があります: ${rowIssues.slice(0, 10).join('、')}${rowIssues.length > 10 ? '…' : ''}`));
+                    return;
+                }
+
+                const classrooms: Classroom[] = rows.map((row) => {
+                    const getVal = (keys: string[]) => {
+                        const key = keys.find(k => row[k] !== undefined);
+                        return key ? row[key] : '';
+                    };
+                    const isTrue = (val: string) =>
+                        val === 'true' || val === 'TRUE' || val === '1' || val === '◯' || val === 'あり';
+
+                    const equipment: string[] = [];
+                    Object.keys(row).forEach((k) => {
+                        if (isTrue(row[k])) {
+                            if (k === 'PJ(中)' || k.includes('中PJ')) {
+                                equipment.push('PJ(中)');
+                            } else if (k === 'PJ(横)' || k.includes('横PJ')) {
+                                equipment.push('PJ(横)');
+                            } else if (k === '白板' || k.includes('Whiteboard')) {
+                                equipment.push('白板');
+                            } else if (k === '黒板' || k.includes('Blackboard')) {
+                                equipment.push('黒板');
+                            } else if (k === 'マイク') {
+                                equipment.push('マイク');
+                            } else if (k === 'ブラインド') {
+                                equipment.push('ブラインド');
+                            } else if (!['ID', '教室ID', 'Name', '教室名', 'キャンパス', 'Campus', '建物', 'Building', '収容人数', 'Capacity', 'Type', 'タイプ', 'IsMovable', '可動', '移動', 'IsExcluded', '配当対象外'].some(known => k.includes(known))) {
+                                equipment.push(normalizeEquipmentName(k));
+                            }
+                        }
+                    });
+
+                    const campus = normalizeCampusLabel(getVal(['Campus', 'キャンパス'])) || '';
+                    const capacity = parseInt(getVal(['Capacity', '収容人数']), 10) || 0;
+                    const examCapacity = parseInt(getVal(['ExamCapacity', '試験時定員', '試験定員']), 10) || undefined;
+                    const typeVal = getVal(['Type', 'タイプ']).toLowerCase();
+                    let type: Classroom['type'] = 'normal';
+                    if (typeVal.includes('pc')) type = 'pc';
+                    else if (typeVal.includes('ゼミ') || typeVal.includes('seminar')) type = 'seminar';
+                    else if (typeVal.includes('other')) type = 'other';
+
+                    return {
+                        id: getVal(['ID', '教室ID', '教室名']) || getVal(['教室名', 'Name']),
+                        name: getVal(['教室名', 'Name']),
+                        campus,
+                        building: getVal(['建物', 'Building']) || '不明',
+                        capacity,
+                        examCapacity,
+                        type,
+                        isMovable: isTrue(getVal(['IsMovable', '可動', '移動'])),
+                        equipment: sanitizeSubjectEquipmentList([...new Set(equipment)]),
+                        isExcluded: isTrue(getVal(['IsExcluded', '配当対象外']))
+                    };
+                });
+                resolve(classrooms);
             },
             error: (error) => reject(error),
         });
