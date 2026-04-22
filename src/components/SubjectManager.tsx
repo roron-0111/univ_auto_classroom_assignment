@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
+﻿import { useState, useRef, useEffect, useMemo } from 'react';
+import type { Subject, Allocation, Classroom, Term, DayOfWeek } from '../types';
 import { DAY_LABELS, BUILDINGS, TERM_LABELS, ROOM_TYPE_LABELS, normalizeCampusLabel } from '../types';
-import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
+import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
@@ -287,8 +287,7 @@ export const SubjectManager = ({
     onClose
 }: Props) => {
     const [editingSubjectModal, setEditingSubjectModal] = useState<Subject | null>(null);
-    const [editForm, setEditForm] = useState<Partial<Subject>>({});
-    const [isAdding, setIsAdding] = useState(false);
+    const [subjectModalMode, setSubjectModalMode] = useState<'add' | 'edit' | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [colConfig, setColConfig] = useState<SMColConfig>(() => parseSMColConfig(localStorage.getItem('smColConfig')));
     const [showColSettings, setShowColSettings] = useState(false);
@@ -338,6 +337,26 @@ export const SubjectManager = ({
     const facultyOptions = subjectTaxonomy.faculties;
     const departmentOptions = subjectTaxonomy.departments;
 
+    const createBlankSubject = (): Subject => ({
+        id: `s-${Date.now()}`,
+        code: '',
+        name: '',
+        teacherCode: '',
+        teacher: '',
+        faculty: facultyOptions[0] || '',
+        department: departmentOptions[0] || '',
+        term: 'spring',
+        day: 'mon',
+        period: 1,
+        requiredCapacity: 30,
+        priority: 2,
+        campus: currentCampusLabel,
+        requiredEquipment: [],
+        previousRooms: [],
+        requiredRoomCount: 1,
+        buildingPreference: ''
+    });
+
     // フィルタステート（配列で保持）
     const [filters, setFilters] = useState<SubjectFilters>({ ...EMPTY_SUBJECT_FILTERS });
 
@@ -362,6 +381,7 @@ export const SubjectManager = ({
     }, [subjects]);
 
     const handleEdit = (subject: Subject) => {
+        setSubjectModalMode('edit');
         setEditingSubjectModal(subject);
     };
 
@@ -450,26 +470,6 @@ export const SubjectManager = ({
         });
     };
 
-    const handleSave = () => {
-        if (!editForm.id || !editForm.name || !editForm.code || !editForm.faculty || !editForm.department) {
-            alert('時間割コード、時間割名称、開講学部、管轄を入力してください。');
-            return;
-        }
-        if (subjects.find(s => s.id === editForm.id)) {
-            alert('その授業IDは既に存在します。');
-            return;
-        }
-        const sanitized = {
-            ...editForm,
-            requiredEquipment: (editForm.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
-            mandatoryEquipment: (editForm.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
-            campus: currentCampusLabel
-        } as Subject;
-        onUpdate([...subjects, sanitized]);
-        setIsAdding(false);
-        setEditForm({});
-    };
-
     const handleDelete = (id: string) => {
         if (confirm('本当にこの授業を削除しますか？割り当ても解除されます。')) {
             onUpdate(subjects.filter(s => s.id !== id));
@@ -483,26 +483,8 @@ export const SubjectManager = ({
     };
 
     const startAdding = () => {
-        setIsAdding(true);
-        setEditForm({
-            id: 's-' + Date.now(),
-            code: '',
-            name: '',
-            teacherCode: '',
-            teacher: '',
-            faculty: facultyOptions[0] || '',
-            department: departmentOptions[0] || '',
-            term: 'spring',
-            day: 'mon',
-            period: 1,
-            requiredCapacity: 30,
-            priority: 2,
-            campus: currentCampusLabel,
-            requiredEquipment: [],
-            previousRooms: [],
-            requiredRoomCount: 1,
-            buildingPreference: ''
-        });
+        setSubjectModalMode('add');
+        setEditingSubjectModal(createBlankSubject());
     };
 
     const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -756,34 +738,6 @@ export const SubjectManager = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {isAdding && (
-                                    <tr style={{ background: '#f0f4ff' }}>
-                                        {smShow('code') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} style={{ width: '100%' }} placeholder="A0001" /></td>}
-                                        {smShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} /></td>}
-                                        {smShow('teacherCode') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacherCode || ''} onChange={e => setEditForm({ ...editForm, teacherCode: e.target.value })} style={{ width: '100%' }} placeholder="T001" /></td>}
-                                        {smShow('teacher') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacher} onChange={e => setEditForm({ ...editForm, teacher: e.target.value })} style={{ width: '100%' }} /></td>}
-                                        {smShow('faculty') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.faculty || ''} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }}><option value="">(未選択)</option>{facultyOptions.map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
-                                        {smShow('department') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.department || ''} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}><option value="">(未選択)</option>{departmentOptions.map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
-                                        {smShow('term') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.term} onChange={e => setEditForm({ ...editForm, term: e.target.value as Term })} style={{ width: '100%' }}><option value="spring">春学期</option><option value="spring_first">春前半</option><option value="spring_second">春後半</option><option value="autumn">秋学期</option><option value="autumn_first">秋前半</option><option value="autumn_second">秋後半</option><option value="full_year">通年</option></select></td>}
-                                        {smShow('day') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.day} onChange={e => setEditForm({ ...editForm, day: e.target.value as DayOfWeek })} style={{ width: '100%' }}>{Object.entries(DAY_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}</select></td>}
-                                        {smShow('period') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.period} onChange={e => setEditForm({ ...editForm, period: Number(e.target.value) as Period })} style={{ width: '100%' }}>{[1, 2, 3, 4, 5, 6, 7].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
-                                        {smShow('campus') && <td style={{ padding: '8px', border: '1px solid #ddd', color: '#666' }}>{currentCampusLabel}</td>}
-                                        {smShow('requiredCapacity') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" value={editForm.requiredCapacity} onChange={e => setEditForm({ ...editForm, requiredCapacity: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
-                                        {smShow('priority') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.priority || 1} onChange={e => setEditForm({ ...editForm, priority: Number(e.target.value) })} style={{ width: '100%' }}>{[1, 2, 3].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
-                                        {smShow('requiredRoomCount') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" min="1" value={editForm.requiredRoomCount || 1} onChange={e => setEditForm({ ...editForm, requiredRoomCount: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
-                                        {smShow('buildingPreference') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.buildingPreference || ''} onChange={e => setEditForm({ ...editForm, buildingPreference: e.target.value })} style={{ width: '100%', padding: '4px' }}><option value="">(なし)</option>{BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}</select></td>}
-                                        {smShow('preferredRoomType') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.preferredRoomType || 'normal'} onChange={e => setEditForm({ ...editForm, preferredRoomType: e.target.value as Subject['preferredRoomType'] })} style={{ width: '100%' }}><option value="normal">一般</option><option value="pc">PC</option><option value="seminar">ゼミ</option></select></td>}
-                                        {smShow('requiredEquipment') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.requiredEquipment?.join(' ') || ''} onChange={e => setEditForm({ ...editForm, requiredEquipment: e.target.value.split(/\s+/).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: プロジェクタ 可動" /></td>}
-                                        {smShow('previousRooms') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.previousRooms?.join(',')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201,3-202" /></td>}
-                                        {smShow('allocatedRoom') && <td style={{ padding: '8px', border: '1px solid #ddd' }} />}
-                                        <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                            <div style={{ display: 'flex', gap: '6px' }}>
-                                                <button onClick={handleSave} style={{ background: '#2e7d32', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><Check size={16} /></button>
-                                                <button onClick={() => { setIsAdding(false); setEditForm({}); }} style={{ background: '#d32f2f', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer' }}><X size={16} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
                                 {sortedSubjects.map(subject => (
                                     <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
                                         {smShow('code') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>}
@@ -828,7 +782,7 @@ export const SubjectManager = ({
                                         </td>
                                     </tr>
                                 ))}
-                                {sortedSubjects.length === 0 && !isAdding && (
+                                {sortedSubjects.length === 0  && (
                                     <tr>
                                         <td colSpan={19} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
@@ -852,7 +806,7 @@ export const SubjectManager = ({
                 </div>
             </div>
             {editingSubjectModal && (
-            <SubjectEditModal
+                <SubjectEditModal
                     key={editingSubjectModal.id}
                     subject={editingSubjectModal}
                     availableEquipment={availableEquipment}
@@ -860,10 +814,18 @@ export const SubjectManager = ({
                     facultyOptions={facultyOptions}
                     departmentOptions={departmentOptions}
                     onSave={(updated) => {
-                        onUpdate(subjects.map(s => s.id === updated.id ? updated : s));
+                        if (subjectModalMode === 'add') {
+                            onUpdate([...subjects, updated]);
+                        } else {
+                            onUpdate(subjects.map(s => s.id === updated.id ? updated : s));
+                        }
                         setEditingSubjectModal(null);
+                        setSubjectModalMode(null);
                     }}
-                    onClose={() => setEditingSubjectModal(null)}
+                    onClose={() => {
+                        setEditingSubjectModal(null);
+                        setSubjectModalMode(null);
+                    }}
                 />
             )}
             {showTaxonomyModal && (
@@ -880,3 +842,4 @@ export const SubjectManager = ({
         </div>
     );
 };
+
