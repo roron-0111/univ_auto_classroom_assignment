@@ -433,9 +433,10 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     };
 
     const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
+        const input = e.currentTarget;
+        if (input.files && input.files[0]) {
             try {
-                const data = await parseSubjectCSV(e.target.files[0]);
+                const data = await parseSubjectCSV(input.files[0]);
                 const sanitized = data.map(subject => ({
                     ...subject,
                     requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
@@ -446,6 +447,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);
+            } finally {
+                input.value = '';
             }
         }
     };

@@ -239,14 +239,17 @@ export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     };
 
     const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
+        const input = e.currentTarget;
+        if (input.files && input.files[0]) {
             try {
-                const data = await parseClassroomCSV(e.target.files[0]);
+                const data = await parseClassroomCSV(input.files[0]);
                 if (confirm(`${data.length}件の教室データを読み込みます。既存のデータは上書きされます。よろしいですか？`)) {
                     onUpdate(mergeClassroomsById(classrooms, data));
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);
+            } finally {
+                input.value = '';
             }
         }
     };
