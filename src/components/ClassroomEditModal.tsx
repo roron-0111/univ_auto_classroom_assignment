@@ -6,6 +6,7 @@ import { ROOM_TYPE_LABELS, getEquipmentStyle, BUILDINGS, EQUIPMENT_LIST } from '
 interface Props {
   classroom: Classroom;
   title?: string;
+  existingIds: string[];
   onSave: (updated: Classroom) => void;
   onClose: () => void;
 }
@@ -18,15 +19,29 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box'
 };
 
-export const ClassroomEditModal = ({ classroom, title = '教室情報の編集', onSave, onClose }: Props) => {
+export const ClassroomEditModal = ({ classroom, title = '教室情報の編集', existingIds, onSave, onClose }: Props) => {
   const [form, setForm] = useState<Classroom>({ ...classroom });
 
   const handleSave = () => {
-    if (!form.id || !form.name) {
+    const nextId = form.id.trim();
+    const nextName = form.name.trim();
+    const originalId = classroom.id.trim();
+
+    if (!nextId || !nextName) {
       alert('教室IDと教室名を入力してください。');
       return;
     }
-    onSave(form);
+
+    if (existingIds.some(id => id.trim() === nextId && id.trim() !== originalId)) {
+      alert('その教室IDはすでに存在します。');
+      return;
+    }
+
+    onSave({
+      ...form,
+      id: nextId,
+      name: nextName
+    });
   };
 
   const toggleEq = (name: string) => {
@@ -56,7 +71,7 @@ export const ClassroomEditModal = ({ classroom, title = '教室情報の編集',
       <div
         style={{
           background: '#fff',
-          width: 'min(900px, 100%)',
+          width: 'min(760px, 100%)',
           maxHeight: '92vh',
           overflow: 'auto',
           borderRadius: '12px',
@@ -68,7 +83,7 @@ export const ClassroomEditModal = ({ classroom, title = '教室情報の編集',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '18px 24px',
+            padding: '16px 20px',
             borderBottom: '1px solid #e5e7eb'
           }}
         >
@@ -78,10 +93,10 @@ export const ClassroomEditModal = ({ classroom, title = '教室情報の編集',
           </button>
         </div>
 
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.9rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '10px', alignItems: 'center' }}>
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.9rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: '10px', alignItems: 'center' }}>
             <label style={{ fontWeight: 700, color: '#555' }}>教室ID</label>
-            <input disabled value={form.id} style={{ ...inputStyle, background: '#f5f5f5' }} />
+            <input value={form.id} onChange={e => setForm({ ...form, id: e.target.value })} style={inputStyle} />
 
             <label style={{ fontWeight: 700, color: '#555' }}>教室名</label>
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
@@ -146,7 +161,7 @@ export const ClassroomEditModal = ({ classroom, title = '教室情報の編集',
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '0 24px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '0 20px 20px' }}>
           <button onClick={onClose} style={{ padding: '8px 20px', background: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>キャンセル</button>
           <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 20px', background: '#646cff', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
             <Check size={18} /> 保存

@@ -1598,8 +1598,9 @@ function App() {
           editingClassroom && (
             <ClassroomEditModal
               classroom={editingClassroom}
+              existingIds={classrooms.map(r => r.id)}
               onSave={(updated) => {
-                setClassrooms(prev => prev.map(r => r.id === updated.id ? updated : r));
+                setClassrooms(prev => prev.map(r => r.id === editingClassroom.id ? updated : r));
                 setEditingClassroomId(null);
               }}
               onClose={() => setEditingClassroomId(null)}

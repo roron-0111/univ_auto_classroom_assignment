@@ -259,7 +259,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         setClassroomModalMode('add');
         setIsAdding(false);
         setEditingClassroom({
-            id: `c-${Date.now()}`,
+            id: '',
             name: '',
             campus: currentCampusLabel,
             building: BUILDINGS[0],
@@ -650,6 +650,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                 <ClassroomEditModal
                     key={editingClassroom.id}
                     classroom={editingClassroom}
+                    existingIds={classrooms.map(r => r.id)}
                     title={classroomModalMode === 'add' ? '新規教室情報の作成' : '教室情報の編集'}
                     onSave={(updated) => {
                         const next = {
@@ -659,7 +660,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                         if (classroomModalMode === 'add') {
                             onUpdate([...classrooms, next]);
                         } else {
-                            onUpdate(classrooms.map(r => r.id === updated.id ? next : r));
+                            onUpdate(classrooms.map(r => r.id === editingClassroom.id ? next : r));
                         }
                         setEditingClassroom(null);
                         setClassroomModalMode(null);

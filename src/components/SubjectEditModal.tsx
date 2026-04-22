@@ -220,10 +220,10 @@ export const SubjectEditModal = ({
                 ))}
               </select>
 
-              <label style={requiredLabelStyle}>履修想定人数</label>
+              <label>履修想定人数</label>
               <input type="number" value={form.requiredCapacity} onChange={e => setForm({ ...form, requiredCapacity: Number(e.target.value) })} style={inputStyle} />
 
-              <label style={requiredLabelStyle}>優先度（1[低]～3[高]）</label>
+              <label>優先度（1[低]～3[高]）</label>
               <select value={form.priority ?? 1} onChange={e => setForm({ ...form, priority: Number(e.target.value) })} style={inputStyle}>
                 {[1, 2, 3].map(v => (
                   <option key={v} value={v}>{v}</option>
