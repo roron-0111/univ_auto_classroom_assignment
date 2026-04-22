@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, BUILDINGS, TERM_LABELS, ROOM_TYPE_LABELS } from '../types';
+import { DAY_LABELS, BUILDINGS, TERM_LABELS, ROOM_TYPE_LABELS, normalizeCampusLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Check, Upload, Download, Search } from 'lucide-react';
 import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
+import type { SubjectTaxonomy } from '../utils/subjectTaxonomy';
+import { SubjectTaxonomyModal } from './SubjectTaxonomyModal';
 
 function equipValue(
     eq: string,
@@ -33,9 +35,56 @@ interface Props {
     subjects: Subject[];
     allocations: Allocation[];
     classrooms: Classroom[];
+    currentCampusLabel: string;
+    subjectTaxonomy: SubjectTaxonomy;
     onUpdate: (updated: Subject[]) => void;
+    onUpdateSubjectTaxonomy: (updated: SubjectTaxonomy) => void;
     onClose: () => void;
 }
+
+type SubjectFilters = {
+    code: string;
+    name: string;
+    teacherCode: string;
+    teacher: string;
+    faculty: string[];
+    department: string[];
+    term: Term[];
+    day: DayOfWeek[];
+    period: string[];
+    campus: string;
+    requiredCapacity: string;
+    requiredCapacityMax: string;
+    priority: number[];
+    requiredRoomCount: number[];
+    buildingPreference: string[];
+    preferredRoomType: string[];
+    previousRooms: string;
+    requiredEquipment: string;
+    allocatedRoom: string;
+};
+
+const EMPTY_SUBJECT_FILTERS: SubjectFilters = {
+    code: '',
+    name: '',
+    teacherCode: '',
+    teacher: '',
+    faculty: [],
+    department: [],
+    term: [],
+    day: [],
+    period: [],
+    campus: '',
+    requiredCapacity: '',
+    requiredCapacityMax: '',
+    priority: [],
+    requiredRoomCount: [],
+    buildingPreference: [],
+    preferredRoomType: [],
+    previousRooms: '',
+    requiredEquipment: '',
+    allocatedRoom: ''
+};
 
 // マルチセレクトドロップダウンコンポーネント
 const MultiSelectFilter = ({
@@ -188,6 +237,30 @@ type SMColKey = typeof SM_COL_DEFS[number]['key'];
 type SMColConfig = Record<SMColKey, { width: number; hidden: boolean; required: boolean }>;
 const smColDefaults = (): SMColConfig => Object.fromEntries(SM_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as SMColConfig;
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const parseSMColConfig = (raw: string | null): SMColConfig => {
+    const defaults = smColDefaults();
+    if (!raw) return defaults;
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (!isRecord(parsed)) return defaults;
+        return {
+            ...defaults,
+            ...Object.fromEntries(
+                SM_COL_DEFS.map(({ key }) => {
+                    const current = isRecord(parsed[key]) ? parsed[key] : undefined;
+                    const savedWidth = current && typeof current.width === 'number' && Number.isFinite(current.width) ? current.width : defaults[key].width;
+                    const savedHidden = current && typeof current.hidden === 'boolean' ? current.hidden : defaults[key].hidden;
+                    return [key, { ...defaults[key], width: Math.max(30, savedWidth), hidden: savedHidden }];
+                })
+            ) as SMColConfig
+        };
+    } catch {
+        return defaults;
+    }
+};
+
 const mergeSubjectsByCode = (existing: Subject[], imported: Subject[]) => {
     const next = [...existing];
     imported.forEach(subject => {
@@ -203,16 +276,23 @@ const mergeSubjectsByCode = (existing: Subject[], imported: Subject[]) => {
     return next;
 };
 
-export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, onClose }: Props) => {
+export const SubjectManager = ({
+    subjects,
+    allocations,
+    classrooms,
+    currentCampusLabel,
+    subjectTaxonomy,
+    onUpdate,
+    onUpdateSubjectTaxonomy,
+    onClose
+}: Props) => {
     const [editingSubjectModal, setEditingSubjectModal] = useState<Subject | null>(null);
     const [editForm, setEditForm] = useState<Partial<Subject>>({});
     const [isAdding, setIsAdding] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [colConfig, setColConfig] = useState<SMColConfig>(() => {
-        try { const s = localStorage.getItem('smColConfig'); if (s) return { ...smColDefaults(), ...JSON.parse(s) }; } catch {}
-        return smColDefaults();
-    });
+    const [colConfig, setColConfig] = useState<SMColConfig>(() => parseSMColConfig(localStorage.getItem('smColConfig')));
     const [showColSettings, setShowColSettings] = useState(false);
+    const [showTaxonomyModal, setShowTaxonomyModal] = useState(false);
     const smColSettingsRef = useRef<HTMLDivElement>(null);
     useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
     useEffect(() => {
@@ -238,6 +318,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         return () => document.removeEventListener('mousedown', handler);
     }, [showCsvHint]);
 
+    const openTaxonomyModal = () => setShowTaxonomyModal(true);
+
     const smDrag = (k: SMColKey) => (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
         const x0 = e.clientX, w0 = colConfig[k].width;
@@ -253,28 +335,11 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         classrooms.forEach(c => filterVisibleRoomEquipment(c.equipment).forEach(e => set.add(e)));
         return Array.from(set);
     }, [classrooms]);
+    const facultyOptions = subjectTaxonomy.faculties;
+    const departmentOptions = subjectTaxonomy.departments;
 
     // フィルタステート（配列で保持）
-    const [filters, setFilters] = useState({
-        code: '',
-        name: '',
-        teacherCode: '',
-        teacher: '',
-        faculty: [] as string[],
-        department: [] as string[],
-        term: [] as Term[],
-        day: [] as DayOfWeek[],
-        period: [] as string[],
-        campus: '',
-        requiredCapacity: '',
-        requiredCapacityMax: '',
-        priority: [] as number[],
-        requiredRoomCount: [] as number[],
-        buildingPreference: [] as string[],
-        preferredRoomType: [] as string[],
-        previousRooms: '',
-        requiredEquipment: ''
-    });
+    const [filters, setFilters] = useState<SubjectFilters>({ ...EMPTY_SUBJECT_FILTERS });
 
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
@@ -304,7 +369,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     const filteredSubjects = useMemo(() => {
         return subjects.filter(s => {
             // テキスト系：スペース区切りOR検索
-            const checkText = (text: any, query: string) => {
+            const checkText = (text: unknown, query: string) => {
                 if (!query) return true;
                 const keywords = query.toLowerCase().split(/\s+/).filter(k => !!k);
                 if (keywords.length === 0) return true;
@@ -351,17 +416,17 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
             if (!sortConfig) return 0;
             const { key, direction } = sortConfig;
 
-            const getValue = (obj: any, k: string) => {
-                if (!obj) return '';
-                const val = obj[k];
+            const getValue = (obj: unknown, k: string) => {
+                if (!obj || typeof obj !== 'object') return '';
+                const val = (obj as Record<string, unknown>)[k];
                 if (k === 'period' || k === 'requiredRoomCount' || k === 'requiredCapacity' || k === 'priority') {
                     return Number(val || 0);
                 }
                 if (k === 'term') {
                     const order: Record<string, number> = { spring: 1, spring_first: 2, spring_second: 3, autumn: 4, autumn_first: 5, autumn_second: 6, full_year: 7 };
-                    return order[val] ?? 8;
+                    return order[typeof val === 'string' ? val : ''] ?? 8;
                 }
-                if (k === 'day') return Object.keys(DAY_LABELS).indexOf(val || 'mon');
+                if (k === 'day') return Object.keys(DAY_LABELS).indexOf(typeof val === 'string' ? val : 'mon');
                 if (Array.isArray(val)) return val.join(',');
                 return String(val || '').toLowerCase();
             };
@@ -386,8 +451,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
     };
 
     const handleSave = () => {
-        if (!editForm.id || !editForm.name || !editForm.code) {
-            alert('時間割名称、時間割コードを入力してください。');
+        if (!editForm.id || !editForm.name || !editForm.code || !editForm.faculty || !editForm.department) {
+            alert('時間割コード、時間割名称、開講学部、管轄を入力してください。');
             return;
         }
         if (subjects.find(s => s.id === editForm.id)) {
@@ -397,7 +462,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         const sanitized = {
             ...editForm,
             requiredEquipment: (editForm.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
-            mandatoryEquipment: (editForm.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
+            mandatoryEquipment: (editForm.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
+            campus: currentCampusLabel
         } as Subject;
         onUpdate([...subjects, sanitized]);
         setIsAdding(false);
@@ -424,14 +490,14 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
             name: '',
             teacherCode: '',
             teacher: '',
-            faculty: '',
-            department: '他',
+            faculty: facultyOptions[0] || '',
+            department: departmentOptions[0] || '',
             term: 'spring',
             day: 'mon',
             period: 1,
             requiredCapacity: 30,
             priority: 2,
-            campus: '寝屋川',
+            campus: currentCampusLabel,
             requiredEquipment: [],
             previousRooms: [],
             requiredRoomCount: 1,
@@ -444,8 +510,26 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
         if (input.files && input.files[0]) {
             try {
                 const data = await parseSubjectCSV(input.files[0]);
+                const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
+                if (data.some(subject => normalizeCampusLabel(subject.campus || '') !== campusLabel)) {
+                    alert('キャンパスが異なるレコードがあります');
+                    return;
+                }
+                const invalidRows = data
+                    .map((subject, index) => {
+                        const issues: string[] = [];
+                        if (!facultyOptions.includes(subject.faculty || '')) issues.push('開講学部');
+                        if (!departmentOptions.includes(subject.department || '')) issues.push('管轄');
+                        return issues.length > 0 ? `${index + 2}行目(${issues.join('・')})` : '';
+                    })
+                    .filter(Boolean);
+                if (invalidRows.length > 0) {
+                    alert(`キャンパスの候補外レコードがあります: ${invalidRows.slice(0, 10).join('、')}${invalidRows.length > 10 ? '…' : ''}`);
+                    return;
+                }
                 const sanitized = data.map(subject => ({
                     ...subject,
+                    campus: campusLabel,
                     requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
                     mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
                 }));
@@ -511,17 +595,21 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
                                                 <div style={{ marginBottom: '4px' }}>本ページの赤字が必須項目</div>
                                                 <div style={{ marginBottom: '4px' }}>機材･設備：◎=必須 ○=希望</div>
+                                                <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
                                         )}
                                     </div>
                                 </div>
+                                <button onClick={openTaxonomyModal} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em' }}>
+                                    開講学部・管轄
+                                </button>
                                 <button onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
                                     // 複数教室配当がある場合は1教室につき1行で出力
                                     const exportData = subjects.flatMap(s => {
                                         const subjectAllocations = allocations.filter(a => a.subjectId === s.id);
-                                        const baseRow: Record<string, any> = {
+                                        const baseRow: Record<string, unknown> = {
                                             'コード': s.code,
                                             '時間割名称': s.name,
                                             '教員コード': s.teacherCode || '',
@@ -635,8 +723,8 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     {smShow('name') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('teacherCode') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacherCode} onChange={e => setFilters({ ...filters, teacherCode: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('teacher') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacher} onChange={e => setFilters({ ...filters, teacher: e.target.value })} placeholder="検索..." /></td>}
-                                    {smShow('faculty') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '経', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.faculty} onChange={v => setFilters({ ...filters, faculty: v as string[] })} /></td>}
-                                    {smShow('department') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => ({ value: v, label: v }))} selected={filters.department} onChange={v => setFilters({ ...filters, department: v as string[] })} /></td>}
+                                    {smShow('faculty') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={facultyOptions.map(v => ({ value: v, label: v }))} selected={filters.faculty} onChange={v => setFilters({ ...filters, faculty: v as string[] })} /></td>}
+                                    {smShow('department') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={departmentOptions.map(v => ({ value: v, label: v }))} selected={filters.department} onChange={v => setFilters({ ...filters, department: v as string[] })} /></td>}
                                     {smShow('term') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[{value:'spring',label:'春学期'},{value:'spring_first',label:'春前半'},{value:'spring_second',label:'春後半'},{value:'autumn',label:'秋学期'},{value:'autumn_first',label:'秋前半'},{value:'autumn_second',label:'秋後半'},{value:'full_year',label:'通年'}]} selected={filters.term} onChange={v => setFilters({ ...filters, term: v as Term[] })} /></td>}
                                     {smShow('day') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v, label: l }))} selected={filters.day} onChange={v => setFilters({ ...filters, day: v as DayOfWeek[] })} /></td>}
                                     {smShow('period') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={periodOptions} selected={filters.period} onChange={v => setFilters({ ...filters, period: v as string[] })} /></td>}
@@ -653,7 +741,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     {smShow('preferredRoomType') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[{value:'normal',label:'一般'},{value:'pc',label:'PC'},{value:'seminar',label:'ゼミ'}]} selected={filters.preferredRoomType} onChange={v => setFilters({ ...filters, preferredRoomType: v as string[] })} /></td>}
                                     {smShow('requiredEquipment') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.requiredEquipment} onChange={e => setFilters({ ...filters, requiredEquipment: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('previousRooms') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.previousRooms} onChange={e => setFilters({ ...filters, previousRooms: e.target.value })} placeholder="検索..." /></td>}
-                                    {smShow('allocatedRoom') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={(filters as any).allocatedRoom || ''} onChange={e => setFilters({ ...filters, allocatedRoom: e.target.value } as any)} placeholder="検索..." /></td>}
+                                    {smShow('allocatedRoom') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.allocatedRoom || ''} onChange={e => setFilters({ ...filters, allocatedRoom: e.target.value })} placeholder="検索..." /></td>}
                                     <td style={{ padding: '4px', border: '1px solid #ddd', textAlign: 'center', background: '#fafafa' }}>
                                         <button
                                             onClick={handleDeleteAll}
@@ -674,17 +762,17 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         {smShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} /></td>}
                                         {smShow('teacherCode') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacherCode || ''} onChange={e => setEditForm({ ...editForm, teacherCode: e.target.value })} style={{ width: '100%' }} placeholder="T001" /></td>}
                                         {smShow('teacher') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.teacher} onChange={e => setEditForm({ ...editForm, teacher: e.target.value })} style={{ width: '100%' }} /></td>}
-                                        {smShow('faculty') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.faculty} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }} placeholder="学部" /></td>}
-                                        {smShow('department') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.department || '他'} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}>{['理', '工', '法', '経', '文', '国', 'IR', '教', '他'].map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
+                                        {smShow('faculty') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.faculty || ''} onChange={e => setEditForm({ ...editForm, faculty: e.target.value })} style={{ width: '100%' }}><option value="">(未選択)</option>{facultyOptions.map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
+                                        {smShow('department') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.department || ''} onChange={e => setEditForm({ ...editForm, department: e.target.value })} style={{ width: '100%' }}><option value="">(未選択)</option>{departmentOptions.map(v => <option key={v} value={v}>{v}</option>)}</select></td>}
                                         {smShow('term') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.term} onChange={e => setEditForm({ ...editForm, term: e.target.value as Term })} style={{ width: '100%' }}><option value="spring">春学期</option><option value="spring_first">春前半</option><option value="spring_second">春後半</option><option value="autumn">秋学期</option><option value="autumn_first">秋前半</option><option value="autumn_second">秋後半</option><option value="full_year">通年</option></select></td>}
                                         {smShow('day') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.day} onChange={e => setEditForm({ ...editForm, day: e.target.value as DayOfWeek })} style={{ width: '100%' }}>{Object.entries(DAY_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}</select></td>}
                                         {smShow('period') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.period} onChange={e => setEditForm({ ...editForm, period: Number(e.target.value) as Period })} style={{ width: '100%' }}>{[1, 2, 3, 4, 5, 6, 7].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
-                                        {smShow('campus') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.campus || ''} onChange={e => setEditForm({ ...editForm, campus: e.target.value })} style={{ width: '100%' }} placeholder="キャンパス" /></td>}
+                                        {smShow('campus') && <td style={{ padding: '8px', border: '1px solid #ddd', color: '#666' }}>{currentCampusLabel}</td>}
                                         {smShow('requiredCapacity') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" value={editForm.requiredCapacity} onChange={e => setEditForm({ ...editForm, requiredCapacity: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
                                         {smShow('priority') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.priority || 1} onChange={e => setEditForm({ ...editForm, priority: Number(e.target.value) })} style={{ width: '100%' }}>{[1, 2, 3].map(p => <option key={p} value={p}>{p}</option>)}</select></td>}
                                         {smShow('requiredRoomCount') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input type="number" min="1" value={editForm.requiredRoomCount || 1} onChange={e => setEditForm({ ...editForm, requiredRoomCount: Number(e.target.value) })} style={{ width: '100%' }} /></td>}
                                         {smShow('buildingPreference') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.buildingPreference || ''} onChange={e => setEditForm({ ...editForm, buildingPreference: e.target.value })} style={{ width: '100%', padding: '4px' }}><option value="">(なし)</option>{BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}</select></td>}
-                                        {smShow('preferredRoomType') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.preferredRoomType || 'normal'} onChange={e => setEditForm({ ...editForm, preferredRoomType: e.target.value as any })} style={{ width: '100%' }}><option value="normal">一般</option><option value="pc">PC</option><option value="seminar">ゼミ</option></select></td>}
+                                        {smShow('preferredRoomType') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><select value={editForm.preferredRoomType || 'normal'} onChange={e => setEditForm({ ...editForm, preferredRoomType: e.target.value as Subject['preferredRoomType'] })} style={{ width: '100%' }}><option value="normal">一般</option><option value="pc">PC</option><option value="seminar">ゼミ</option></select></td>}
                                         {smShow('requiredEquipment') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.requiredEquipment?.join(' ') || ''} onChange={e => setEditForm({ ...editForm, requiredEquipment: e.target.value.split(/\s+/).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: プロジェクタ 可動" /></td>}
                                         {smShow('previousRooms') && <td style={{ padding: '8px', border: '1px solid #ddd' }}><input value={editForm.previousRooms?.join(',')} onChange={e => setEditForm({ ...editForm, previousRooms: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} style={{ width: '100%' }} placeholder="例: 3-201,3-202" /></td>}
                                         {smShow('allocatedRoom') && <td style={{ padding: '8px', border: '1px solid #ddd' }} />}
@@ -749,7 +837,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                                 <button
                                                     onClick={() => setFilters({
                                                         code: '', name: '', teacherCode: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', requiredCapacityMax: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: '', allocatedRoom: ''
-                                                    } as any)}
+                                                    })}
                                                     style={{ background: 'none', border: '1px solid #ccc', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', marginTop: '10px' }}
                                                 >
                                                     フィルタをすべて解除
@@ -764,14 +852,29 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                 </div>
             </div>
             {editingSubjectModal && (
-                <SubjectEditModal
+            <SubjectEditModal
+                    key={editingSubjectModal.id}
                     subject={editingSubjectModal}
                     availableEquipment={availableEquipment}
+                    currentCampusLabel={currentCampusLabel}
+                    facultyOptions={facultyOptions}
+                    departmentOptions={departmentOptions}
                     onSave={(updated) => {
                         onUpdate(subjects.map(s => s.id === updated.id ? updated : s));
                         setEditingSubjectModal(null);
                     }}
                     onClose={() => setEditingSubjectModal(null)}
+                />
+            )}
+            {showTaxonomyModal && (
+                <SubjectTaxonomyModal
+                    campusLabel={currentCampusLabel}
+                    taxonomy={subjectTaxonomy}
+                    onSave={(updated) => {
+                        onUpdateSubjectTaxonomy(updated);
+                        setShowTaxonomyModal(false);
+                    }}
+                    onClose={() => setShowTaxonomyModal(false)}
                 />
             )}
         </div>

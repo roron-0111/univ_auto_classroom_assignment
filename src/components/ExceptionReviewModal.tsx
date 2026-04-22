@@ -1,81 +1,105 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { X, Check, XCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { Classroom, PendingException } from '../types';
 import { buildApprovalKey } from '../utils/approvalKey';
 
 interface Props {
   isOpen: boolean;
-  exceptions: PendingException[];
-  classrooms: Classroom[];
+  exceptions?: PendingException[];
+  classrooms?: Classroom[];
+  approvedKeys: string[];
+  onApprovedKeysChange: (approvedKeys: string[]) => void;
   onConfirm: (approvedKeys: string[]) => void;
   onCancel: () => void;
 }
 
+const isPendingException = (value: unknown): value is PendingException => {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as PendingException;
+  const validExceptions =
+    Array.isArray(item.exceptions) &&
+    item.exceptions.every(
+      exception => exception === 'term_split' || exception === 'room_type_relaxed'
+    );
+  return !!item.subject && typeof item.subject.id === 'string' && typeof item.classroomId === 'string' && validExceptions;
+};
+
 const keyOf = (item: PendingException) => buildApprovalKey(item.subject.id, item.classroomId, item.exceptions);
 
-export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm, onCancel }: Props) => {
-  const [approved, setApproved] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setApproved(new Set(exceptions.map(keyOf)));
-  }, [isOpen, exceptions]);
-
+export const ExceptionReviewModal = ({
+  isOpen,
+  exceptions = [],
+  classrooms = [],
+  approvedKeys,
+  onApprovedKeysChange,
+  onConfirm,
+  onCancel
+}: Props) => {
+  const safeExceptions = useMemo(() => exceptions.filter(isPendingException), [exceptions]);
+  const approvedSet = useMemo(() => new Set(approvedKeys), [approvedKeys]);
+  const allKeys = useMemo(() => safeExceptions.map(keyOf), [safeExceptions]);
   const classroomById = useMemo(() => new Map(classrooms.map(room => [room.id, room])), [classrooms]);
 
   if (!isOpen) return null;
 
-  const approvedCount = approved.size;
-  const rejectedCount = exceptions.length - approvedCount;
+  const approvedCount = approvedSet.size;
+  const rejectedCount = safeExceptions.length - approvedCount;
 
   const toggle = (item: PendingException, nextApproved: boolean) => {
     const key = keyOf(item);
-    setApproved(prev => {
-      const next = new Set(prev);
-      if (nextApproved) next.add(key);
-      else next.delete(key);
-      return next;
-    });
+    const next = new Set(approvedKeys);
+    if (nextApproved) next.add(key);
+    else next.delete(key);
+    onApprovedKeysChange(Array.from(next));
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(15, 23, 42, 0.58)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 2200,
-      padding: '20px'
-    }}>
-      <div style={{
-        width: 'min(920px, 100%)',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        background: '#fff',
-        borderRadius: '16px',
-        boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-        border: '1px solid #e5e7eb'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '18px 20px',
-          borderBottom: '1px solid #e5e7eb',
-          background: 'linear-gradient(135deg, #fff7ed, #ffffff)'
-        }}>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.58)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2200,
+        padding: '20px'
+      }}
+    >
+      <div
+        style={{
+          width: 'min(920px, 100%)',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          background: '#fff',
+          borderRadius: '16px',
+          boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+          border: '1px solid #e5e7eb'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '18px 20px',
+            borderBottom: '1px solid #e5e7eb',
+            background: 'linear-gradient(135deg, #fff7ed, #ffffff)'
+          }}
+        >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <AlertTriangle size={18} color="#f59e0b" />
               <h2 style={{ margin: 0, fontSize: '1.05rem' }}>例外配当の確認</h2>
             </div>
             <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-              例外候補 {exceptions.length} 件 / 承認 {approvedCount} 件 / 却下 {rejectedCount} 件
+              対象 {safeExceptions.length} 件 / 承認 {approvedCount} 件 / 却下 {rejectedCount} 件
             </div>
           </div>
-          <button onClick={onCancel} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8' }}>
+          <button
+            onClick={onCancel}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8' }}
+          >
             <X size={20} />
           </button>
         </div>
@@ -83,7 +107,7 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
         <div style={{ padding: '20px', display: 'grid', gap: '14px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
-              onClick={() => setApproved(new Set(exceptions.map(keyOf)))}
+              onClick={() => onApprovedKeysChange(allKeys)}
               style={{
                 padding: '8px 12px',
                 borderRadius: '8px',
@@ -97,7 +121,7 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
               すべて承認
             </button>
             <button
-              onClick={() => setApproved(new Set())}
+              onClick={() => onApprovedKeysChange([])}
               style={{
                 padding: '8px 12px',
                 borderRadius: '8px',
@@ -113,10 +137,10 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
           </div>
 
           <div style={{ display: 'grid', gap: '10px' }}>
-            {exceptions.map(item => {
+            {safeExceptions.map(item => {
               const room = classroomById.get(item.classroomId);
               const key = keyOf(item);
-              const isApproved = approved.has(key);
+              const isApproved = approvedSet.has(key);
               return (
                 <div
                   key={key}
@@ -132,7 +156,10 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
                       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{item.subject.name}</div>
                       <div style={{ fontSize: '0.82rem', color: '#475569' }}>
                         {item.subject.teacher} / {item.subject.day} {item.subject.period}
-                        {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}講時 / {room?.name || item.classroomId}
+                        {item.subject.endPeriod && item.subject.endPeriod > item.subject.period
+                          ? `-${item.subject.endPeriod}`
+                          : ''}
+                        講時 / {room?.name || item.classroomId}
                       </div>
                       <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '6px' }}>
                         例外: {item.exceptions.join(' / ')}
@@ -195,7 +222,7 @@ export const ExceptionReviewModal = ({ isOpen, exceptions, classrooms, onConfirm
               キャンセル
             </button>
             <button
-              onClick={() => onConfirm(Array.from(approved))}
+              onClick={() => onConfirm(approvedKeys)}
               style={{
                 display: 'flex',
                 alignItems: 'center',

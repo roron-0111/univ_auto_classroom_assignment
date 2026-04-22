@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Classroom } from '../types';
 import { ROOM_TYPE_LABELS, getEquipmentStyle, BUILDINGS, EQUIPMENT_LIST } from '../types';
 import { X, Check } from 'lucide-react';
@@ -11,10 +11,6 @@ interface Props {
 
 export const ClassroomEditModal = ({ classroom, onSave, onClose }: Props) => {
     const [form, setForm] = useState<Classroom>({ ...classroom });
-
-    useEffect(() => {
-        setForm({ ...classroom });
-    }, [classroom]);
 
     const handleSave = () => {
         if (!form.name) return;
