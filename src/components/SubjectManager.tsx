@@ -6,7 +6,6 @@ import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
-import { SUBJECT_IMPORT_REQUIRED_COLUMNS } from '../utils/csvParser';
 
 function equipValue(
     eq: string,
@@ -158,28 +157,35 @@ const MultiSelectFilter = ({
     );
 };
 
-const SM_COL_DEFS = [
-    { key: 'code', label: 'コード', width: 70 },
-    { key: 'name', label: '時間割名称', width: 208 },
-    { key: 'teacherCode', label: '教員コード', width: 90 },
-    { key: 'teacher', label: '教員', width: 104 },
-    { key: 'faculty', label: '学部', width: 78 },
-    { key: 'department', label: '管轄', width: 50 },
-    { key: 'term', label: '学期', width: 77 },
-    { key: 'day', label: '曜日', width: 60 },
-    { key: 'period', label: '講時', width: 70 },
-    { key: 'campus', label: 'キャンパス', width: 70 },
-    { key: 'requiredCapacity', label: '定員', width: 90 },
+type SMColDef = {
+    key: string;
+    label: string;
+    width: number;
+    required?: boolean;
+};
+
+const SM_COL_DEFS: readonly SMColDef[] = [
+    { key: 'code', label: 'コード', width: 70, required: true },
+    { key: 'name', label: '時間割名称', width: 208, required: true },
+    { key: 'teacherCode', label: '教員コード', width: 90, required: true },
+    { key: 'teacher', label: '教員', width: 104, required: true },
+    { key: 'faculty', label: '学部', width: 78, required: true },
+    { key: 'department', label: '管轄', width: 50, required: true },
+    { key: 'term', label: '学期', width: 77, required: true },
+    { key: 'day', label: '曜日', width: 60, required: true },
+    { key: 'period', label: '講時', width: 70, required: true },
+    { key: 'campus', label: 'キャンパス', width: 70, required: true },
+    { key: 'requiredCapacity', label: '定員', width: 90, required: false },
     { key: 'priority', label: '優先度', width: 65 },
-    { key: 'requiredRoomCount', label: '数', width: 55 },
+    { key: 'requiredRoomCount', label: '数', width: 55, required: true },
     { key: 'buildingPreference', label: '希望建物', width: 60 },
-    { key: 'preferredRoomType', label: 'タイプ', width: 60 },
+    { key: 'preferredRoomType', label: 'タイプ', width: 60, required: true },
     { key: 'requiredEquipment', label: '機材･設備', width: 130 },
     { key: 'previousRooms', label: '過去教室', width: 80 },
     { key: 'allocatedRoom', label: '配当教室', width: 100 },
 ] as const;
 type SMColKey = typeof SM_COL_DEFS[number]['key'];
-type SMColConfig = Record<SMColKey, { width: number; hidden: boolean }>;
+type SMColConfig = Record<SMColKey, { width: number; hidden: boolean; required: boolean }>;
 const smColDefaults = (): SMColConfig => Object.fromEntries(SM_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as SMColConfig;
 
 const mergeSubjectsByCode = (existing: Subject[], imported: Subject[]) => {
@@ -503,14 +509,7 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         {showCsvHint && (
                                             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
-                                                <div style={{ marginBottom: '4px', lineHeight: 1.7 }}>
-                                                    <span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須: </span>
-                                                    {SUBJECT_IMPORT_REQUIRED_COLUMNS.map((col, index) => (
-                                                        <span key={col.label} style={{ color: '#d32f2f', fontWeight: 'bold' }}>
-                                                            {col.label}{index < SUBJECT_IMPORT_REQUIRED_COLUMNS.length - 1 ? '、' : ''}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                                <div style={{ marginBottom: '4px' }}>本ページの赤字が必須項目</div>
                                                 <div style={{ marginBottom: '4px' }}>機材･設備：◎=必須 ○=希望</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
@@ -617,7 +616,9 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     {SM_COL_DEFS.filter(col => smShow(col.key)).map(col => (
                                         <th key={col.key} style={{ ...thStyle, width: smW(col.key), overflow: 'visible' }} onClick={() => handleSort(col.key)}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                                                {col.label}
+                                                <span style={{ color: col.required ? '#d32f2f' : '#222', fontWeight: col.required ? 'bold' : 600 }}>
+                                                    {col.label}
+                                                </span>
                                                 <SortIcon columnKey={col.key} />
                                             </div>
                                             {smRH(col.key)}
