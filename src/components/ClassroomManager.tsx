@@ -1,8 +1,8 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import type { Classroom } from '../types';
-import { ROOM_TYPE_LABELS, BUILDINGS, EQUIPMENT_LIST, normalizeCampusLabel } from '../types';
+import { ROOM_TYPE_LABELS, BUILDINGS, EQUIPMENT_LIST } from '../types';
 import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
-import { parseClassroomCSVStrict, exportToCSV } from '../utils/csvParser';
+import { parseClassroomCSV, exportToCSV } from '../utils/csvParser';
 import { getEquipmentStyle, getImportantEquipmentStyle } from '../types';
 import { ClassroomEditModal } from './ClassroomEditModal';
 
@@ -50,14 +50,12 @@ const MultiSelectFilter = ({
 interface Props {
     classrooms: Classroom[];
     onUpdate: (updated: Classroom[]) => void;
-    currentCampusLabel: string;
     onClose: () => void;
 }
 
 const CR_COL_DEFS = [
     { key: 'id', label: 'ID', width: 60 },
     { key: 'name', label: '教室名', width: 120 },
-    { key: 'campus', label: 'キャンパス', width: 90 },
     { key: 'building', label: '建物', width: 100 },
     { key: 'capacity', label: '収容人数(試験)', width: 140 },
     { key: 'type', label: 'タイプ', width: 90 },
@@ -67,30 +65,6 @@ const CR_COL_DEFS = [
 type CRColKey = typeof CR_COL_DEFS[number]['key'];
 type CRColConfig = Record<CRColKey, { width: number; hidden: boolean }>;
 const crColDefaults = (): CRColConfig => Object.fromEntries(CR_COL_DEFS.map(c => [c.key, { width: c.width, hidden: false }])) as CRColConfig;
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-
-const parseCRColConfig = (raw: string | null): CRColConfig => {
-    const defaults = crColDefaults();
-    if (!raw) return defaults;
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (!isRecord(parsed)) return defaults;
-        return {
-            ...defaults,
-            ...Object.fromEntries(
-                CR_COL_DEFS.map(({ key }) => {
-                    const current = isRecord(parsed[key]) ? parsed[key] : undefined;
-                    const savedWidth = current && typeof current.width === 'number' && Number.isFinite(current.width) ? current.width : defaults[key].width;
-                    const savedHidden = current && typeof current.hidden === 'boolean' ? current.hidden : defaults[key].hidden;
-                    return [key, { width: Math.max(30, savedWidth), hidden: savedHidden }];
-                })
-            ) as CRColConfig
-        };
-    } catch {
-        return defaults;
-    }
-};
 
 const mergeClassroomsById = (existing: Classroom[], imported: Classroom[]) => {
     const next = [...existing];
@@ -105,11 +79,14 @@ const mergeClassroomsById = (existing: Classroom[], imported: Classroom[]) => {
     return next;
 };
 
-export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onClose }: Props) => {
+export const ClassroomManager = ({ classrooms, onUpdate, onClose }: Props) => {
     const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
     const [editForm, setEditForm] = useState<Partial<Classroom>>({});
     const [isAdding, setIsAdding] = useState(false);
-    const [colConfig, setColConfig] = useState<CRColConfig>(() => parseCRColConfig(localStorage.getItem('crColConfig')));
+    const [colConfig, setColConfig] = useState<CRColConfig>(() => {
+        try { const s = localStorage.getItem('crColConfig'); if (s) return { ...crColDefaults(), ...JSON.parse(s) }; } catch {}
+        return crColDefaults();
+    });
     const [showColSettings, setShowColSettings] = useState(false);
     const crColSettingsRef = useRef<HTMLDivElement>(null);
     useEffect(() => { localStorage.setItem('crColConfig', JSON.stringify(colConfig)); }, [colConfig]);
@@ -146,7 +123,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     };
     const crRH = (k: CRColKey) => <div onMouseDown={crDrag(k)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }} />;
     const [filters, setFilters] = useState({
-        id: '', name: '', campus: '', buildings: [] as string[], type: '',
+        id: '', name: '', buildings: [] as string[], type: '',
         capacityMin: '', capacityMax: '', examCapacityMin: '', examCapacityMax: '',
         equipment: [] as string[]
     });
@@ -172,7 +149,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         return classrooms.filter(r => {
             if (filters.id && !r.id.toLowerCase().includes(filters.id.toLowerCase())) return false;
             if (filters.name && !r.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
-            if (filters.campus && !(r.campus || '').toLowerCase().includes(filters.campus.toLowerCase())) return false;
             if (filters.buildings.length > 0 && !filters.buildings.includes(r.building)) return false;
             if (filters.type && r.type !== filters.type) return false;
             if (filters.capacityMin && r.capacity < Number(filters.capacityMin)) return false;
@@ -230,13 +206,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
             alert('その教室IDは既に存在します。');
             return;
         }
-        onUpdate([
-            ...classrooms,
-            {
-                ...(editForm as Classroom),
-                campus: normalizeCampusLabel(editForm.campus || currentCampusLabel) || currentCampusLabel
-            }
-        ]);
+        onUpdate([...classrooms, editForm as Classroom]);
         setIsAdding(false);
         setEditForm({});
     };
@@ -258,7 +228,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         setEditForm({
             id: '',
             name: '',
-            campus: currentCampusLabel,
             building: 'フォーサイト',
             capacity: 50,
             examCapacity: 25,
@@ -273,13 +242,8 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         const input = e.currentTarget;
         if (input.files && input.files[0]) {
             try {
-                const data = await parseClassroomCSVStrict(input.files[0]);
-                const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
-                if (data.some(room => normalizeCampusLabel(room.campus || '') !== campusLabel)) {
-                    alert('キャンパスが異なるレコードがあります');
-                    return;
-                }
-                if (confirm(`${data.length}件の教室データを読み込みます。同一IDは上書きし、それ以外は追加します。よろしいですか？`)) {
+                const data = await parseClassroomCSV(input.files[0]);
+                if (confirm(`${data.length}件の教室データを読み込みます。既存のデータは上書きされます。よろしいですか？`)) {
                     onUpdate(mergeClassroomsById(classrooms, data));
                 }
             } catch (err) {
@@ -344,10 +308,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                         {showCsvHint && (
                                             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '260px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
-                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 教室名, キャンパス, 建物, 収容人数</div>
+                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 教室名, 建物, 収容人数</div>
                                                 <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: ID, 教室タイプ, 可動(○), 配当対象外(○)</div>
                                                 <div style={{ marginBottom: '4px' }}>機材列: 列名がそのまま機材名、値が○なら有効</div>
-                                                <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                                 <div style={{ color: '#1976d2', fontSize: '0.75rem', marginTop: '6px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
                                         )}
@@ -355,10 +318,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 </div>
                                 <button onClick={() => {
                                     const exportData = classrooms.map(r => {
-                                        const base: Record<string, unknown> = {
+                                        const base: Record<string, any> = {
                                             'ID': r.id,
                                             '教室名': r.name,
-                                            'キャンパス': r.campus || currentCampusLabel,
                                             '建物': r.building,
                                             '収容人数': r.capacity,
                                             '試験時定員': r.examCapacity ?? '',
@@ -423,7 +385,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 <th style={{ padding: '10px', border: '1px solid #ddd', width: '50px', cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10 }} onClick={() => handleSort('order')}>順</th>
                                 {crShow('id') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('id'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('id')}>ID{crRH('id')}</th>}
                                 {crShow('name') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('name'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('name')}>教室名{crRH('name')}</th>}
-                                {crShow('campus') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('campus'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('campus')}>キャンパス{crRH('campus')}</th>}
                                 {crShow('building') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('building'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('building')}>建物{crRH('building')}</th>}
                                 {crShow('capacity') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('capacity'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('capacity')}>収容人数 (試験){crRH('capacity')}</th>}
                                 {crShow('type') && <th style={{ padding: '10px', border: '1px solid #ddd', width: crW('type'), cursor: 'pointer', position: 'sticky', top: 0, background: '#f5f5f5', zIndex: 10, overflow: 'visible' }} onClick={() => handleSort('type')}>タイプ{crRH('type')}</th>}
@@ -445,10 +406,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 {crShow('name') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
                                         value={filters.name} onChange={e => setFilters(f => ({ ...f, name: e.target.value }))} placeholder="検索..." />
-                                </td>}
-                                {crShow('campus') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
-                                    <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}
-                                        value={filters.campus} onChange={e => setFilters(f => ({ ...f, campus: e.target.value }))} placeholder="検索..." />
                                 </td>}
                                 {crShow('building') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <MultiSelectFilter
@@ -506,9 +463,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                     {crShow('name') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={{ width: '100%' }} />
                                     </td>}
-                                    {crShow('campus') && <td style={{ padding: '8px', border: '1px solid #ddd', color: '#666' }}>
-                                        {currentCampusLabel}
-                                    </td>}
                                     {crShow('building') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
                                         <select value={editForm.building} onChange={e => setEditForm({ ...editForm, building: e.target.value })} style={{ width: '100%', padding: '4px' }}>
                                             {BUILDINGS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -523,7 +477,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                         </div>
                                     </td>}
                                     {crShow('type') && <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                                        <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value as Classroom['type'] })} style={{ width: '100%' }}>
+                                        <select value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value as any })} style={{ width: '100%' }}>
                                             {Object.entries(ROOM_TYPE_LABELS).map(([val, label]) => (
                                                 <option key={val} value={val}>{label}</option>
                                             ))}
@@ -581,7 +535,6 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                         </td>
                                         {crShow('id') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.id}</td>}
                                         {crShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{room.name}</td>}
-                                        {crShow('campus') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.campus || currentCampusLabel}</td>}
                                         {crShow('building') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{room.building}</td>}
                                         {crShow('capacity') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>
                                             {room.capacity}名 <span style={{ color: '#999', fontSize: '0.8em' }}>({room.examCapacity || '-'})</span>
@@ -633,14 +586,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
             </div>
             {editingClassroom && (
                 <ClassroomEditModal
-                    key={editingClassroom.id}
                     classroom={editingClassroom}
                     onSave={(updated) => {
-                        const next = {
-                            ...updated,
-                            campus: normalizeCampusLabel(updated.campus || currentCampusLabel) || currentCampusLabel
-                        };
-                        onUpdate(classrooms.map(r => r.id === updated.id ? next : r));
+                        onUpdate(classrooms.map(r => r.id === updated.id ? updated : r));
                         setEditingClassroom(null);
                     }}
                     onClose={() => setEditingClassroom(null)}

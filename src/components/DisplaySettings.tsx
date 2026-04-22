@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DisplayConfig, SubjectMainDisplay } from '../types';
+import type { DisplayConfig } from '../types';
 import { getEquipmentStyle } from '../types';
 import { X, Eye } from 'lucide-react';
 
@@ -9,12 +9,6 @@ interface Props {
     onUpdate: (config: DisplayConfig) => void;
     onClose: () => void;
 }
-
-const subjectMainDisplayOptions: Array<{ id: SubjectMainDisplay; label: string }> = [
-    { id: 'name', label: '科目名' },
-    { id: 'teacher', label: '教員名' },
-    { id: 'department', label: '開講学部名' }
-];
 
 export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose }: Props) => {
     const [localConfig, setLocalConfig] = useState<DisplayConfig>({ ...config });
@@ -35,13 +29,8 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
 
     return (
         <div className="manager-overlay" style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            zIndex: 1100,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div style={{ background: '#fff', width: '90%', maxWidth: '550px', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 15px 35px rgba(0,0,0,0.3)' }}>
                 <header style={{ padding: '15px 20px', background: '#2d2d2d', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -49,15 +38,15 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                         <Eye size={20} color="#646cff" />
                         <h3 style={{ margin: 0, letterSpacing: '0.5px' }}>表示設定</h3>
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', transition: 'opacity 0.2s' }} className="hover:opacity-70">
-                        <X />
-                    </button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', transition: 'opacity 0.2s' }} className="hover:opacity-70"><X /></button>
                 </header>
 
                 <div style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+                    {/* 1. 教室表示 */}
                     <section>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #f0f0f0', paddingBottom: '8px', marginBottom: '12px', color: '#333' }}>
-                            教室表示
+                            🏛️ 教室表示
                         </h4>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -72,22 +61,27 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                         </div>
                     </section>
 
+                    {/* 2. 授業カード表示 */}
                     <section>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #f0f0f0', paddingBottom: '8px', marginBottom: '12px', color: '#333' }}>
-                            授業カード詳細
+                            🗂️ 授業カード詳細
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 'bold' }}>メイン表示:</span>
+                                <span style={{ fontSize: '0.9rem', color: '#666', fontWeight: 'bold' }}>メイン表示項目:</span>
                                 <div style={{ display: 'flex', gap: '12px' }}>
-                                    {subjectMainDisplayOptions.map(item => (
+                                    {[
+                                        { id: 'name', label: '科目名' },
+                                        { id: 'teacher', label: '教員名' },
+                                        { id: 'department', label: '開講学部名' }
+                                    ].map(item => (
                                         <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                             <input
                                                 type="radio"
                                                 name="subjectMainDisplay"
                                                 value={item.id}
                                                 checked={localConfig.subjectMainDisplay === item.id}
-                                                onChange={() => setLocalConfig({ ...localConfig, subjectMainDisplay: item.id })}
+                                                onChange={() => setLocalConfig({ ...localConfig, subjectMainDisplay: item.id as any })}
                                             />
                                             {item.label}
                                         </label>
@@ -96,28 +90,29 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={localConfig.showSubInfo} onChange={e => setLocalConfig({ ...localConfig, showSubInfo: e.target.checked })} /> サブ情報（教員/科目名）
+                                    <input type="checkbox" checked={localConfig.showSubInfo} onChange={e => setLocalConfig({ ...localConfig, showSubInfo: e.target.checked })} /> サブ情報 (教員/科目名)
                                 </label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                     <input type="checkbox" checked={localConfig.showPreviousRooms} onChange={e => setLocalConfig({ ...localConfig, showPreviousRooms: e.target.checked })} /> 過年度教室
                                 </label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={localConfig.showRequirementTags} onChange={e => setLocalConfig({ ...localConfig, showRequirementTags: e.target.checked })} /> 要件タグ（PC/可動等）
+                                    <input type="checkbox" checked={localConfig.showRequirementTags} onChange={e => setLocalConfig({ ...localConfig, showRequirementTags: e.target.checked })} /> 要件タグ (PC/可動等)
                                 </label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={localConfig.showAllocationProgress} onChange={e => setLocalConfig({ ...localConfig, showAllocationProgress: e.target.checked })} /> 配当進捗（○/□室）
+                                    <input type="checkbox" checked={localConfig.showAllocationProgress} onChange={e => setLocalConfig({ ...localConfig, showAllocationProgress: e.target.checked })} /> 配当進捗 (○/○室)
                                 </label>
                             </div>
                         </div>
                     </section>
 
+                    {/* 3. グリッド・全体表示 */}
                     <section>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #f0f0f0', paddingBottom: '8px', marginBottom: '12px', color: '#333' }}>
-                            グリッド視覚効果
+                            🎨 グリッド視覚効果
                         </h4>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                <input type="checkbox" checked={localConfig.showContinuityHighlight} onChange={e => setLocalConfig({ ...localConfig, showContinuityHighlight: e.target.checked })} /> 複数講時・通年科目の強調（<span style={{ color: '#2196f3', fontWeight: 'bold' }}>青枠</span>）
+                                <input type="checkbox" checked={localConfig.showContinuityHighlight} onChange={e => setLocalConfig({ ...localConfig, showContinuityHighlight: e.target.checked })} /> 複数講時・通年科目の強調 (<span style={{ color: '#2196f3', fontWeight: 'bold' }}>青枠</span>)
                             </label>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                 <input type="checkbox" checked={localConfig.showViolationAlerts} onChange={e => setLocalConfig({ ...localConfig, showViolationAlerts: e.target.checked })} /> 制約違反の警告アイコン
@@ -125,13 +120,14 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                         </div>
                     </section>
 
+                    {/* 4. 機材強調 */}
                     <section>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #f0f0f0', paddingBottom: '8px', marginBottom: '12px', color: '#333' }}>
-                            機材表示（教室列）
+                            🏷️ 機材表示 (教室列)
                         </h4>
                         <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '10px' }}>選択した機材がグリッド左側の教室情報欄に表示されます。</p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {availableEquipment.length === 0 && <span style={{ color: '#999', fontSize: '0.9em' }}>表示できる機材がありません</span>}
+                            {availableEquipment.length === 0 && <span style={{ color: '#999', fontSize: '0.9em' }}>機材データがありません。</span>}
                             {availableEquipment.map(eq => {
                                 const style = getEquipmentStyle(eq);
                                 const isSelected = localConfig.highlightedEquipment.includes(eq);
@@ -140,12 +136,8 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                                         key={eq}
                                         onClick={() => toggleEq(eq)}
                                         style={{
-                                            padding: '4px 12px',
-                                            borderRadius: '16px',
-                                            border: '1px solid',
-                                            fontSize: '0.8rem',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s',
+                                            padding: '4px 12px', borderRadius: '16px', border: '1px solid',
+                                            fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s',
                                             background: isSelected ? style.bg : '#fff',
                                             color: isSelected ? style.text : '#666',
                                             borderColor: isSelected ? style.border : '#ddd',

@@ -38,101 +38,8 @@ const REASON_ORDER: UnassignedReason[] = [
 
 const toSubject = (item: UnassignedListItem): Subject => {
   const { _realId, reason, ...subject } = item;
-  void _realId;
-  void reason;
   return subject;
 };
-
-type FilterDropdownProps<T extends string> = {
-  label: string;
-  options: Array<{ value: T; label: string }>;
-  selected: Set<T>;
-  onToggle: (value: T) => void;
-  isOpen: boolean;
-  setIsOpen: (value: boolean) => void;
-  getLabel: (value: T) => string;
-};
-
-const FilterDropdown = <T extends string,>({
-  label,
-  options,
-  selected,
-  onToggle,
-  isOpen,
-  setIsOpen,
-  getLabel
-}: FilterDropdownProps<T>) => (
-  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-    <button
-      onClick={() => setIsOpen(!isOpen)}
-      style={{
-        width: '100%',
-        fontSize: '0.75rem',
-        padding: '4px 6px',
-        borderRadius: '4px',
-        border: '1px solid #ccc',
-        background: '#fff',
-        textAlign: 'left',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        cursor: 'pointer'
-      }}
-    >
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-        {selected.size === 0 ? label : Array.from(selected).map(getLabel).join(', ')}
-      </span>
-      <span style={{ fontSize: '0.6rem' }}>{isOpen ? '▲' : '▼'}</span>
-    </button>
-    {isOpen && (
-      <>
-        <div
-          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100 }}
-          onClick={() => setIsOpen(false)}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            width: '100%',
-            background: '#fff',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            marginTop: '2px',
-            zIndex: 101,
-            maxHeight: '220px',
-            overflowY: 'auto',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}
-        >
-          {options.map(opt => (
-            <label
-              key={opt.value}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 8px',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f0f0f0'
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.has(opt.value)}
-                onChange={() => onToggle(opt.value)}
-                style={{ margin: 0 }}
-              />
-              {opt.label}
-            </label>
-          ))}
-        </div>
-      </>
-    )}
-  </div>
-);
 
 export const UnassignedList = ({
   subjects,
@@ -276,6 +183,95 @@ export const UnassignedList = ({
       }}
     >
       ここに移動
+    </div>
+  );
+
+  const FilterDropdown = ({
+    label,
+    options,
+    selected,
+    onToggle,
+    isOpen,
+    setIsOpen,
+    getLabel
+  }: {
+    label: string;
+    options: Array<{ value: string; label: string }>;
+    selected: Set<any>;
+    onToggle: (value: any) => void;
+    isOpen: boolean;
+    setIsOpen: (value: boolean) => void;
+    getLabel: (value: any) => string;
+  }) => (
+    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%',
+          fontSize: '0.75rem',
+          padding: '4px 6px',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+          background: '#fff',
+          textAlign: 'left',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer'
+        }}
+      >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {selected.size === 0 ? label : Array.from(selected).map(getLabel).join(', ')}
+        </span>
+        <span style={{ fontSize: '0.6rem' }}>{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && (
+        <>
+          <div
+            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100 }}
+            onClick={() => setIsOpen(false)}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              width: '100%',
+              background: '#fff',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              marginTop: '2px',
+              zIndex: 101,
+              maxHeight: '220px',
+              overflowY: 'auto',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+          >
+            {options.map(opt => (
+              <label
+                key={opt.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 8px',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #f0f0f0'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(opt.value)}
+                  onChange={() => onToggle(opt.value)}
+                  style={{ margin: 0 }}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 

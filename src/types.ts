@@ -43,7 +43,6 @@ export type Period = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export interface Classroom {
     id: string;
     name: string;
-    campus?: string;
     building: string; // 棟
     capacity: number; // 通常収容人数
     examCapacity?: number; // 試験時収容人数
@@ -125,48 +124,11 @@ export type Department = typeof DEPARTMENTS[number];
 export const BUILDINGS = ['フォーサイト', '3号館', '7号館', '8号館', 'SCC'] as const;
 export type Building = typeof BUILDINGS[number];
 
-export type Campus = {
-    id: string;
-    name: string;
-    aliases?: string[];
-};
-
-export const CAMPUSES: Campus[] = [
-    { id: 'hakkei', name: '八景', aliases: ['金沢八景'] },
+export const CAMPUSES = [
+    { id: 'hakkei', name: '八景' },
     { id: 'kannnai', name: '関内' },
     { id: 'muronoki', name: '室の木' }
-];
-
-const CAMPUS_LABEL_ALIASES: Record<string, string> = CAMPUSES.reduce((acc, campus) => {
-    acc[campus.id] = campus.name;
-    acc[campus.name] = campus.name;
-    campus.aliases?.forEach(alias => {
-        acc[alias] = campus.name;
-    });
-    return acc;
-}, {} as Record<string, string>);
-
-export const normalizeCampusLabel = (value: string) => {
-    const trimmed = value.trim();
-    return CAMPUS_LABEL_ALIASES[trimmed] || trimmed;
-};
-
-export const getCampusById = (id: string) => {
-    return CAMPUSES.find(campus => campus.id === id) || null;
-};
-
-export const getCampusLabelById = (id: string) => {
-    return getCampusById(id)?.name || id;
-};
-
-export const getCampusByEmail = (email?: string | null) => {
-    if (!email) return null;
-    return CAMPUSES.find(campus => `${campus.id}@campus.local` === email) || null;
-};
-
-export const getCampusLabelFromEmail = (email?: string | null) => {
-    return normalizeCampusLabel(getCampusByEmail(email)?.name || '') || '';
-};
+] as const;
 
 // 割り当て結果の全体像
 export interface Schedule {
@@ -251,27 +213,20 @@ export interface AllocationRule {
     tier: RuleTier;
     enabled: boolean;
     order: number;
-    params?: Record<string, unknown>;
+    params?: Record<string, any>;
 }
-
-export interface EquipmentSettingItem {
-    enabled: boolean;
-    importance: number;
-}
-
-export interface EquipmentSettings {
-    items: Record<string, EquipmentSettingItem>;
-    strictLevel5: boolean;
-}
-
-export type SubjectMainDisplay = 'name' | 'teacher' | 'department';
 
 export interface AllocationSettings {
     rules: AllocationRule[];
-    equipmentSettings?: EquipmentSettings;
-    /*
+    equipmentSettings?: {
+        items: {
+            [key: string]: {
+                enabled: boolean;
+                importance: number;
+            }
+        };
         strictLevel5?: boolean; // 重要度5を必須条件とするフラグ
-    */
+    };
 }
 
 export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
@@ -477,16 +432,16 @@ export interface RelocationResult {
     unresolved: UnassignedInfo[];
 }
 
-const cloneParams = (params?: unknown) => {
-    if (!params || typeof params !== 'object' || Array.isArray(params)) return undefined;
-    return { ...(params as Record<string, unknown>) };
+const cloneParams = (params?: Record<string, any>) => {
+    if (!params) return undefined;
+    return { ...params };
 };
 
-const isLegacyRule = (rule: unknown): rule is Record<string, unknown> & { id: string } => {
-    return !!rule && typeof rule === 'object' && typeof (rule as { id?: unknown }).id === 'string';
+const isLegacyRule = (rule: any): rule is Record<string, any> => {
+    return rule && typeof rule === 'object' && typeof rule.id === 'string';
 };
 
-export const migrateAllocationRules = (oldRules: unknown[] | undefined): AllocationRule[] => {
+export const migrateAllocationRules = (oldRules: any[] | undefined): AllocationRule[] => {
     const savedRules = Array.isArray(oldRules) ? oldRules.filter(isLegacyRule) : [];
     const savedById = new Map(savedRules.map(rule => [rule.id, rule]));
 
@@ -516,7 +471,7 @@ export const migrateAllocationRules = (oldRules: unknown[] | undefined): Allocat
         return {
             ...def,
             enabled: nextEnabled,
-            params: Object.keys(nextParams).length > 0 ? (nextParams as Record<string, unknown>) : undefined
+            params: Object.keys(nextParams).length > 0 ? nextParams : undefined
         };
     });
 };

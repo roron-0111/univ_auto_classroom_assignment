@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import './App.css';
-import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
-import { BUILDINGS, DAY_LABELS } from './types';
+import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult } from './types';
+import { BUILDINGS, DAY_LABELS, CAMPUSES } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
@@ -15,12 +15,11 @@ import { AllocationRuleSettings } from './components/AllocationRuleSettings';
 import { AllocationResultModal } from './components/AllocationResultModal';
 import { ExceptionReviewModal } from './components/ExceptionReviewModal';
 import { RelocationPreviewModal } from './components/RelocationPreviewModal';
-import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
+import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
 import { sanitizeSubjectEquipmentList } from './utils/equipmentVisibility';
-import { getDefaultSubjectTaxonomy, normalizeSubjectTaxonomy, type SubjectTaxonomy } from './utils/subjectTaxonomy';
 
 // Cloud Sync
 import { CloudConnectionModal } from './components/CloudConnectionModal';
@@ -50,7 +49,6 @@ const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
   highlightedEquipment: []
 };
 const SHOW_DISPLAY_SETTINGS_BUTTON = false;
-const DEFAULT_CAMPUS_LABEL = '八景';
 
 const isTerm = (value: unknown): value is Term =>
   value === 'spring' || value === 'spring_first' || value === 'spring_second' ||
@@ -76,7 +74,7 @@ const normalizeDisplayConfig = (value: unknown): DisplayConfig => {
   };
 };
 
-const normalizeClassroom = (value: unknown, fallbackCampusLabel = DEFAULT_CAMPUS_LABEL): Classroom | null => {
+const normalizeClassroom = (value: unknown): Classroom | null => {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<Classroom> & { equipment?: unknown };
   const equipment = Array.isArray(raw.equipment)
@@ -86,7 +84,6 @@ const normalizeClassroom = (value: unknown, fallbackCampusLabel = DEFAULT_CAMPUS
   return {
     id: raw.id,
     name: raw.name,
-    campus: normalizeCampusLabel(raw.campus || fallbackCampusLabel) || fallbackCampusLabel,
     building: typeof raw.building === 'string' ? raw.building : '未設定',
     capacity: typeof raw.capacity === 'number' ? raw.capacity : 0,
     examCapacity: typeof raw.examCapacity === 'number' ? raw.examCapacity : undefined,
@@ -140,116 +137,9 @@ const normalizeSubject = (value: unknown): Subject | null => {
 };
 
 const normalizeSubjects = (value: unknown): Subject[] => {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) return mockSubjects;
   const items = value.map(normalizeSubject).filter((item): item is Subject => item !== null);
-  return items.length > 0 ? items : [];
-};
-
-const normalizeSubjectsForCampus = (value: unknown, fallbackCampusLabel = DEFAULT_CAMPUS_LABEL): Subject[] => {
-  const normalizedCampus = normalizeCampusLabel(fallbackCampusLabel) || DEFAULT_CAMPUS_LABEL;
-  return normalizeSubjects(value).map(subject => ({
-    ...subject,
-    campus: normalizeCampusLabel(subject.campus || normalizedCampus) || normalizedCampus
-  }));
-};
-
-const normalizeSubjectTaxonomyForCampus = (value: unknown, fallbackCampusLabel = DEFAULT_CAMPUS_LABEL): SubjectTaxonomy => {
-  const campusLabel = normalizeCampusLabel(fallbackCampusLabel) || DEFAULT_CAMPUS_LABEL;
-  return normalizeSubjectTaxonomy(value, campusLabel);
-};
-
-const normalizeClassrooms = (rooms: Classroom[], fallbackCampusLabel = DEFAULT_CAMPUS_LABEL): Classroom[] =>
-  rooms.map(r => ({
-    ...r,
-    campus: normalizeCampusLabel(r.campus || fallbackCampusLabel) || fallbackCampusLabel,
-    equipment: r.equipment.map(eq => eq === 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' ? 'タッチディスプレイ' : eq)
-  }));
-
-const getScopedStorageKey = (campusLabel: string, key: string) => {
-  const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
-  return `campus:${normalizedCampus}:${key}`;
-};
-
-const readScopedStorage = (campusLabel: string, key: string) => {
-  const scopedKey = getScopedStorageKey(campusLabel, key);
-  const scopedValue = localStorage.getItem(scopedKey);
-  if (scopedValue !== null) return scopedValue;
-  if (normalizeCampusLabel(campusLabel) === DEFAULT_CAMPUS_LABEL) {
-    const legacyValue = localStorage.getItem(key);
-    if (legacyValue !== null) {
-      localStorage.setItem(scopedKey, legacyValue);
-      return legacyValue;
-    }
-  }
-  return null;
-};
-
-const writeScopedStorage = (campusLabel: string, key: string, value: string) => {
-  localStorage.setItem(getScopedStorageKey(campusLabel, key), value);
-};
-
-const parseJsonOrNull = <T,>(raw: string | null): T | null => {
-  if (raw === null) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-};
-
-const loadCampusLocalState = (campusLabel: string) => {
-  const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
-
-  const classroomsRaw = readScopedStorage(normalizedCampus, 'classrooms');
-  const classroomsParsed = parseJsonOrNull<unknown[]>(classroomsRaw);
-  const classrooms = Array.isArray(classroomsParsed)
-    ? normalizeClassrooms(
-        classroomsParsed.map(item => normalizeClassroom(item, normalizedCampus)).filter((item): item is Classroom => item !== null),
-        normalizedCampus
-      )
-    : [];
-
-  const subjectsRaw = readScopedStorage(normalizedCampus, 'subjects');
-  const subjectsParsed = parseJsonOrNull<unknown>(subjectsRaw);
-  const subjects = subjectsParsed ? normalizeSubjectsForCampus(subjectsParsed, normalizedCampus) : [];
-
-  const allocationsRaw = readScopedStorage(normalizedCampus, 'allocations');
-  const allocationsParsed = parseJsonOrNull<unknown>(allocationsRaw);
-  const allocations = allocationsParsed ? normalizeAllocationsForPhase6(allocationsParsed) : [];
-
-  const allocationSettingsRaw = readScopedStorage(normalizedCampus, 'allocationSettings');
-  const allocationSettingsParsed = parseJsonOrNull<unknown[]>(allocationSettingsRaw);
-  const allocationSettings = allocationSettingsRaw
-    ? migrateAllocationRules(allocationSettingsParsed ?? undefined)
-    : DEFAULT_ALLOCATION_RULES;
-
-  const equipmentSettingsRaw = readScopedStorage(normalizedCampus, 'equipmentSettings');
-  const equipmentSettingsParsed = parseJsonOrNull<unknown>(equipmentSettingsRaw);
-  const equipmentSettings = equipmentSettingsRaw
-    ? normalizeEquipmentSettings(equipmentSettingsParsed)
-    : DEFAULT_EQUIPMENT_SETTINGS;
-
-  const displayConfigRaw = readScopedStorage(normalizedCampus, 'displayConfig');
-  const displayConfigParsed = parseJsonOrNull<unknown>(displayConfigRaw);
-  const displayConfig = displayConfigRaw
-    ? normalizeDisplayConfig(displayConfigParsed)
-    : DEFAULT_DISPLAY_CONFIG;
-
-  const subjectTaxonomyRaw = readScopedStorage(normalizedCampus, 'subjectTaxonomy');
-  const subjectTaxonomyParsed = parseJsonOrNull<unknown>(subjectTaxonomyRaw);
-  const subjectTaxonomy = subjectTaxonomyRaw
-    ? normalizeSubjectTaxonomyForCampus(subjectTaxonomyParsed, normalizedCampus)
-    : getDefaultSubjectTaxonomy(normalizedCampus);
-
-  return {
-    classrooms,
-    subjects,
-    allocations,
-    allocationSettings,
-    equipmentSettings,
-    displayConfig,
-    subjectTaxonomy
-  };
+  return items.length > 0 ? items : mockSubjects;
 };
 
 const getMissingSubjectFields = (subject: Subject) => {
@@ -287,41 +177,10 @@ const validateSubjectsForAutoAllocation = (targetSubjects: Subject[]) => {
   return false;
 };
 
-const validateCampusScopeForOperation = (
-  operationLabel: string,
-  campusLabel: string,
-  classrooms: Classroom[],
-  subjects: Subject[]
-) => {
-  const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
-  const classroomMismatch = classrooms.some(room => normalizeCampusLabel(room.campus || normalizedCampus) !== normalizedCampus);
-  const subjectMismatch = subjects.some(subject => normalizeCampusLabel(subject.campus || normalizedCampus) !== normalizedCampus);
-
-  if (classroomMismatch || subjectMismatch) {
-    alert(`${operationLabel}を実行できません。現在のキャンパス以外のデータが含まれています。`);
-    return false;
-  }
-
-  return true;
-};
-
-const normalizeEquipmentSettings = (value: unknown): EquipmentSettings => {
+const normalizeEquipmentSettings = (value: unknown) => {
   if (!value || typeof value !== 'object') return DEFAULT_EQUIPMENT_SETTINGS;
   const raw = value as { items?: unknown; strictLevel5?: unknown };
-  const items: EquipmentSettings['items'] = raw.items && typeof raw.items === 'object' && !Array.isArray(raw.items)
-    ? Object.fromEntries(
-        Object.entries(raw.items as Record<string, unknown>).map(([key, item]) => {
-          const current = item && typeof item === 'object' ? item as { enabled?: unknown; importance?: unknown } : {};
-          return [
-            key,
-            {
-              enabled: Boolean(current.enabled),
-              importance: typeof current.importance === 'number' ? current.importance : 3
-            }
-          ];
-        })
-      )
-    : DEFAULT_EQUIPMENT_SETTINGS.items;
+  const items = raw.items && typeof raw.items === 'object' && !Array.isArray(raw.items) ? raw.items as { [key: string]: { enabled: boolean; importance: number } } : DEFAULT_EQUIPMENT_SETTINGS.items;
   return {
     items,
     strictLevel5: Boolean(raw.strictLevel5)
@@ -343,14 +202,20 @@ type PendingAllocationBatch = {
   pendingExceptions: PendingException[];
   attemptedSubjects: Subject[];
   difficultyTop10: DifficultyEntry[];
-  campusLabel: string;
 };
 
 type PendingRelocationBatch = {
   result: RelocationResult;
   sourceUnassigned: UnassignedInfo[];
-  campusLabel: string;
 };
+
+
+// ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ（半角）→ タッチディスプレイ（全角）の正規化
+const normalizeClassrooms = (rooms: Classroom[]): Classroom[] =>
+  rooms.map(r => ({
+    ...r,
+    equipment: r.equipment.map(eq => eq === 'ﾀｯﾁﾃﾞｨｽﾌﾟﾚｲ' ? 'タッチディスプレイ' : eq)
+  }));
 
 const normalizeAllocationForPhase6 = (allocation: unknown): Allocation | null => {
   if (!allocation || typeof allocation !== 'object') return null;
@@ -376,7 +241,6 @@ function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
   const { saveData, refreshData } = useCloudSync(user);
-  const currentCampusLabel = useMemo(() => getCampusLabelFromEmail(user?.email), [user?.email]);
 
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
@@ -388,27 +252,27 @@ function App() {
     }
   }, [authLoading, user]);
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    if (loadedCampusRef.current === currentCampusLabel) return;
-    applyCampusState(currentCampusLabel);
-  }, [authLoading, user, currentCampusLabel]);
-
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     try {
-      const loaded = loadCampusLocalState(currentCampusLabel).classrooms;
-      return loaded.length > 0 ? loaded : normalizeClassrooms(mockClassrooms, currentCampusLabel);
+      const saved = localStorage.getItem('classrooms');
+      if (!saved) return mockClassrooms;
+      const parsed = JSON.parse(saved);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map(normalizeClassroom).filter((item): item is Classroom => item !== null)
+        : [];
+      return normalized.length > 0 ? normalizeClassrooms(normalized) : mockClassrooms;
     } catch { return mockClassrooms; }
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     try {
-      const loaded = loadCampusLocalState(currentCampusLabel).subjects;
-      return loaded.length > 0 ? loaded : normalizeSubjectsForCampus(mockSubjects, currentCampusLabel);
-    } catch { return normalizeSubjectsForCampus(mockSubjects, currentCampusLabel); }
+      const saved = localStorage.getItem('subjects');
+      return saved ? normalizeSubjects(JSON.parse(saved)) : mockSubjects;
+    } catch { return mockSubjects; }
   });
   const [allocations, setAllocations] = useState<Allocation[]>(() => {
     try {
-      return loadCampusLocalState(currentCampusLabel).allocations;
+      const saved = localStorage.getItem('allocations');
+      return saved ? normalizeAllocationsForPhase6(JSON.parse(saved)) : [];
     } catch { return []; }
   });
 
@@ -428,7 +292,6 @@ function App() {
   const [pendingAllocationBatch, setPendingAllocationBatch] = useState<PendingAllocationBatch | null>(null);
   const [pendingRelocationBatch, setPendingRelocationBatch] = useState<PendingRelocationBatch | null>(null);
   const [showExceptionReviewModal, setShowExceptionReviewModal] = useState(false);
-  const [pendingExceptionApprovedKeys, setPendingExceptionApprovedKeys] = useState<string[]>([]);
   const [showRelocationPreviewModal, setShowRelocationPreviewModal] = useState(false);
   const [resolvingExceptions, setResolvingExceptions] = useState(false);
   const [relocating, setRelocating] = useState(false);
@@ -436,13 +299,19 @@ function App() {
 
   const [allocationSettings, setAllocationSettings] = useState<AllocationRule[]>(() => {
     try {
-      return loadCampusLocalState(currentCampusLabel).allocationSettings;
+      const saved = localStorage.getItem('allocationSettings');
+      return migrateAllocationRules(saved ? JSON.parse(saved) : undefined);
     } catch { return DEFAULT_ALLOCATION_RULES; }
   });
 
-  const [equipmentSettings, setEquipmentSettings] = useState<EquipmentSettings>(() => {
+  const [equipmentSettings, setEquipmentSettings] = useState<{
+    items: { [key: string]: { enabled: boolean; importance: number } };
+    strictLevel5: boolean;
+  }>(() => {
+    const saved = localStorage.getItem('equipmentSettings');
+    if (!saved) return DEFAULT_EQUIPMENT_SETTINGS;
     try {
-      return loadCampusLocalState(currentCampusLabel).equipmentSettings;
+      return normalizeEquipmentSettings(JSON.parse(saved));
     } catch {
       return DEFAULT_EQUIPMENT_SETTINGS;
     }
@@ -450,69 +319,24 @@ function App() {
 
   const [displayConfig, setDisplayConfig] = useState<DisplayConfig>(() => {
     try {
-      return loadCampusLocalState(currentCampusLabel).displayConfig;
+      const saved = localStorage.getItem('displayConfig');
+      if (saved) return normalizeDisplayConfig(JSON.parse(saved));
     } catch { /* fall through to default */ }
     return DEFAULT_DISPLAY_CONFIG;
   });
 
-  const [subjectTaxonomy, setSubjectTaxonomy] = useState<SubjectTaxonomy>(() => {
-    try {
-      return loadCampusLocalState(currentCampusLabel).subjectTaxonomy;
-    } catch {
-      return getDefaultSubjectTaxonomy(currentCampusLabel);
-    }
-  });
-
   const [pickingCell, setPickingCell] = useState<{ room: string; period: Period; term: Term } | null>(null);
   const [draggingSubjectId, setDraggingSubjectId] = useState<string | null>(null);
-  const activeCampusRef = useRef(currentCampusLabel);
-  const loadedCampusRef = useRef(currentCampusLabel);
-
-  const applyCampusState = (campusLabel: string) => {
-    const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
-    const localCampusState = loadCampusLocalState(normalizedCampus);
-    activeCampusRef.current = normalizedCampus;
-    loadedCampusRef.current = normalizedCampus;
-    setClassrooms(localCampusState.classrooms.length > 0 ? localCampusState.classrooms : normalizeClassrooms(mockClassrooms, normalizedCampus));
-    setSubjects(localCampusState.subjects.length > 0 ? localCampusState.subjects : normalizeSubjectsForCampus(mockSubjects, normalizedCampus));
-    setAllocations(localCampusState.allocations);
-    setAllocationSettings(localCampusState.allocationSettings);
-    setEquipmentSettings(localCampusState.equipmentSettings);
-    setDisplayConfig(localCampusState.displayConfig);
-    setSubjectTaxonomy(localCampusState.subjectTaxonomy);
-  };
 
   // 永続化（ローカルストレージ）
   // クラウド接続中もローカルバックアップとして機能させるが、
   // クラウドからのロード直後は上書きしないよう注意が必要（現状は単純に保存）
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'classrooms', JSON.stringify(classrooms));
-  }, [classrooms, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'subjects', JSON.stringify(subjects));
-  }, [subjects, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'allocations', JSON.stringify(allocations));
-  }, [allocations, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'allocationSettings', JSON.stringify(allocationSettings));
-  }, [allocationSettings, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'equipmentSettings', JSON.stringify(equipmentSettings));
-  }, [equipmentSettings, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'displayConfig', JSON.stringify(displayConfig));
-  }, [displayConfig, currentCampusLabel]);
-  useEffect(() => {
-    if (activeCampusRef.current !== currentCampusLabel) return;
-    writeScopedStorage(currentCampusLabel, 'subjectTaxonomy', JSON.stringify(subjectTaxonomy));
-  }, [subjectTaxonomy, currentCampusLabel]);
+  useEffect(() => { localStorage.setItem('classrooms', JSON.stringify(classrooms)); }, [classrooms]);
+  useEffect(() => { localStorage.setItem('subjects', JSON.stringify(subjects)); }, [subjects]);
+  useEffect(() => { localStorage.setItem('allocations', JSON.stringify(allocations)); }, [allocations]);
+  useEffect(() => { localStorage.setItem('allocationSettings', JSON.stringify(allocationSettings)); }, [allocationSettings]);
+  useEffect(() => { localStorage.setItem('equipmentSettings', JSON.stringify(equipmentSettings)); }, [equipmentSettings]);
+  useEffect(() => { localStorage.setItem('displayConfig', JSON.stringify(displayConfig)); }, [displayConfig]);
   useEffect(() => {
     pruneStreakMap(subjects);
     setStreakRevision(v => v + 1);
@@ -526,8 +350,7 @@ function App() {
         classrooms,
         allocations,
         settings: allocationSettings,
-        equipmentSettings,
-        subjectTaxonomy
+        equipmentSettings
       };
 
       const timeoutId = setTimeout(() => {
@@ -536,30 +359,29 @@ function App() {
 
       return () => clearTimeout(timeoutId);
     }
-  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, subjectTaxonomy, saveData]);
+  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, saveData]);
 
 
   // クラウドデータの旧フォーマット（フラット構造）を新フォーマットに移行
-  const migrateEquipmentSettings = (s: unknown): EquipmentSettings => normalizeEquipmentSettings(s);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const migrateEquipmentSettings = (s: any) =>
+    s && typeof s === 'object' && 'items' in s ? s : { items: s || {}, strictLevel5: false };
 
   const handleCloudConnect = async (email: string) => {
     try {
       setIsCloudLoading(true);
       // 単一のキャンパスログインに統合
       await loginByCampus(email); // emailにはcampusIdが入る
-      const campusLabel = getCampusLabelFromEmail(email);
-      applyCampusState(campusLabel);
 
       // ログイン直後にデータをロード
       const cloudData = await refreshData();
       if (cloudData) {
         if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
-          setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
-          setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
+          setClassrooms(normalizeClassrooms(cloudData.classrooms));
+          setSubjects(normalizeSubjects(cloudData.subjects));
           setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
           setAllocationSettings(migrateAllocationRules(cloudData.settings));
           setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
-          setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
 
           alert('クラウドデータをロードしました。');
           setShowCloudModal(false);
@@ -569,12 +391,11 @@ function App() {
 
       // クラウドにデータがない、またはロードをキャンセルした場合は現在のローカルデータをアップロード
       const currentData: CloudData = {
-        subjects: normalizeSubjectsForCampus(subjects, campusLabel),
-        classrooms: normalizeClassrooms(classrooms, campusLabel),
+        subjects,
+        classrooms,
         allocations,
         settings: allocationSettings,
-        equipmentSettings,
-        subjectTaxonomy
+        equipmentSettings
       };
       await saveData(currentData);
       alert('現在のデータをクラウドに同期しました。');
@@ -591,15 +412,9 @@ function App() {
   }, [subjects, draggingSubjectId]);
   const editingSubject = subjects.find(s => s.id === editingSubjectId);
   const editingClassroom = classrooms.find(r => r.id === editingClassroomId);
-  const [streakMapSnapshot, setStreakMapSnapshot] = useState(() => loadStreakMap());
-
-  useEffect(() => {
-    setStreakMapSnapshot(loadStreakMap());
-  }, [streakRevision]);
-
-  const computeSubjectDifficulty = useCallback((subject: Subject) => {
-    return computeDifficulty(subject, subjects, classrooms, allocationSettings, equipmentSettings, streakMapSnapshot);
-  }, [subjects, classrooms, allocationSettings, equipmentSettings, streakMapSnapshot]);
+  const streakMapSnapshot = useMemo(() => loadStreakMap(), [streakRevision]);
+  const computeSubjectDifficulty = (subject: Subject) =>
+    computeDifficulty(subject, subjects, classrooms, allocationSettings, equipmentSettings, streakMapSnapshot);
   const buildApprovedExceptionSet = (sourceAllocations: Allocation[]) =>
     new Set(
       sourceAllocations
@@ -667,7 +482,6 @@ function App() {
   }, [classrooms, selectedBuilding, selectedTypes, selectedEquipment]);
 
   const handleClassroomUpdate = (updated: Classroom[]) => {
-    const nextClassrooms = normalizeClassrooms(updated, currentCampusLabel);
     const roomIds = new Set(updated.map(r => r.id));
     const lostRooms = classrooms.filter(r => !roomIds.has(r.id)).map(r => r.id);
 
@@ -675,23 +489,19 @@ function App() {
       setAllocations(prev => prev.filter(a => !lostRooms.includes(a.classroomId)));
     }
 
-    setClassrooms(nextClassrooms);
+    setClassrooms(updated);
   };
 
   const handleSubjectUpdate = (updated: Subject[]) => {
     const subjectIds = new Set(updated.map(s => s.id));
     const lostSubjects = subjects.filter(s => !subjectIds.has(s.id)).map(s => s.id);
-    const normalizedSubjects = updated.map(subject => ({
-      ...subject,
-      campus: normalizeCampusLabel(subject.campus || currentCampusLabel) || currentCampusLabel
-    }));
 
     setAllocations(prev => {
       let next = prev.filter(a => !lostSubjects.includes(a.subjectId));
 
       next = next.filter(a => {
         const oldSub = subjects.find(s => s.id === a.subjectId);
-        const newSub = normalizedSubjects.find(s => s.id === a.subjectId);
+        const newSub = updated.find(s => s.id === a.subjectId);
         if (oldSub && newSub) {
           if (
             oldSub.term !== newSub.term ||
@@ -708,7 +518,7 @@ function App() {
       return next;
     });
 
-    setSubjects(normalizedSubjects);
+    setSubjects(updated);
   };
 
   const unassignedSubjectsAll = useMemo(() => {
@@ -744,7 +554,7 @@ function App() {
         difficultyDetail: difficulty ? formatDifficultySummary(difficulty) : undefined
       };
     });
-  }, [unassignedSubjectsAll, lastUnassigned, computeSubjectDifficulty]);
+  }, [unassignedSubjectsAll, lastUnassigned, streakMapSnapshot, subjects, classrooms, allocationSettings, equipmentSettings]);
 
   const displayedUnassigned = useMemo(() => {
     return unassignedWithReason.filter(s => s.day === currentDay);
@@ -849,7 +659,6 @@ function App() {
     });
     setPendingAllocationBatch(null);
     setShowExceptionReviewModal(false);
-    setPendingExceptionApprovedKeys([]);
     setPendingRelocationBatch(null);
     setShowRelocationPreviewModal(false);
     updateStreakAfterAllocation(attemptedSubjects, nextUnassigned);
@@ -858,10 +667,6 @@ function App() {
 
   const handleAutoAllocate = (options: AllocationOptions) => {
     const { rules: rulesToUse, priorities, includeAllocated, includeUnassigned, equipmentSettings: equipmentToUse } = options;
-
-    if (!validateCampusScopeForOperation('教室自動配当', currentCampusLabel, classrooms, subjects)) {
-      return;
-    }
 
     // 対象科目をフィルタリング
     const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
@@ -947,10 +752,6 @@ function App() {
       return;
     }
 
-    if (!validateCampusScopeForOperation('教室自動配当', currentCampusLabel, classrooms, subjects)) {
-      return;
-    }
-
     const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
     const targetSubjects = subjects.filter(s => {
       if (!priorities.includes(s.priority || 1)) return false;
@@ -1006,10 +807,8 @@ function App() {
         preservedCount: preservedAllocations.length,
         pendingExceptions: result.pendingExceptions,
         attemptedSubjects: targetSubjects,
-        difficultyTop10,
-        campusLabel: currentCampusLabel
+        difficultyTop10
       });
-      setPendingExceptionApprovedKeys(result.pendingExceptions.map(pendingExceptionKey));
       setShowExceptionReviewModal(true);
       setShowRuleSettings(false);
       setPendingRelocationBatch(null);
@@ -1030,13 +829,6 @@ function App() {
 
   const handleConfirmExceptionReview = (approvedKeys: string[]) => {
     if (!pendingAllocationBatch) return;
-    if (pendingAllocationBatch.campusLabel !== currentCampusLabel) {
-      alert('キャンパスが切り替わったため、例外確認を中止しました。');
-      setPendingAllocationBatch(null);
-      setShowExceptionReviewModal(false);
-      setPendingExceptionApprovedKeys([]);
-      return;
-    }
 
     const approvedSet = new Set(approvedKeys);
     const rejectedPending = pendingAllocationBatch.pendingExceptions.filter(item => !approvedSet.has(pendingExceptionKey(item)));
@@ -1058,20 +850,15 @@ function App() {
       pendingAllocationBatch.attemptedSubjects,
       pendingAllocationBatch.difficultyTop10
     );
-    setPendingExceptionApprovedKeys([]);
   };
 
   const handleCancelExceptionReview = () => {
     setPendingAllocationBatch(null);
     setShowExceptionReviewModal(false);
-    setPendingExceptionApprovedKeys([]);
   };
 
   const handleResolveCurrentExceptions = () => {
     if (resolvingExceptions) return;
-    if (!validateCampusScopeForOperation('例外の再スキャン', currentCampusLabel, classrooms, subjects)) {
-      return;
-    }
     const exceptionCount = allocations.filter(a => a.exceptions && a.exceptions.length > 0 && !a.exceptionApproved).length;
     if (exceptionCount === 0) return;
 
@@ -1109,9 +896,6 @@ function App() {
 
   const handleRelocate = () => {
     if (relocating) return;
-    if (!validateCampusScopeForOperation('未配当の再配置', currentCampusLabel, classrooms, subjects)) {
-      return;
-    }
 
     const sourceUnassigned = lastUnassigned.length > 0
       ? lastUnassigned
@@ -1138,7 +922,7 @@ function App() {
         return;
       }
 
-      setPendingRelocationBatch({ result, sourceUnassigned, campusLabel: currentCampusLabel });
+      setPendingRelocationBatch({ result, sourceUnassigned });
       setShowRelocationPreviewModal(true);
     } finally {
       setRelocating(false);
@@ -1147,12 +931,6 @@ function App() {
 
   const handleConfirmRelocation = () => {
     if (!pendingRelocationBatch) return;
-    if (pendingRelocationBatch.campusLabel !== currentCampusLabel) {
-      alert('キャンパスが切り替わったため、再配置を中止しました。');
-      setPendingRelocationBatch(null);
-      setShowRelocationPreviewModal(false);
-      return;
-    }
 
     const result = pendingRelocationBatch.result;
     setAllocations(result.allocations);
@@ -1246,7 +1024,7 @@ function App() {
             className="hover:scale-105 active:scale-95"
           >
             {user ? <LogIn size={16} /> : <CloudOff size={16} />}
-            {user ? `ログイン中(${getCampusLabelFromEmail(user.email) || user.email?.split('@')[0]})` : 'ログイン'}
+            {user ? `ログイン中(${(CAMPUSES.find(c => `${c.id}@campus.local` === user.email)?.name) || user.email?.split('@')[0]})` : 'ログイン'}
           </button>
 
 
@@ -1259,8 +1037,7 @@ function App() {
                     const data = await refreshData();
                     if (data) {
                       if (data.classrooms) setClassrooms(data.classrooms);
-                      if (data.subjects) setSubjects(normalizeSubjectsForCampus(data.subjects, currentCampusLabel));
-                      if (data.subjectTaxonomy) setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(data.subjectTaxonomy, currentCampusLabel));
+                      if (data.subjects) setSubjects(normalizeSubjects(data.subjects));
                       if (data.allocations) setAllocations(normalizeAllocationsForPhase6(data.allocations));
                       if (data.settings?.length) setAllocationSettings(migrateAllocationRules(data.settings));
                       if (data.equipmentSettings) setEquipmentSettings(migrateEquipmentSettings(data.equipmentSettings));
@@ -1550,7 +1327,6 @@ function App() {
             <ClassroomManager
               classrooms={classrooms}
               onUpdate={handleClassroomUpdate}
-              currentCampusLabel={currentCampusLabel}
               onClose={() => setShowManager(false)}
             />
           )
@@ -1563,10 +1339,7 @@ function App() {
               subjects={subjects}
               allocations={allocations}
               classrooms={classrooms}
-              currentCampusLabel={currentCampusLabel}
-              subjectTaxonomy={subjectTaxonomy}
               onUpdate={handleSubjectUpdate}
-              onUpdateSubjectTaxonomy={setSubjectTaxonomy}
               onClose={() => setShowSubjectManager(false)}
             />
           )
@@ -1578,12 +1351,9 @@ function App() {
             <SubjectEditModal
               subject={editingSubject}
               availableEquipment={allEquipment}
-              currentCampusLabel={currentCampusLabel}
-              facultyOptions={subjectTaxonomy.faculties}
-              departmentOptions={subjectTaxonomy.departments}
               onSave={(updated) => {
                 setSubjects(prev => {
-                  const next = prev.map(s => s.id === updated.id ? { ...updated, campus: normalizeCampusLabel(updated.campus || currentCampusLabel) || currentCampusLabel } : s);
+                  const next = prev.map(s => s.id === updated.id ? updated : s);
                   return next;
                 });
                 setEditingSubjectId(null);
@@ -1668,15 +1438,13 @@ function App() {
 
         {
           showExceptionReviewModal && pendingAllocationBatch && (
-              <ExceptionReviewModal
-                isOpen={showExceptionReviewModal}
-                exceptions={pendingAllocationBatch.pendingExceptions}
-                classrooms={classrooms}
-                approvedKeys={pendingExceptionApprovedKeys}
-                onApprovedKeysChange={setPendingExceptionApprovedKeys}
-                onConfirm={handleConfirmExceptionReview}
-                onCancel={handleCancelExceptionReview}
-              />
+            <ExceptionReviewModal
+              isOpen={showExceptionReviewModal}
+              exceptions={pendingAllocationBatch.pendingExceptions}
+              classrooms={classrooms}
+              onConfirm={handleConfirmExceptionReview}
+              onCancel={handleCancelExceptionReview}
+            />
           )
         }
 

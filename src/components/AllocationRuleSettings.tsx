@@ -6,7 +6,7 @@ import { ChevronUp, ChevronDown, ArrowLeft, Save, Lock } from 'lucide-react';
 interface Props {
     settings: AllocationRule[];
     equipmentSettings?: {
-        items: Record<string, { enabled: boolean; importance: number }>;
+        items: { [key: string]: { enabled: boolean; importance: number } };
         strictLevel5: boolean;
     };
     onSave: (options: AllocationOptions) => void;
@@ -21,9 +21,6 @@ const tierOrder: Record<AllocationRule['tier'], number> = {
 };
 
 const displayOrder = new Map(DEFAULT_ALLOCATION_RULES.map((rule, index) => [rule.id, index]));
-type EquipmentItemState = { enabled: boolean; importance: number };
-
-const getEquipmentFallback = (): EquipmentItemState => ({ enabled: true, importance: 3 });
 
 const sortRules = (items: AllocationRule[]) =>
     [...items].sort((a, b) => {
@@ -71,23 +68,18 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
         setRules(sortRules(updated));
     };
 
-    function handleEquipmentChange(key: string, field: 'enabled'): void;
-    function handleEquipmentChange(key: string, field: 'importance', value: number): void;
-    function handleEquipmentChange(key: string, field: 'enabled' | 'importance', value?: number) {
+    const handleEquipmentChange = (key: string, field: 'enabled' | 'importance', value?: any) => {
         setEquipmentSettings(prev => ({
             ...prev,
             items: {
                 ...prev.items,
                 [key]: {
-                    ...((prev.items[key] ?? getEquipmentFallback()) as EquipmentItemState),
-                    [field]:
-                        field === 'enabled'
-                            ? !(prev.items[key] ?? getEquipmentFallback()).enabled
-                            : (typeof value === 'number' ? value : (prev.items[key] ?? getEquipmentFallback()).importance)
+                    ...prev.items[key],
+                    [field]: field === 'enabled' ? !prev.items[key].enabled : value
                 }
             }
         }));
-    }
+    };
 
     const hardRules = rules.filter(r => r.tier === 'hard');
     const prefRules = rules.filter(r => r.tier === 'pref').sort((a, b) => a.order - b.order);

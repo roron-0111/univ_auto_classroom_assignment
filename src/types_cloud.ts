@@ -1,5 +1,4 @@
 import type { Subject, Classroom, Allocation, AllocationRule, AllocationSettings } from './types';
-import type { SubjectTaxonomy } from './utils/subjectTaxonomy';
 
 export interface CloudProject {
     id: string; // プロジェクトID（ユーザー指定）
@@ -14,5 +13,4 @@ export interface CloudData {
     allocations: Allocation[];
     settings: AllocationRule[];
     equipmentSettings: AllocationSettings['equipmentSettings'];
-    subjectTaxonomy: SubjectTaxonomy;
 }
