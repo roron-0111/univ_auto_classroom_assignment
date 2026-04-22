@@ -6,6 +6,41 @@ import { SUBJECT_EQUIPMENT_CHOICES, sanitizeSubjectEquipmentList } from './equip
 // Header definitions
 // Header definitions
 
+export type SubjectImportColumnDef = {
+    label: string;
+    aliases: string[];
+};
+
+export const SUBJECT_IMPORT_REQUIRED_COLUMNS: SubjectImportColumnDef[] = [
+    { label: 'コード', aliases: ['コード', '時間割コード', 'ID', 'Code'] },
+    { label: '時間割名称', aliases: ['時間割名称', '時間割名', 'Name'] },
+    { label: '教員コード', aliases: ['教員コード', 'TeacherCode'] },
+    { label: '教員名', aliases: ['教員名', '教員', 'Teacher'] },
+    { label: '開講学部', aliases: ['開講学部', 'Faculty'] },
+    { label: '管轄', aliases: ['管轄', '管轄学科', '学科', 'Department'] },
+    { label: '配当期', aliases: ['配当期', '開講期', '学期', 'Term'] },
+    { label: '曜日', aliases: ['曜日', 'Day'] },
+    { label: '講時', aliases: ['講時', '開始講時', 'Period'] },
+    { label: 'キャンパス', aliases: ['キャンパス', 'Campus'] },
+    { label: '必要教室数', aliases: ['必要教室数', 'RequiredRoomCount'] },
+    { label: 'タイプ', aliases: ['タイプ', '希望教室タイプ', 'PreferredRoomType'] },
+];
+
+const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim();
+
+const getCsvValue = (row: Record<string, string>, aliases: string[]) => {
+    const key = Object.keys(row).find((header) =>
+        aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
+    );
+    return key ? String(row[key] ?? '').trim() : '';
+};
+
+const hasCsvHeader = (headers: string[], aliases: string[]) => {
+    return headers.some(header =>
+        aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
+    );
+};
+
 export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
     return new Promise((resolve, reject) => {
         Papa.parse(file, {
@@ -90,16 +125,44 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
+                const rows = results.data as Record<string, string>[];
+                const headers = (results.meta.fields || []).map(normalizeCsvHeader).filter(Boolean);
+                const missingHeaders = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !hasCsvHeader(headers, col.aliases));
+                if (missingHeaders.length > 0) {
+                    reject(new Error(`必須列が不足しています: ${missingHeaders.map(col => col.label).join('、')}`));
+                    return;
+                }
+
+                const rowIssues: string[] = [];
+                rows.forEach((row, index) => {
+                    const missing = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !getCsvValue(row, col.aliases));
+                    const periodValue = parseInt(getCsvValue(row, ['講時', '開始講時', 'Period']), 10);
+                    if ((!missing.some(col => col.label === '講時')) && (!Number.isFinite(periodValue) || periodValue <= 0)) {
+                        missing.push({ label: '講時', aliases: ['講時'] });
+                    }
+                    const roomCountValue = parseInt(getCsvValue(row, ['必要教室数', 'RequiredRoomCount']), 10);
+                    if ((!missing.some(col => col.label === '必要教室数')) && (!Number.isFinite(roomCountValue) || roomCountValue <= 0)) {
+                        missing.push({ label: '必要教室数', aliases: ['必要教室数'] });
+                    }
+                    if (missing.length > 0) {
+                        rowIssues.push(`${index + 2}行目(${missing.map(col => col.label).join('、')})`);
+                    }
+                });
+                if (rowIssues.length > 0) {
+                    reject(new Error(`必須項目が空欄の行があります: ${rowIssues.slice(0, 10).join('、')}${rowIssues.length > 10 ? '…' : ''}`));
+                    return;
+                }
+
                 const rawSubjects = (results.data as Record<string, string>[]).map((row) => ({
-                    id: row.ID || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
-                    code: row['時間割コード'] || row.Code || row.ID,
-                    name: row.Name || row['時間割名称'] || row['授業名'],
-                    teacherCode: row.TeacherCode || row['教員コード'] || row['教員番号'] || '',
-                    teacher: row.Teacher || row['教員'] || row['代表教員'],
-                    department: row.Department || row['管轄学科'] || row['学科'],
-                    faculty: row.Faculty || row['開講学部'],
+                    id: row.ID || row['コード'] || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
+                    code: row['コード'] || row['時間割コード'] || row.Code || row.ID,
+                    name: row['時間割名称'] || row.Name || row['授業名'],
+                    teacherCode: row['教員コード'] || row.TeacherCode || row['教員番号'] || '',
+                    teacher: row['教員名'] || row.Teacher || row['教員'] || row['代表教員'],
+                    department: row['管轄'] || row.Department || row['管轄学科'] || row['学科'],
+                    faculty: row['開講学部'] || row.Faculty,
                     term: (() => {
-                        const t = row.Term || row['開講期'] || row['配当期'] || row['学期'];
+                        const t = row['配当期'] || row.Term || row['開講期'] || row['学期'];
                         if (t === '春' || t === '春学期') return 'spring';
                         if (t === '春学期前半' || t === '春前半') return 'spring_first';
                         if (t === '春学期後半' || t === '春後半') return 'spring_second';
@@ -110,17 +173,18 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                         return (t as Term) || 'spring';
                     })(),
                     day: (() => {
-                        const d = row.Day || row['曜日'];
+                        const d = row['曜日'] || row.Day;
                         const map: Record<string, DayOfWeek> = { '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu', '金': 'fri', '土': 'sat' };
                         return map[d] || d as DayOfWeek;
                     })(),
-                    period: parseInt(row.Period || row['開始講時'] || row['講時'], 10) as Period,
+                    period: parseInt(row['講時'] || row['開始講時'] || row.Period, 10) as Period,
                     endPeriod: (parseInt(row.EndPeriod || row['終了講時'], 10) || undefined) as Period | undefined,
-                    requiredCapacity: parseInt(row.RequiredCapacity || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
-                    campus: row.Campus || row['キャンパス'],
-                    previousRooms: row.PreviousRooms || row['教室'] || row['過去教室'] ? (row.PreviousRooms || row['教室'] || row['過去教室']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    requiredCapacity: parseInt(row.RequiredCapacity || row['履修者数'] || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
+                    campus: row['キャンパス'] || row.Campus,
+                    requiredRoomCount: parseInt(row.RequiredRoomCount || row['必要教室数'], 10) || 1,
+                    previousRooms: row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室'] ? (row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
                     preferredRoomType: (() => {
-                        const t = row.PreferredRoomType || row['希望教室タイプ'] || row['教室タイプ'];
+                        const t = row['タイプ'] || row.PreferredRoomType || row['希望教室タイプ'] || row['教室タイプ'];
                         if (t === 'PC' || t === 'PC室') return 'pc';
                         if (t === 'ゼミ' || t === 'ゼミ室') return 'seminar';
                         if (t === '一般') return 'normal';
@@ -169,7 +233,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     const key = `${s.code}-${s.term}-${s.day}-${s.period}`;
                     if (grouped.has(key)) {
                         const existing = grouped.get(key)!;
-                        existing.requiredRoomCount = (existing.requiredRoomCount || 1) + 1; // Increment count, default to 1 if not set
+                        existing.requiredRoomCount = Math.max(existing.requiredRoomCount || 1, s.requiredRoomCount || 1);
                         if (s.previousRooms && s.previousRooms.length > 0) {
                             existing.previousRooms = Array.from(new Set([...(existing.previousRooms || []), ...s.previousRooms]));
                         }

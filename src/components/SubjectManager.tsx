@@ -6,6 +6,7 @@ import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
+import { SUBJECT_IMPORT_REQUIRED_COLUMNS } from '../utils/csvParser';
 
 function equipValue(
     eq: string,
@@ -502,11 +503,16 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                         {showCsvHint && (
                                             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
-                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須</span>: 時間割コード(またはID), 曜日(月〜土), 開始講時(数値), 配当期</div>
-                                                <div style={{ marginBottom: '2px', fontSize: '0.73rem', color: '#888', paddingLeft: '4px' }}>配当期: 春学期/春前半/春後半/秋学期/秋前半/秋後半/通年</div>
-                                                <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: 時間割名称, 教員コード, 教員, 管轄学科, 開講学部, キャンパス, 履修予定人数, 優先度, 終了講時, 棟希望, 教室(過去教室)</div>
-                                                <div style={{ marginBottom: '4px' }}>機材列: 列名=機材名、◎=必須 ○=希望</div>
-                                                <div style={{ color: '#1976d2', fontSize: '0.75rem', marginTop: '6px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                                <div style={{ marginBottom: '4px', lineHeight: 1.7 }}>
+                                                    <span style={{ color: '#d32f2f', fontWeight: 'bold' }}>必須: </span>
+                                                    {SUBJECT_IMPORT_REQUIRED_COLUMNS.map((col, index) => (
+                                                        <span key={col.label} style={{ color: '#d32f2f', fontWeight: 'bold' }}>
+                                                            {col.label}{index < SUBJECT_IMPORT_REQUIRED_COLUMNS.length - 1 ? '、' : ''}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <div style={{ marginBottom: '4px' }}>機材･設備：◎=必須 ○=希望</div>
+                                                <div style={{ marginBottom: '4px' }}>列情報は本ページと必ず合わせること</div>
                                             </div>
                                         )}
                                     </div>
@@ -517,23 +523,23 @@ export const SubjectManager = ({ subjects, allocations, classrooms, onUpdate, on
                                     const exportData = subjects.flatMap(s => {
                                         const subjectAllocations = allocations.filter(a => a.subjectId === s.id);
                                         const baseRow: Record<string, any> = {
-                                            '時間割コード': s.code,
+                                            'コード': s.code,
                                             '時間割名称': s.name,
                                             '教員コード': s.teacherCode || '',
-                                            '教員': s.teacher,
-                                            '学部': s.faculty,
-                                            '学科': s.department,
+                                            '教員名': s.teacher,
+                                            '開講学部': s.faculty,
+                                            '管轄': s.department,
                                             '配当期': TERM_LABELS[s.term] || s.term,
                                             '曜日': DAY_LABELS[s.day],
-                                            '開始講時': s.period,
+                                            '講時': s.period,
                                             '終了講時': s.endPeriod || s.period,
                                             'キャンパス': s.campus,
-                                            '履修予定人数': s.requiredCapacity,
-                                            '優先度[1(低)～3(高)]': s.priority,
+                                            '履修者数': s.requiredCapacity,
+                                            '優先度': s.priority,
                                             '必要教室数': s.requiredRoomCount,
                                             '棟希望': s.buildingPreference || '',
-                                            '希望教室タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
-                                            '過去教室': s.previousRooms?.join(', ') || '',
+                                            'タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
+                                            '教室(過去教室)': s.previousRooms?.join(', ') || '',
                                         };
                                         // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
                                         SUBJECT_EQUIPMENT_CHOICES.forEach(eq => {
