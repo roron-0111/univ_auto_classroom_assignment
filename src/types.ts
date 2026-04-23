@@ -115,20 +115,20 @@ export const getDayLabel = (day: string | null | undefined) => {
 
 
 export const PERIOD_LABELS: Record<Period, string> = {
-    1: '1-2',
-    2: '3-4',
-    3: '5-6',
-    4: '7-8',
-    5: '9-10',
-    6: 'N1-N2',
-    7: 'N3-N4'
+    1: '1',
+    2: '2',
+    3: '3',
+    4: '4',
+    5: '5',
+    6: '6',
+    7: '7'
 };
 
 export const getPeriodLabel = (period: number | string | null | undefined) => {
     if (period === null || period === undefined || period === '') return '未定';
     const numeric = Number(period);
     if (!Number.isFinite(numeric) || numeric <= 0) return '未定';
-    return PERIOD_LABELS[numeric as Period] || String(period);
+    return PERIOD_LABELS[numeric as Period] || String(numeric);
 };
 
 
