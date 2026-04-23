@@ -1,8 +1,9 @@
 ﻿import { useState, useRef, useEffect, useMemo } from 'react';
+import Papa from 'papaparse';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
-import { parseSubjectCSV, exportToCSV } from '../utils/csvParser';
+import { SUBJECT_IMPORT_REQUIRED_COLUMNS, exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
@@ -30,6 +31,140 @@ function equipValue(
     if (pref.includes(normalizedEq)) return '○';
     return '';
 }
+
+const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim();
+
+const getCsvValue = (row: Record<string, string>, aliases: string[]) => {
+    const key = Object.keys(row).find(header =>
+        aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
+    );
+    return key ? String(row[key] ?? '').trim() : '';
+};
+
+const hasCsvHeader = (headers: string[], aliases: string[]) => {
+    return headers.some(header =>
+        aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
+    );
+};
+
+const parseSubjectCSVWithTbd = (file: File): Promise<Subject[]> => {
+    return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const rows = results.data as Record<string, string>[];
+                const headers = (results.meta.fields || []).map(normalizeCsvHeader).filter(Boolean);
+                const missingHeaders = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !hasCsvHeader(headers, col.aliases));
+                if (missingHeaders.length > 0) {
+                    reject(new Error(`必須列が不足しています: ${missingHeaders.map(col => col.label).join('、')}`));
+                    return;
+                }
+
+                const rowIssues: string[] = [];
+                rows.forEach((row, index) => {
+                    const missing = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !getCsvValue(row, col.aliases));
+                    const periodRaw = getCsvValue(row, ['講時', '開始講時', 'Period']);
+                    const periodValue = parseInt(periodRaw, 10);
+                    if ((!missing.some(col => col.label === '講時')) && (!Number.isFinite(periodValue) || periodValue < 0)) {
+                        missing.push({ label: '講時', aliases: ['講時'] });
+                    }
+                    const roomCountValue = parseInt(getCsvValue(row, ['必要教室数', 'RequiredRoomCount']), 10);
+                    if ((!missing.some(col => col.label === '必要教室数')) && (!Number.isFinite(roomCountValue) || roomCountValue <= 0)) {
+                        missing.push({ label: '必要教室数', aliases: ['必要教室数'] });
+                    }
+                    if (missing.length > 0) {
+                        rowIssues.push(`${index + 2}行目(${missing.map(col => col.label).join('・')})`);
+                    }
+                });
+                if (rowIssues.length > 0) {
+                    reject(new Error(`必須項目が不足している行があります ${rowIssues.slice(0, 10).join('、')}${rowIssues.length > 10 ? '…' : ''}`));
+                    return;
+                }
+
+                const rawSubjects = rows.map((row) => ({
+                    id: row.ID || row['コード'] || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
+                    code: row['コード'] || row['時間割コード'] || row.Code || row.ID,
+                    name: row['時間割名称'] || row.Name || row['授業名称'],
+                    teacherCode: row['教員コード'] || row.TeacherCode || '',
+                    teacher: row['教員名'] || row.Teacher || row['教員'] || row['代表教員'],
+                    department: row['管轄'] || row.Department || '',
+                    faculty: row['開講学部'] || row.Faculty || '',
+                    term: (() => {
+                        const t = row['配当期'] || row.Term || row['学期'] || '';
+                        if (t === '0' || t === '未定' || t === '') return '' as Term;
+                        if (t === '春学期' || t === '春') return 'spring';
+                        if (t === '春前半') return 'spring_first';
+                        if (t === '春後半') return 'spring_second';
+                        if (t === '秋学期' || t === '秋') return 'autumn';
+                        if (t === '秋前半') return 'autumn_first';
+                        if (t === '秋後半') return 'autumn_second';
+                        if (t === '通年') return 'full_year';
+                        return (t as Term) || '' as Term;
+                    })(),
+                    day: (() => {
+                        const d = row['曜日'] || row.Day || '';
+                        if (d === '0' || d === '未定' || d === '') return '' as DayOfWeek;
+                        const map: Record<string, DayOfWeek> = { '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu', '金': 'fri', '土': 'sat' };
+                        return map[d] || d as DayOfWeek;
+                    })(),
+                    period: (() => {
+                        const raw = row['講時'] || row['開始講時'] || row.Period || '';
+                        if (raw === '0' || raw === '未定' || raw === '') return 0 as Period;
+                        return parseInt(raw, 10) as Period;
+                    })(),
+                    endPeriod: (() => {
+                        const raw = row['終了講時'] || row.EndPeriod || '';
+                        if (raw === '0' || raw === '未定' || raw === '') return undefined;
+                        return (parseInt(raw, 10) || undefined) as Period | undefined;
+                    })(),
+                    requiredCapacity: parseInt(row['履修者数'] || row.RequiredCapacity || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
+                    campus: row['キャンパス'] || row.Campus || '',
+                    requiredRoomCount: parseInt(row['必要教室数'] || row.RequiredRoomCount, 10) || 1,
+                    previousRooms: row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)'] ? (row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    preferredRoomType: (() => {
+                        const t = row['タイプ'] || row.PreferredRoomType || '';
+                        if (t === 'PC') return 'pc';
+                        if (t === 'ゼミ') return 'seminar';
+                        if (t === '一般') return 'normal';
+                        return t ? (t as Subject['preferredRoomType']) : undefined;
+                    })(),
+                    requiresProjector: SUBJECT_EQUIPMENT_CHOICES.some(eq => normalizeRequiredEquipmentName(eq) === 'PJ' && row[eq] === '◎') || row.RequiresProjector === 'true' || row.RequiresProjector === '1',
+                    requiresMovable: SUBJECT_EQUIPMENT_CHOICES.some(eq => normalizeRequiredEquipmentName(eq) === '可動' && row[eq] === '◎') || row.RequiresMovable === 'true' || row.RequiresMovable === '1',
+                    priority: parseInt(row['優先度'] || row.Priority, 10) || 1,
+                    isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
+                    buildingPreference: row['棟希望'] || row.BuildingPreference || '',
+                    mandatoryEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '◎').map(normalizeRequiredEquipmentName),
+                    requiredEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '○').map(normalizeRequiredEquipmentName)
+                } as Subject));
+
+                const normalizedSubjects = rawSubjects.map(s => ({
+                    ...s,
+                    campus: normalizeCampusLabel(s.campus || '') || '',
+                    requiredEquipment: s.requiredEquipment || [],
+                    mandatoryEquipment: s.mandatoryEquipment || []
+                }));
+
+                const grouped = new Map<string, Subject>();
+                normalizedSubjects.forEach(s => {
+                    const key = `${s.code}-${s.term}-${s.day}-${s.period}`;
+                    if (grouped.has(key)) {
+                        const existing = grouped.get(key)!;
+                        existing.requiredRoomCount = Math.max(existing.requiredRoomCount || 1, s.requiredRoomCount || 1);
+                        if (s.previousRooms && s.previousRooms.length > 0) {
+                            existing.previousRooms = Array.from(new Set([...(existing.previousRooms || []), ...s.previousRooms]));
+                        }
+                    } else {
+                        grouped.set(key, { ...s, requiredRoomCount: 1 });
+                    }
+                });
+
+                resolve(Array.from(grouped.values()));
+            },
+            error: (error) => reject(error)
+        });
+    });
+};
 
 interface Props {
     subjects: Subject[];
@@ -524,7 +659,7 @@ export const SubjectManager = ({
         const input = e.currentTarget;
         if (input.files && input.files[0]) {
             try {
-                const data = await parseSubjectCSV(input.files[0]);
+                const data = await parseSubjectCSVWithTbd(input.files[0]);
                 const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
                 if (data.some(subject => normalizeCampusLabel(subject.campus || '') !== campusLabel)) {
                     alert('キャンパスが異なるレコードがあります');
@@ -624,6 +759,10 @@ export const SubjectManager = ({
                                     // 複数教室配当がある場合は1教室につき1行で出力
                                     const exportData = subjects.flatMap(s => {
                                         const subjectAllocations = allocations.filter(a => a.subjectId === s.id);
+                                        const exportTerm = s.term ? getTermLabel(s.term) : '0';
+                                        const exportDay = s.day ? getDayLabel(s.day) : '0';
+                                        const exportPeriod = s.period && s.period > 0 ? String(s.period) : '0';
+                                        const exportEndPeriod = s.endPeriod && s.endPeriod > 0 ? String(s.endPeriod) : '0';
                                         const baseRow: Record<string, unknown> = {
                                             'コード': s.code,
                                             '時間割名称': s.name,
@@ -631,10 +770,10 @@ export const SubjectManager = ({
                                             '教員名': s.teacher,
                                             '開講学部': s.faculty,
                                             '管轄': s.department,
-                                            '配当期': getTermLabel(s.term),
-                                            '曜日': getDayLabel(s.day),
-                                            '講時': getPeriodLabel(s.period),
-                                            '終了講時': getPeriodLabel(s.endPeriod || s.period),
+                                            '配当期': exportTerm,
+                                            '曜日': exportDay,
+                                            '講時': exportPeriod,
+                                            '終了講時': exportEndPeriod,
                                             'キャンパス': s.campus,
                                             '履修者数': s.requiredCapacity,
                                             '優先度': s.priority,
