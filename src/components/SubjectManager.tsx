@@ -365,9 +365,12 @@ export const SubjectManager = ({
     // 講時フィルタ用：実データから存在する単/複数講時パターンを抽出し、
     // かつ「2-4」「3-5」などの標準的なパターンを確実に追加する
     const periodOptions = useMemo(() => {
-        const found = subjects.map(s =>
-            s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`
-        );
+        const found = subjects
+            .map(s => {
+                if (!s.period || s.period <= 0) return null;
+                return s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
+            })
+            .filter((v): v is string => !!v);
         const patterns = Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
             const aIsMulti = a.includes('-');
             const bIsMulti = b.includes('-');

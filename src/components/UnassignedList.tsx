@@ -162,9 +162,12 @@ export const UnassignedList = ({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const periodPatterns = useMemo(() => {
-    const found = subjects.map(s =>
-      s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`
-    );
+    const found = subjects
+      .map(s => {
+        if (!s.period || s.period <= 0) return null;
+        return s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
+      })
+      .filter((v): v is string => !!v);
     return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
       const aIsMulti = a.includes('-');
       const bIsMulti = b.includes('-');
