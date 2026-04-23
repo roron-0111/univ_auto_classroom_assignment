@@ -45,6 +45,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
     const confirmExceptions = false;
     const ignoreStreakOnce = false;
     const [equipmentSettings, setEquipmentSettings] = useState(initialEquipment || DEFAULT_EQUIPMENT_SETTINGS);
+    const [showPriorityHelp, setShowPriorityHelp] = useState(false);
 
     const handleToggle = (id: string) => {
         setRules(prev => prev.map(r =>
@@ -224,9 +225,29 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                                     </label>
                                 ))}
                             </div>
-                            <span style={{ fontSize: '0.75rem', color: '#666', background: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>
-                                ※ 優先度が高い順に配当されます
-                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setShowPriorityHelp(true)}
+                                aria-label="科目の優先度の説明を開く"
+                                style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    borderRadius: '999px',
+                                    border: '1px solid #cbd5e1',
+                                    background: '#fff',
+                                    color: '#64748b',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    lineHeight: 1,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginLeft: '8px'
+                                }}
+                            >
+                                ?
+                            </button>
                         </div>
 
                         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -264,6 +285,19 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </div>
                 </div>
 
+                <div style={{
+                    display: 'none',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: '#e8f1ff',
+                    border: '1px solid #b6d0ff',
+                    color: '#1e3a8a',
+                    fontSize: '0.9rem',
+                    lineHeight: 1.6
+                }}>
+                    <strong>科目の優先度</strong> は、配当処理の最上位です。数字が大きい科目ほど先に処理され、その後に各配当条件の順序を評価します。
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 'bold', color: '#37474f' }}>
@@ -286,7 +320,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                             <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#555', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                希望条件の順序<span style={{ fontWeight: 'normal', fontSize: '0.75rem', color: '#888' }}>(優先度 1:強い, 5:弱い)</span>
+                                希望条件の順序
                             </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -423,6 +457,113 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </div>
                 </section>
             </div>
+
+            {showPriorityHelp && (
+                <div
+                    role="presentation"
+                    onClick={() => setShowPriorityHelp(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 1100,
+                        background: 'rgba(15, 23, 42, 0.45)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '20px'
+                    }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="priority-help-title"
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            width: 'min(760px, 100%)',
+                            maxHeight: 'min(80vh, 900px)',
+                            overflow: 'auto',
+                            background: '#fff',
+                            borderRadius: '14px',
+                            boxShadow: '0 24px 80px rgba(15, 23, 42, 0.35)',
+                            border: '1px solid #e2e8f0'
+                        }}
+                    >
+                        <div style={{
+                            padding: '18px 22px',
+                            borderBottom: '1px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '16px'
+                        }}>
+                            <div id="priority-help-title" style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                                科目の優先度について
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowPriorityHelp(false)}
+                                style={{
+                                    border: '1px solid #cbd5e1',
+                                    background: '#fff',
+                                    color: '#334155',
+                                    borderRadius: '8px',
+                                    padding: '6px 12px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 600
+                                }}
+                            >
+                                閉じる
+                            </button>
+                        </div>
+                        <div style={{ padding: '22px', color: '#334155', fontSize: '0.92rem', lineHeight: 1.8 }}>
+                            <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '10px' }}>【全体の流れ】</div>
+                            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '18px' }}>{`1. まず、処理する科目の順番を決めます。
+   優先度 → 困難度 → 未配当連続回数 → 元の並び順
+
+2. 先頭の科目を1つ取り出します。
+
+3. その科目について、教室を選びます。
+   必須条件で候補を絞る → 希望条件の順序で比較する → 最適な教室を決める
+
+4. 次の科目に進み、同じ流れを繰り返します。`}</div>
+
+                            <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '10px' }}>【用語】</div>
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>優先度</div>
+                                <div>科目を先に処理する順番です。数字が大きい科目ほど先に配当を試します。</div>
+                            </div>
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>困難度</div>
+                                <div>その科目を配当する難しさです。候補教室の少なさ、必須機材、定員の余裕、連続講時、春秋ペアなどの制約が強いほど高くなります。</div>
+                            </div>
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>未配当連続回数</div>
+                                <div>直近で何回続けて配当できなかったかを表します。困難度が同程度なら、未配当が続いている科目を少し優先して救います。</div>
+                            </div>
+                            <div style={{ marginBottom: '18px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>希望条件の順序</div>
+                                <div>1つの科目に対して、どの教室を先に見るかの順番です。科目の並び順が決まったあとで、各科目の候補教室を比較するときに使います。</div>
+                            </div>
+
+                            <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '10px' }}>【例】</div>
+                            <div style={{ whiteSpace: 'pre-wrap' }}>{`優先度3が10科目、優先度2が50科目、優先度1が100科目ある場合、
+まず 優先度3 → 優先度2 → 優先度1 の順で、科目を1つずつ取り出して処理します。
+
+同じ優先度3の中に A, B, C がある場合、
+A: 困難度90 / 未配当連続回数0
+B: 困難度70 / 未配当連続回数2
+C: 困難度70 / 未配当連続回数0
+なら、A → B → C の順になります。
+
+そして A を処理するときは、
+必須条件で候補を絞る → 希望条件の順序で教室を比較する
+という流れで教室を決めます。
+B でも C でも、同じ流れをあらためて繰り返します。`}</div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style>{`
                 @keyframes slideIn {
