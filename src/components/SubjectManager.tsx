@@ -483,7 +483,7 @@ export const SubjectManager = ({
         term: '' as Term,
         day: '' as DayOfWeek,
         period: 0 as Period,
-        requiredCapacity: 30,
+        requiredCapacity: 0,
         priority: 1,
         campus: currentCampusLabel,
         requiredEquipment: [],
@@ -730,7 +730,7 @@ export const SubjectManager = ({
                                 <button onClick={startAdding} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#646cff', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
-                                    <Plus size={18} /> 新規授業
+                                    <Plus size={18} /> 新規追加
                                 </button>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <button onClick={() => fileInputRef.current?.click()} style={{
