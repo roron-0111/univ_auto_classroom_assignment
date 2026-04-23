@@ -165,7 +165,7 @@ export const UnassignedList = ({
     const found = subjects.map(s =>
       s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`
     );
-        return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
+    return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
       const aIsMulti = a.includes('-');
       const bIsMulti = b.includes('-');
       if (aIsMulti !== bIsMulti) return aIsMulti ? 1 : -1;
@@ -326,6 +326,7 @@ export const UnassignedList = ({
             <FilterDropdown
               label="配当期"
               options={[
+                { value: '', label: '未定' },
                 { value: 'spring', label: '春学期' },
                 { value: 'spring_first', label: '春学期前半' },
                 { value: 'spring_second', label: '春学期後半' },
@@ -357,7 +358,7 @@ export const UnassignedList = ({
           <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="曜日"
-              options={Object.entries(DAY_LABELS).map(([val, label]) => ({ value: val, label: `${label}曜日` }))}
+              options={[{ value: '', label: '未定' }, ...Object.entries(DAY_LABELS).map(([val, label]) => ({ value: val, label: `${label}曜日` }))]}
               selected={selectedDays}
               onToggle={(val: string) => toggleFilter(selectedDays, setSelectedDays, val as DayOfWeek)}
               isOpen={isDayOpen}
@@ -369,7 +370,7 @@ export const UnassignedList = ({
           <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="講時"
-              options={periodPatterns.map(p => ({ value: p, label: `${getPeriodLabel(p)}講時` }))}
+              options={[{ value: '0', label: '未定' }, ...periodPatterns.map(p => ({ value: p, label: `${getPeriodLabel(p)}講時` }))]}
               selected={selectedPeriods}
               onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
               isOpen={isPeriodOpen}
@@ -488,7 +489,12 @@ export const UnassignedList = ({
                     {subject.teacher} ({subject.faculty})
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                    {getTermLabel(subject.term)} {getDayLabel(subject.day)} {getPeriodLabel(subject.period)}{subject.endPeriod && subject.endPeriod > subject.period ? `-${getPeriodLabel(subject.endPeriod)}` : ''}講時
+                    {getTermLabel(subject.term)} {getDayLabel(subject.day)} {(() => {
+                      const startLabel = getPeriodLabel(subject.period);
+                      const endLabel = subject.endPeriod && subject.endPeriod > subject.period ? getPeriodLabel(subject.endPeriod) : '';
+                      if (startLabel === '未定') return '未定';
+                      return `${startLabel}${endLabel ? `-${endLabel}` : ''}講時`;
+                    })()}
                   </div>
                 </div>
               </div>
@@ -616,3 +622,4 @@ export const UnassignedList = ({
     </div>
   );
 };
+

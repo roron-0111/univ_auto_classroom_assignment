@@ -383,6 +383,33 @@ export const SubjectManager = ({
         });
     }, [subjects]);
 
+    const termFilterOptions = useMemo(() => {
+        const options = [
+            { value: '' as Term, label: '未定' },
+            { value: 'spring' as Term, label: '春学期' },
+            { value: 'spring_first' as Term, label: '春前半' },
+            { value: 'spring_second' as Term, label: '春後半' },
+            { value: 'autumn' as Term, label: '秋学期' },
+            { value: 'autumn_first' as Term, label: '秋前半' },
+            { value: 'autumn_second' as Term, label: '秋後半' },
+            { value: 'full_year' as Term, label: '通年' }
+        ];
+        return Array.from(new Map(options.map(item => [String(item.value), item])).values());
+    }, []);
+
+    const dayFilterOptions = useMemo(() => {
+        const options = [
+            { value: '' as DayOfWeek, label: '未定' },
+            ...Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v as DayOfWeek, label: l }))
+        ];
+        return Array.from(new Map(options.map(item => [String(item.value), item])).values());
+    }, []);
+
+    const periodFilterOptions = useMemo(() => {
+        const options = [{ value: '0', label: '未定' }, ...periodOptions];
+        return Array.from(new Map(options.map(item => [String(item.value), item])).values());
+    }, [periodOptions]);
+
     const handleEdit = (subject: Subject) => {
         setSubjectModalMode('edit');
         setEditingSubjectModal(subject);
@@ -710,9 +737,9 @@ export const SubjectManager = ({
                                     {smShow('teacher') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.teacher} onChange={e => setFilters({ ...filters, teacher: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('faculty') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={facultyOptions.map(v => ({ value: v, label: v }))} selected={filters.faculty} onChange={v => setFilters({ ...filters, faculty: v as string[] })} /></td>}
                                     {smShow('department') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={departmentOptions.map(v => ({ value: v, label: v }))} selected={filters.department} onChange={v => setFilters({ ...filters, department: v as string[] })} /></td>}
-                                    {smShow('term') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={[{value:'spring',label:'春学期'},{value:'spring_first',label:'春前半'},{value:'spring_second',label:'春後半'},{value:'autumn',label:'秋学期'},{value:'autumn_first',label:'秋前半'},{value:'autumn_second',label:'秋後半'},{value:'full_year',label:'通年'}]} selected={filters.term} onChange={v => setFilters({ ...filters, term: v as Term[] })} /></td>}
-                                    {smShow('day') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={Object.entries(DAY_LABELS).map(([v, l]) => ({ value: v, label: l }))} selected={filters.day} onChange={v => setFilters({ ...filters, day: v as DayOfWeek[] })} /></td>}
-                                    {smShow('period') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={periodOptions} selected={filters.period} onChange={v => setFilters({ ...filters, period: v as string[] })} /></td>}
+                                    {smShow('term') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={termFilterOptions} selected={filters.term} onChange={v => setFilters({ ...filters, term: v as Term[] })} /></td>}
+                                    {smShow('day') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={dayFilterOptions} selected={filters.day} onChange={v => setFilters({ ...filters, day: v as DayOfWeek[] })} /></td>}
+                                    {smShow('period') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><MultiSelectFilter options={periodFilterOptions} selected={filters.period} onChange={v => setFilters({ ...filters, period: v as string[] })} /></td>}
                                     {smShow('campus') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}><input style={filterInputStyle} value={filters.campus} onChange={e => setFilters({ ...filters, campus: e.target.value })} placeholder="検索..." /></td>}
                                     {smShow('requiredCapacity') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>

@@ -58,8 +58,8 @@ export const SubjectEditModal = ({
   const [form, setForm] = useState<Subject>({
     ...subject,
     campus: currentCampusLabel,
-    faculty: subject.faculty || facultyOptions[0] || '',
-    department: subject.department || departmentOptions[0] || '',
+    faculty: subject.faculty || '',
+    department: subject.department || '',
     priority: subject.priority ?? 1,
     requiredEquipment: subject.requiredEquipment || [],
     mandatoryEquipment: subject.mandatoryEquipment || [],
