@@ -804,7 +804,7 @@ function App() {
   };
 
 
-  const handleDrop = (vSubjectId: string, classroomId: string, period: Period, term: Term) => {
+  const handleDrop = (vSubjectId: string, classroomId: string, period: Period, term: Term, fromClassroomId?: string) => {
     const subjectId = vSubjectId.includes('__slot') ? vSubjectId.split('__slot')[0] : vSubjectId;
     const subject = subjects.find(s => s.id === subjectId);
     if (!subject) return;
@@ -847,6 +847,17 @@ function App() {
       // (TimeTableGrid側でガードはあるが、allocationsの状態としてもチェック)
       const isAlreadyInThisCell = prev.some(a => a.subjectId === subjectId && a.classroomId === classroomId);
       if (isAlreadyInThisCell) return prev;
+
+      if (fromClassroomId) {
+        const sourceExists = prev.some(a => a.subjectId === subjectId && a.classroomId === fromClassroomId);
+        if (sourceExists) {
+          return prev.map(a =>
+            a.subjectId === subjectId && a.classroomId === fromClassroomId
+              ? { subjectId, classroomId }
+              : a
+          );
+        }
+      }
 
       if (current.length < limit) {
         return [...prev, { subjectId, classroomId }];
@@ -1572,8 +1583,15 @@ function App() {
                         onMouseOver={(e) => (e.currentTarget.style.background = '#f0f0f0')}
                         onMouseOut={(e) => (e.currentTarget.style.background = '#fafafa')}
                       >
-                        <div style={{ fontWeight: 'bold', color: '#333' }}>{s.name}</div>
-                        <div style={{ fontSize: '0.85em', color: '#666' }}>{s.teacher} / 定員: {s.requiredCapacity}</div>
+                        <div style={{ fontWeight: 'bold', color: '#333' }}>
+                          {s.code} / {s.name}
+                        </div>
+                        <div style={{ fontSize: '0.85em', color: '#666' }}>
+                          {s.teacher} / {s.faculty} / {s.department}
+                        </div>
+                        <div style={{ fontSize: '0.82em', color: '#888' }}>
+                          履修想定人数: {s.requiredCapacity}
+                        </div>
                       </button>
                     ))}
                   </div>

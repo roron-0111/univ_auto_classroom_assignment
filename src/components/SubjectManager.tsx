@@ -468,6 +468,9 @@ export const SubjectManager = ({
     const [showColSettings, setShowColSettings] = useState(false);
     const [showTaxonomyModal, setShowTaxonomyModal] = useState(false);
     const smColSettingsRef = useRef<HTMLDivElement>(null);
+    const subjectScrollRef = useRef<HTMLDivElement>(null);
+    const [subjectViewportHeight, setSubjectViewportHeight] = useState(0);
+    const [subjectScrollTop, setSubjectScrollTop] = useState(0);
     useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
     useEffect(() => {
         if (!showColSettings) return;
@@ -655,6 +658,63 @@ export const SubjectManager = ({
             return 0;
         });
     }, [filteredSubjects, sortConfig]);
+
+    const visibleSubjectColumns = useMemo(() => {
+        return SM_COL_DEFS.filter(col => smShow(col.key)).length + 1;
+    }, [colConfig]);
+
+    useEffect(() => {
+        const el = subjectScrollRef.current;
+        if (!el) return;
+
+        const updateHeight = () => setSubjectViewportHeight(el.clientHeight);
+        updateHeight();
+
+        if (typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver(() => updateHeight());
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    const virtualizedSubjects = useMemo(() => {
+        const total = sortedSubjects.length;
+        const rowEstimate = 56;
+        const overscan = 10;
+
+        if (total === 0) {
+            return {
+                enabled: false,
+                start: 0,
+                end: 0,
+                topPadding: 0,
+                bottomPadding: 0,
+                items: [] as Subject[]
+            };
+        }
+
+        if (total < 200 || subjectViewportHeight <= 0) {
+            return {
+                enabled: false,
+                start: 0,
+                end: total,
+                topPadding: 0,
+                bottomPadding: 0,
+                items: sortedSubjects
+            };
+        }
+
+        const start = Math.max(0, Math.floor(subjectScrollTop / rowEstimate) - overscan);
+        const end = Math.min(total, Math.ceil((subjectScrollTop + subjectViewportHeight) / rowEstimate) + overscan);
+        return {
+            enabled: true,
+            start,
+            end,
+            topPadding: start * rowEstimate,
+            bottomPadding: Math.max(0, (total - end) * rowEstimate),
+            items: sortedSubjects.slice(start, end)
+        };
+    }, [sortedSubjects, subjectScrollTop, subjectViewportHeight]);
 
 
     const handleSort = (key: string) => {
@@ -909,7 +969,11 @@ export const SubjectManager = ({
                 </div>
             </div>
             {/* スクロールエリア（テーブルのみ） */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div
+                ref={subjectScrollRef}
+                onScroll={e => setSubjectScrollTop(e.currentTarget.scrollTop)}
+                style={{ flex: 1, overflow: 'auto' }}
+            >
                 <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 30px 20px' }}>
                     <div style={{ border: '1px solid #ddd', borderRadius: '4px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
@@ -970,7 +1034,12 @@ export const SubjectManager = ({
                                 </tr>
                             </thead>
                             <tbody>
-                                {sortedSubjects.map(subject => (
+                                {virtualizedSubjects.enabled && virtualizedSubjects.topPadding > 0 && (
+                                    <tr aria-hidden="true">
+                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.topPadding}px`, padding: 0, border: 'none' }} />
+                                    </tr>
+                                )}
+                                {virtualizedSubjects.items.map(subject => (
                                     <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
                                         {smShow('code') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>}
                                         {smShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>}
@@ -1014,9 +1083,14 @@ export const SubjectManager = ({
                                         </td>
                                     </tr>
                                 ))}
+                                {virtualizedSubjects.enabled && virtualizedSubjects.bottomPadding > 0 && (
+                                    <tr aria-hidden="true">
+                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.bottomPadding}px`, padding: 0, border: 'none' }} />
+                                    </tr>
+                                )}
                                 {sortedSubjects.length === 0  && (
                                     <tr>
-                                        <td colSpan={19} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
+                                        <td colSpan={visibleSubjectColumns} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                                 <Search size={40} strokeWidth={1} />
                                                 <span>該当する授業が見つかりません</span>

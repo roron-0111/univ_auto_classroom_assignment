@@ -10,7 +10,7 @@ interface Props {
   classrooms: Classroom[];
   allocations: Allocation[];
   subjects: Subject[];
-  onDrop: (subjectId: string, classroomId: string, period: Period, term: Term) => void;
+  onDrop: (subjectId: string, classroomId: string, period: Period, term: Term, fromClassroomId?: string) => void;
   onRemove: (subjectId: string, classroomId: string) => void;
   onCellClick: (classroomId: string, period: Period, term: Term) => void;
   onClassClick?: (classroomId: string) => void;
@@ -72,9 +72,10 @@ export const TimeTableGrid = ({
     e.preventDefault();
     const subjectId = e.dataTransfer.getData('subjectId');
     const dragType = e.dataTransfer.getData('dragType');
+    const fromClassroomId = e.dataTransfer.getData('fromClassroomId') || undefined;
 
     if (subjectId && (dragType === 'assign' || !dragType)) {
-      onDrop(subjectId, classroomId, period, term);
+      onDrop(subjectId, classroomId, period, term, fromClassroomId);
     }
     onDragEnd?.();
   };
