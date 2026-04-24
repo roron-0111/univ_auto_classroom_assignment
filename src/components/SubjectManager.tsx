@@ -441,6 +441,15 @@ const mergeSubjectsByCode = (existing: Subject[], imported: Subject[]) => {
     return next;
 };
 
+const sortSubjectsByCode = (items: Subject[]) =>
+    [...items].sort((a, b) => {
+        const codeA = (a.code || a.id || '').trim();
+        const codeB = (b.code || b.id || '').trim();
+        const cmp = codeA.localeCompare(codeB, 'ja', { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) return cmp;
+        return (a.name || '').localeCompare(b.name || '', 'ja', { numeric: true, sensitivity: 'base' });
+    });
+
 export const SubjectManager = ({
     subjects,
     allocations,
@@ -714,7 +723,7 @@ export const SubjectManager = ({
                     mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
                 }));
                 if (confirm(`${data.subjects.length}件の授業データを読み込みます。コードが一致する授業は上書きし、一致しないものは追加します。教室IDがある行は配当も復元します。よろしいですか？`)) {
-                    const mergedSubjects = mergeSubjectsByCode(subjects, sanitized);
+                    const mergedSubjects = mergeSubjectsByCode(subjects, sortSubjectsByCode(sanitized));
                     const importedCodes = new Set(sanitized.map(subject => (subject.code || '').trim()).filter(Boolean));
                     const codeToSubjectId = new Map(
                         mergedSubjects
