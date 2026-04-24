@@ -256,6 +256,12 @@ export const UnassignedList = ({
 
   const renderDropIndicator = () => (
     <div
+      onDragOver={handleDragOver}
+      onDrop={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDrop(e, dropIndex ?? 0);
+      }}
       style={{
         marginBottom: '10px',
         padding: '5px 8px',
