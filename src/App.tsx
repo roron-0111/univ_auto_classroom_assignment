@@ -553,18 +553,16 @@ function App() {
       // ログイン直後にデータをロード
       const cloudData = await refreshData();
       if (cloudData) {
-        if (window.confirm('クラウド上のデータが見つかりました。現在のローカルデータを上書きしてロードしますか？')) {
-          setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
-          setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
-          setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
-          setAllocationSettings(migrateAllocationRules(cloudData.settings));
-          setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
-          setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
+        setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
+        setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
+        setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
+        setAllocationSettings(migrateAllocationRules(cloudData.settings));
+        setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
+        setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
 
-          alert('クラウドデータをロードしました。');
-          setShowCloudModal(false);
-          return; // ロードした場合は保存処理を飛ばす（useEffect側で必要に応じて保存される）
-        }
+        alert('クラウドデータをロードしました。');
+        setShowCloudModal(false);
+        return; // ロードした場合は保存処理を飛ばす（useEffect側で必要に応じて保存される）
       }
 
       // クラウドにデータがない、またはロードをキャンセルした場合は現在のローカルデータをアップロード
