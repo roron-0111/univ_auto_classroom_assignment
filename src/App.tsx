@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
-import { BUILDINGS, DAY_LABELS } from './types';
+import { BUILDINGS, DAY_LABELS, ROOM_TYPE_LABELS, getDayLabel, getTermLabel } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
@@ -15,12 +15,16 @@ import { AllocationRuleSettings } from './components/AllocationRuleSettings';
 import { AllocationResultModal } from './components/AllocationResultModal';
 import { ExceptionReviewModal } from './components/ExceptionReviewModal';
 import { RelocationPreviewModal } from './components/RelocationPreviewModal';
-import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
+import { CloudWriteWarningModal } from './components/CloudWriteWarningModal';
+import { CloudReadWarningModal } from './components/CloudReadWarningModal';
+import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeRequiredEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
 import { sanitizeSubjectEquipmentList } from './utils/equipmentVisibility';
+import { SUBJECT_EQUIPMENT_CHOICES } from './utils/equipmentVisibility';
 import { getDefaultSubjectTaxonomy, normalizeSubjectTaxonomy, type SubjectTaxonomy } from './utils/subjectTaxonomy';
+import { exportToCSV } from './utils/csvParser';
 
 // Cloud Sync
 import { CloudConnectionModal } from './components/CloudConnectionModal';
@@ -32,7 +36,7 @@ import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocat
 // Icons
 import {
   RefreshCw, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, Cloud, CloudOff, LogIn
+  AlertTriangle, ListChecks, CloudUpload, CloudDownload
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -186,6 +190,19 @@ const readScopedStorage = (campusLabel: string, key: string) => {
 
 const writeScopedStorage = (campusLabel: string, key: string, value: string) => {
   localStorage.setItem(getScopedStorageKey(campusLabel, key), value);
+};
+
+const hasScopedLocalCampusData = (campusLabel: string) => {
+  const keys = [
+    'classrooms',
+    'subjects',
+    'allocations',
+    'allocationSettings',
+    'equipmentSettings',
+    'displayConfig',
+    'subjectTaxonomy'
+  ];
+  return keys.some(key => readScopedStorage(campusLabel, key) !== null);
 };
 
 const parseJsonOrNull = <T,>(raw: string | null): T | null => {
@@ -372,6 +389,199 @@ const normalizeAllocationsForPhase6 = (allocations: unknown) =>
     ? allocations.map(normalizeAllocationForPhase6).filter((item): item is Allocation => item !== null)
     : [];
 
+type DiffCount = {
+  added: number;
+  removed: number;
+  updated: number;
+};
+
+type CloudWriteWarningSummary = {
+  subjects: DiffCount;
+  classrooms: DiffCount;
+  allocations: DiffCount;
+  settingsChanged: boolean;
+  equipmentSettingsChanged: boolean;
+  subjectTaxonomyChanged: boolean;
+  hasDiff: boolean;
+};
+
+const createDiffCount = (): DiffCount => ({
+  added: 0,
+  removed: 0,
+  updated: 0
+});
+
+const stableSerialize = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableSerialize(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, val]) => `${JSON.stringify(key)}:${stableSerialize(val)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const compareCollections = <T,>(
+  localItems: T[],
+  cloudItems: T[],
+  getKey: (item: T) => string
+): DiffCount => {
+  const localMap = new Map(localItems.map(item => [getKey(item), item] as const));
+  const cloudMap = new Map(cloudItems.map(item => [getKey(item), item] as const));
+  const diff = createDiffCount();
+
+  cloudMap.forEach((cloudItem, key) => {
+    if (!localMap.has(key)) {
+      diff.added += 1;
+      return;
+    }
+    const localItem = localMap.get(key);
+    if (stableSerialize(localItem) !== stableSerialize(cloudItem)) {
+      diff.updated += 1;
+    }
+  });
+
+  localMap.forEach((_, key) => {
+    if (!cloudMap.has(key)) {
+      diff.removed += 1;
+    }
+  });
+
+  return diff;
+};
+
+const hasAnyDiff = (summary: CloudWriteWarningSummary) =>
+  summary.subjects.added > 0 ||
+  summary.subjects.removed > 0 ||
+  summary.subjects.updated > 0 ||
+  summary.classrooms.added > 0 ||
+  summary.classrooms.removed > 0 ||
+  summary.classrooms.updated > 0 ||
+  summary.allocations.added > 0 ||
+  summary.allocations.removed > 0 ||
+  summary.allocations.updated > 0 ||
+  summary.settingsChanged ||
+  summary.equipmentSettingsChanged ||
+  summary.subjectTaxonomyChanged;
+
+const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): CloudWriteWarningSummary => {
+  const summary: CloudWriteWarningSummary = {
+    subjects: compareCollections(localData.subjects, cloudData.subjects, subject => subject.id),
+    classrooms: compareCollections(localData.classrooms, cloudData.classrooms, room => room.id),
+    allocations: compareCollections(
+      localData.allocations,
+      cloudData.allocations,
+      allocation => `${allocation.subjectId}__${allocation.classroomId}`
+    ),
+    settingsChanged: stableSerialize(localData.settings) !== stableSerialize(cloudData.settings),
+    equipmentSettingsChanged: stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings),
+    subjectTaxonomyChanged: stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy),
+    hasDiff: false
+  };
+  summary.hasDiff = hasAnyDiff(summary);
+  return summary;
+};
+
+const equipValue = (
+  eq: string,
+  requiresMovable?: boolean,
+  requiresProjector?: boolean,
+  mandatory?: string[],
+  preferred?: string[]
+): string => {
+  const man = (mandatory ?? []).map(normalizeRequiredEquipmentName);
+  const pref = (preferred ?? []).map(normalizeRequiredEquipmentName);
+  const normalizedEq = normalizeRequiredEquipmentName(eq);
+  const manHasProjector = man.some(item => item === 'PJ');
+  const prefHasProjector = pref.some(item => item === 'PJ');
+  if (requiresMovable && normalizedEq === '可動') return '◎';
+  if (normalizedEq === 'PJ') {
+    if (requiresProjector || manHasProjector) return '◎';
+    if (prefHasProjector) return '○';
+  }
+  if (man.includes(normalizedEq)) return '◎';
+  if (pref.includes(normalizedEq)) return '○';
+  return '';
+};
+
+const buildSubjectExportRows = (subjects: Subject[], allocations: Allocation[], classrooms: Classroom[]) => {
+  return subjects.flatMap(subject => {
+    const subjectAllocations = allocations.filter(a => a.subjectId === subject.id);
+    const exportTerm = subject.term ? getTermLabel(subject.term) : '0';
+    const exportDay = subject.day ? getDayLabel(subject.day) : '0';
+    const exportPeriod = subject.period && subject.period > 0 ? String(subject.period) : '0';
+    const exportEndPeriod = subject.endPeriod && subject.endPeriod > 0 ? String(subject.endPeriod) : '0';
+    const baseRow: Record<string, unknown> = {
+      'コード': subject.code,
+      '時間割名称': subject.name,
+      '教員コード': subject.teacherCode || '',
+      '教員名': subject.teacher,
+      '開講学部': subject.faculty,
+      '管轄': subject.department,
+      '配当期': exportTerm,
+      '曜日': exportDay,
+      '開始講時': exportPeriod,
+      '終了講時': exportEndPeriod,
+      'キャンパス': subject.campus,
+      '履修者数': subject.requiredCapacity,
+      '優先度': subject.priority,
+      '必要教室数': subject.requiredRoomCount,
+      '棟希望': subject.buildingPreference || '',
+      'タイプ': subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
+      '教室(過去教室)': subject.previousRooms?.join(', ') || ''
+    };
+    SUBJECT_EQUIPMENT_CHOICES.forEach(eq => {
+      baseRow[eq] = equipValue(eq, subject.requiresMovable, subject.requiresProjector, subject.mandatoryEquipment, subject.requiredEquipment);
+    });
+
+    if (subjectAllocations.length === 0) {
+      return [{ ...baseRow, '教室ID': '', '教室名': '', '建物': '', '教室定員': '', '教室試験定員': '', '教室タイプ': '', '教室設備': '' }];
+    }
+
+    return subjectAllocations.map(alloc => {
+      const room = classrooms.find(roomItem => roomItem.id === alloc.classroomId);
+      const eqList = room ? [...(room.equipment ?? [])] : [];
+      if (room?.isMovable) eqList.unshift('可動');
+      return {
+        ...baseRow,
+        '教室ID': room?.id ?? alloc.classroomId ?? '',
+        '教室名': room?.name ?? '',
+        '建物': room?.building ?? '',
+        '教室定員': room?.capacity ?? '',
+        '教室試験定員': room?.examCapacity ?? '',
+        '教室タイプ': room ? (ROOM_TYPE_LABELS[room.type] ?? room.type) : '',
+        '教室設備': eqList.join(', ')
+      };
+    });
+  });
+};
+
+const buildClassroomExportRows = (classrooms: Classroom[], currentCampusLabel: string) =>
+  classrooms.map(room => {
+    const base: Record<string, unknown> = {
+      'ID': room.id,
+      '教室名': room.name,
+      'キャンパス': room.campus || currentCampusLabel,
+      '建物': room.building,
+      '定員': room.capacity,
+      '試験時定員': room.examCapacity ?? '',
+      '教室タイプ': ROOM_TYPE_LABELS[room.type] ?? room.type,
+      '可動': room.isMovable ? '◎' : '',
+      '非表示': room.isExcluded ? '◎' : ''
+    };
+    EQUIPMENT_LIST.filter(eq => eq !== '可動' && eq !== '固定').forEach(eq => {
+      base[eq] = room.equipment.includes(eq) ? '◎' : '';
+    });
+    room.equipment.filter(eq => !EQUIPMENT_LIST.includes(eq)).forEach(eq => {
+      base[eq] = '◎';
+    });
+    return base;
+  });
+
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
@@ -381,7 +591,6 @@ function App() {
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
 
-  // ログイン強制ロジック
   useEffect(() => {
     if (!authLoading && !user) {
       setShowCloudModal(true);
@@ -427,6 +636,12 @@ function App() {
   const [autoAllocationSummary, setAutoAllocationSummary] = useState<AutoAllocationSummary | null>(null);
   const [pendingAllocationBatch, setPendingAllocationBatch] = useState<PendingAllocationBatch | null>(null);
   const [pendingRelocationBatch, setPendingRelocationBatch] = useState<PendingRelocationBatch | null>(null);
+  const [cloudWriteWarningSummary, setCloudWriteWarningSummary] = useState<CloudWriteWarningSummary | null>(null);
+  const [cloudWriteFingerprint, setCloudWriteFingerprint] = useState<string | null>(null);
+  const [showCloudWriteWarningModal, setShowCloudWriteWarningModal] = useState(false);
+  const [cloudReadWarningSummary, setCloudReadWarningSummary] = useState<CloudWriteWarningSummary | null>(null);
+  const [pendingCloudReadData, setPendingCloudReadData] = useState<CloudData | null>(null);
+  const [showCloudReadWarningModal, setShowCloudReadWarningModal] = useState(false);
   const [showExceptionReviewModal, setShowExceptionReviewModal] = useState(false);
   const [pendingExceptionApprovedKeys, setPendingExceptionApprovedKeys] = useState<string[]>([]);
   const [showRelocationPreviewModal, setShowRelocationPreviewModal] = useState(false);
@@ -518,64 +733,163 @@ function App() {
     setStreakRevision(v => v + 1);
   }, [subjects]);
 
-  // 自動保存の仕組み: ローカルの状態が変わった際、ログイン中ならクラウドにも保存
-  useEffect(() => {
-    if (user && !isCloudLoading) {
-      const data: CloudData = {
-        subjects,
-        classrooms,
-        allocations,
-        settings: allocationSettings,
-        equipmentSettings,
-        subjectTaxonomy
-      };
 
-      const timeoutId = setTimeout(() => {
-        saveData(data).catch(console.error);
-      }, 2000); // 2秒変更がなければ保存
 
-      return () => clearTimeout(timeoutId);
+  const buildCloudSnapshot = useCallback((): CloudData => ({
+    subjects,
+    classrooms,
+    allocations,
+    settings: allocationSettings,
+    equipmentSettings,
+    subjectTaxonomy
+  }), [subjects, classrooms, allocations, allocationSettings, equipmentSettings, subjectTaxonomy]);
+
+  const applyCloudData = useCallback((cloudData: CloudData, campusLabel: string) => {
+    setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
+    setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
+    setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
+    setAllocationSettings(migrateAllocationRules(cloudData.settings));
+    setEquipmentSettings(normalizeEquipmentSettings(cloudData.equipmentSettings));
+    setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
+  }, []);
+
+  const exportCurrentSnapshotCsv = useCallback(() => {
+    const subjectExport = buildSubjectExportRows(subjects, allocations, classrooms);
+    exportToCSV(subjectExport, 'subjects_export.csv');
+    const classroomExport = buildClassroomExportRows(classrooms, currentCampusLabel);
+    exportToCSV(classroomExport, 'classrooms_export.csv');
+  }, [subjects, allocations, classrooms, currentCampusLabel]);
+
+  const performCloudWrite = useCallback(async () => {
+    if (!user) return;
+    try {
+      setIsCloudLoading(true);
+      await saveData(buildCloudSnapshot());
+      alert('Cloud write complete.');
+    } catch (error) {
+      console.error(error);
+      alert('Cloud write failed.');
+    } finally {
+      setIsCloudLoading(false);
     }
-  }, [user, isCloudLoading, subjects, classrooms, allocations, allocationSettings, equipmentSettings, subjectTaxonomy, saveData]);
+  }, [user, saveData, buildCloudSnapshot]);
 
+  const handleCloudWrite = useCallback(async () => {
+    if (!user) return;
+    try {
+      setIsCloudLoading(true);
+      const cloudData = await refreshData();
+      if (cloudData) {
+        const summary = compareCloudSnapshots(buildCloudSnapshot(), cloudData);
+        if (summary.hasDiff) {
+          setCloudWriteWarningSummary(summary);
+          setCloudWriteFingerprint(stableSerialize(cloudData));
+          setShowCloudWriteWarningModal(true);
+          return;
+        }
+      }
+      await performCloudWrite();
+    } catch (error) {
+      console.error(error);
+      alert('Cloud write failed.');
+    } finally {
+      setIsCloudLoading(false);
+    }
+  }, [user, refreshData, buildCloudSnapshot, performCloudWrite]);
 
-  // クラウドデータの旧フォーマット（フラット構造）を新フォーマットに移行
-  const migrateEquipmentSettings = (s: unknown): EquipmentSettings => normalizeEquipmentSettings(s);
+  const handleCloudWriteWarningExport = useCallback(() => {
+    exportCurrentSnapshotCsv();
+  }, [exportCurrentSnapshotCsv]);
+
+  const handleCloudWriteWarningConfirm = useCallback(async () => {
+    if (!user || !cloudWriteWarningSummary) return;
+    try {
+      setIsCloudLoading(true);
+      const latestCloud = await refreshData();
+      if (latestCloud) {
+        const latestFingerprint = stableSerialize(latestCloud);
+        if (cloudWriteFingerprint && latestFingerprint !== cloudWriteFingerprint) {
+          const refreshedSummary = compareCloudSnapshots(buildCloudSnapshot(), latestCloud);
+          setCloudWriteWarningSummary(refreshedSummary);
+          setCloudWriteFingerprint(latestFingerprint);
+          setShowCloudWriteWarningModal(true);
+          alert('Cloud data has been updated. Please review the latest diff before writing.');
+          return;
+        }
+      }
+      setShowCloudWriteWarningModal(false);
+      setCloudWriteWarningSummary(null);
+      setCloudWriteFingerprint(null);
+      await saveData(buildCloudSnapshot());
+      alert('Cloud write complete.');
+    } catch (error) {
+      console.error(error);
+      alert('Cloud write failed.');
+    } finally {
+      setIsCloudLoading(false);
+    }
+  }, [user, cloudWriteWarningSummary, refreshData, buildCloudSnapshot, saveData, cloudWriteFingerprint]);
+
+  const handleCloudWriteWarningCancel = useCallback(() => {
+    setShowCloudWriteWarningModal(false);
+    setCloudWriteWarningSummary(null);
+    setCloudWriteFingerprint(null);
+  }, []);
+
+  const handleCloudRead = useCallback(async () => {
+    if (!user) return;
+    try {
+      setIsCloudLoading(true);
+      const cloudData = await refreshData();
+      if (cloudData) {
+        const summary = compareCloudSnapshots(buildCloudSnapshot(), cloudData);
+        if (summary.hasDiff) {
+          setCloudReadWarningSummary(summary);
+          setPendingCloudReadData(cloudData);
+          setShowCloudReadWarningModal(true);
+          return;
+        }
+        applyCloudData(cloudData, currentCampusLabel);
+        alert('Cloud data loaded.');
+      } else {
+        alert('No cloud data found.');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Cloud fetch failed.');
+    } finally {
+      setIsCloudLoading(false);
+    }
+  }, [user, refreshData, applyCloudData, currentCampusLabel, buildCloudSnapshot]);
+
+  const handleCloudReadWarningConfirm = useCallback(() => {
+    if (!pendingCloudReadData) return;
+    applyCloudData(pendingCloudReadData, currentCampusLabel);
+    setShowCloudReadWarningModal(false);
+    setCloudReadWarningSummary(null);
+    setPendingCloudReadData(null);
+    alert('Cloud data loaded.');
+  }, [pendingCloudReadData, applyCloudData, currentCampusLabel]);
+
+  const handleCloudReadWarningCancel = useCallback(() => {
+    setShowCloudReadWarningModal(false);
+    setCloudReadWarningSummary(null);
+    setPendingCloudReadData(null);
+  }, []);
+
 
   const handleCloudConnect = async (email: string) => {
     try {
       setIsCloudLoading(true);
-      // 単一のキャンパスログインに統合
-      await loginByCampus(email); // emailにはcampusIdが入る
+      await loginByCampus(email);
       const campusLabel = getCampusLabelFromEmail(email);
       applyCampusState(campusLabel);
 
-      // ログイン直後にデータをロード
       const cloudData = await refreshData();
-      if (cloudData) {
-        setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
-        setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
-        setAllocations(normalizeAllocationsForPhase6(cloudData.allocations));
-        setAllocationSettings(migrateAllocationRules(cloudData.settings));
-        setEquipmentSettings(migrateEquipmentSettings(cloudData.equipmentSettings));
-        setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
-
-        alert('クラウドデータをロードしました。');
-        setShowCloudModal(false);
-        return; // ロードした場合は保存処理を飛ばす（useEffect側で必要に応じて保存される）
+      if (cloudData && !hasScopedLocalCampusData(campusLabel)) {
+        applyCloudData(cloudData, campusLabel);
+        alert('Cloud data loaded.');
       }
-
-      // クラウドにデータがない、またはロードをキャンセルした場合は現在のローカルデータをアップロード
-      const currentData: CloudData = {
-        subjects: normalizeSubjectsForCampus(subjects, campusLabel),
-        classrooms: normalizeClassrooms(classrooms, campusLabel),
-        allocations,
-        settings: allocationSettings,
-        equipmentSettings,
-        subjectTaxonomy
-      };
-      await saveData(currentData);
-      alert('現在のデータをクラウドに同期しました。');
       setShowCloudModal(false);
     } finally {
       setIsCloudLoading(false);
@@ -1274,89 +1588,59 @@ function App() {
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {user && (
-            <div className={`sync-badge ${isCloudLoading ? 'saving' : 'synced'}`}>
-              <Cloud size={14} className={isCloudLoading ? 'animate-pulse' : ''} />
-              <span>{isCloudLoading ? 'クラウド同期中...' : 'クラウド同期済み'}</span>
-            </div>
-          )}
-
-          <button
-            onClick={() => setShowCloudModal(true)}
-            style={{
-              display: 'flex', gap: '8px', alignItems: 'center',
-              background: user ? 'rgba(100, 108, 255, 0.1)' : '#fff',
-              color: user ? '#646cff' : '#666',
-              border: user ? '1px solid rgba(100, 108, 255, 0.2)' : '1px solid #ccc',
-              padding: '6px 16px', borderRadius: '12px', cursor: 'pointer',
-              fontWeight: 'bold', transition: 'all 0.2s',
-              boxShadow: user ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
-            }}
-            className="hover:scale-105 active:scale-95"
-          >
-            {user ? <LogIn size={16} /> : <CloudOff size={16} />}
-            {user ? `ログイン中(${getCampusLabelFromEmail(user.email) || user.email?.split('@')[0]})` : 'ログイン'}
-          </button>
-
-
-          {user && (
-            <button
-              onClick={async () => {
-                if (!isCloudLoading) {
-                  setIsCloudLoading(true);
-                  try {
-                    const data = await refreshData();
-                    if (data) {
-                      if (data.classrooms) setClassrooms(data.classrooms);
-                      if (data.subjects) setSubjects(normalizeSubjectsForCampus(data.subjects, currentCampusLabel));
-                      if (data.subjectTaxonomy) setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(data.subjectTaxonomy, currentCampusLabel));
-                      if (data.allocations) setAllocations(normalizeAllocationsForPhase6(data.allocations));
-                      if (data.settings?.length) setAllocationSettings(migrateAllocationRules(data.settings));
-                      if (data.equipmentSettings) setEquipmentSettings(migrateEquipmentSettings(data.equipmentSettings));
-                      alert('最新のデータを取得しました');
-                    } else {
-                      alert('保存されたデータが見つかりませんでした');
-                    }
-                  } catch (e) {
-                    console.error('Refresh Error:', e);
-                    alert('データの取得に失敗しました');
-                  } finally {
-                    setIsCloudLoading(false);
-                  }
-                }
-              }}
-              style={{
-                display: 'flex', gap: '6px', alignItems: 'center',
-                background: '#fff', color: '#666',
-                border: '1px solid #ccc',
-                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-                opacity: isCloudLoading ? 0.5 : 1,
-                fontSize: '0.9rem', fontWeight: '500'
-              }}
-              disabled={isCloudLoading}
-              title="共有データを取得して更新"
-            >
-              <RefreshCw size={16} className={isCloudLoading ? 'animate-spin' : ''} />
-              更新(共有)
-            </button>
+            <>
+              <button
+                onClick={handleCloudWrite}
+                style={{
+                  display: 'flex', gap: '6px', alignItems: 'center',
+                  background: '#2e7d32', color: '#fff',
+                  border: 'none',
+                  padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                  opacity: isCloudLoading ? 0.5 : 1,
+                  fontSize: '0.9rem', fontWeight: '500'
+                }}
+                disabled={isCloudLoading}
+                title={"ローカルの内容をクラウドへ書き込みます"}
+              >
+                <CloudUpload size={16} />
+                {"ローカル→クラウドへ書き込み"}
+              </button>
+              <button
+                onClick={handleCloudRead}
+                style={{
+                  display: 'flex', gap: '6px', alignItems: 'center',
+                  background: '#fff', color: '#666',
+                  border: '1px solid #ccc',
+                  padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                  opacity: isCloudLoading ? 0.5 : 1,
+                  fontSize: '0.9rem', fontWeight: '500'
+                }}
+                disabled={isCloudLoading}
+                title={"クラウドの内容をローカルへ取得します"}
+              >
+                <CloudDownload size={16} className={isCloudLoading ? 'animate-pulse' : ''} />
+                {"クラウド→ローカルに取得"}
+              </button>
+            </>
           )}
 
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-            <ListChecks size={16} /> 配当ルール設定
+            <ListChecks size={16} /> {"配当ルール設定"}
           </button>
           <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#d32f2f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <RefreshCw size={16} /> クリア
+            <RefreshCw size={16} /> {"クリア"}
           </button>
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <Settings size={16} /> 教室管理
+            <Settings size={16} /> {"教室管理"}
           </button>
           <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <BookOpen size={16} /> 授業管理
+            <BookOpen size={16} /> {"授業管理"}
           </button>
           {SHOW_DISPLAY_SETTINGS_BUTTON && (
             <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-              <Eye size={16} /> 表示設定
+              <Eye size={16} /> {"表示設定"}
             </button>
           )}
         </div>
@@ -1735,6 +2019,29 @@ function App() {
                 onConfirm={handleConfirmExceptionReview}
                 onCancel={handleCancelExceptionReview}
               />
+          )
+        }
+
+        {
+          showCloudWriteWarningModal && cloudWriteWarningSummary && (
+            <CloudWriteWarningModal
+              isOpen={showCloudWriteWarningModal}
+              summary={cloudWriteWarningSummary}
+              onExportCsv={handleCloudWriteWarningExport}
+              onConfirm={handleCloudWriteWarningConfirm}
+              onCancel={handleCloudWriteWarningCancel}
+            />
+          )
+        }
+
+        {
+          showCloudReadWarningModal && cloudReadWarningSummary && (
+            <CloudReadWarningModal
+              isOpen={showCloudReadWarningModal}
+              summary={cloudReadWarningSummary}
+              onConfirm={handleCloudReadWarningConfirm}
+              onCancel={handleCloudReadWarningCancel}
+            />
           )
         }
 

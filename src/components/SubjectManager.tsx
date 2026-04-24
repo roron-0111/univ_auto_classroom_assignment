@@ -976,7 +976,7 @@ export const SubjectManager = ({
             >
                 <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 30px 20px' }}>
                     <div style={{ border: '1px solid #ddd', borderRadius: '4px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', borderSpacing: 0, background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
                             <thead>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
                                     {SM_COL_DEFS.filter(col => smShow(col.key)).map(col => (
@@ -1033,14 +1033,14 @@ export const SubjectManager = ({
                                     </td>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style={{ background: '#fff' }}>
                                 {virtualizedSubjects.enabled && virtualizedSubjects.topPadding > 0 && (
                                     <tr aria-hidden="true">
-                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.topPadding}px`, padding: 0, border: 'none' }} />
+                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.topPadding}px`, padding: 0, border: 'none', background: '#fff' }} />
                                     </tr>
                                 )}
                                 {virtualizedSubjects.items.map(subject => (
-                                    <tr key={subject.id} style={{ borderBottom: '1px solid #eee' }}>
+                                    <tr key={subject.id} style={{ borderBottom: '1px solid #eee', background: '#fff' }}>
                                         {smShow('code') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.code}</td>}
                                         {smShow('name') && <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{subject.name}</td>}
                                         {smShow('teacherCode') && <td style={{ padding: '10px', border: '1px solid #ddd', color: '#888' }}>{subject.teacherCode || ''}</td>}
@@ -1085,7 +1085,7 @@ export const SubjectManager = ({
                                 ))}
                                 {virtualizedSubjects.enabled && virtualizedSubjects.bottomPadding > 0 && (
                                     <tr aria-hidden="true">
-                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.bottomPadding}px`, padding: 0, border: 'none' }} />
+                                        <td colSpan={visibleSubjectColumns} style={{ height: `${virtualizedSubjects.bottomPadding}px`, padding: 0, border: 'none', background: '#fff' }} />
                                     </tr>
                                 )}
                                 {sortedSubjects.length === 0  && (

@@ -107,7 +107,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                     const isMovable = isTrue(getVal(['IsMovable', '机椅子(可動)', '可動式', '可動']));
 
                     const name = getVal(['Name', '教室名', '名前']);
-                    const id = getVal(['ID', '教室コード']) || name;
+                    const id = getVal(['ID', '教室ID']) || name;
 
                     return {
                         id,
@@ -277,7 +277,11 @@ export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
 
                 const rowIssues: string[] = [];
                 rows.forEach((row, index) => {
+                    const classroomId = getCsvValue(row, ['ID', '教室ID']);
                     const missing = CLASSROOM_IMPORT_REQUIRED_COLUMNS.filter(col => !getCsvValue(row, col.aliases));
+                    if (!classroomId) {
+                        missing.push({ label: 'ID', aliases: ['ID', '教室ID'] });
+                    }
                     const capacityValue = parseInt(getCsvValue(row, ['収容人数', 'Capacity']), 10);
                     if ((!missing.some(col => col.label === '収容人数')) && (!Number.isFinite(capacityValue) || capacityValue <= 0)) {
                         missing.push({ label: '収容人数', aliases: ['収容人数'] });
@@ -330,7 +334,7 @@ export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
                     else if (typeVal.includes('other')) type = 'other';
 
                     return {
-                        id: getVal(['ID', '教室ID', '教室名']) || getVal(['教室名', 'Name']),
+                        id: getVal(['ID', '教室ID']),
                         name: getVal(['教室名', 'Name']),
                         campus,
                         building: getVal(['建物', 'Building']) || '不明',
