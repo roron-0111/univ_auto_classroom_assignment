@@ -772,7 +772,7 @@ export const SubjectManager = ({
                                             '管轄': s.department,
                                             '配当期': exportTerm,
                                             '曜日': exportDay,
-                                            '講時': exportPeriod,
+                                            '開始講時': exportPeriod,
                                             '終了講時': exportEndPeriod,
                                             'キャンパス': s.campus,
                                             '履修者数': s.requiredCapacity,
@@ -798,7 +798,7 @@ export const SubjectManager = ({
                                             if (r?.isMovable) eqList.unshift('可動');
                                             return {
                                                 ...baseRow,
-                                                '教室ID': r?.id ?? '',
+                                                '教室ID': r?.id ?? alloc.classroomId ?? '',
                                                 '教室名': r?.name ?? '',
                                                 '建物': r?.building ?? '',
                                                 '教室定員': r?.capacity ?? '',
