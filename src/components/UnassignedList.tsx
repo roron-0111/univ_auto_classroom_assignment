@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
 import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
 
@@ -13,11 +13,12 @@ export type UnassignedListItem = Subject & {
 interface Props {
   subjects: UnassignedListItem[];
   allocations: Allocation[];
-  onReorder: (newOrder: Subject[]) => void;
+  onReorder: (newOrder: UnassignedListItem[]) => void;
   onDragStart?: (id: string) => void;
   onDragEnd?: () => void;
+  draggingSubjectId?: string | null;
   onEdit?: (id: string) => void;
-  onRemoveAllocation?: (subjectId: string, classroomId: string) => void;
+  onRemoveAllocation?: (subjectId: string, classroomId: string, insertIndex?: number) => void;
 }
 
 const REASON_META: Record<UnassignedReason, { label: string; short: string; color: string; bg: string; border: string }> = {
@@ -28,17 +29,8 @@ const REASON_META: Record<UnassignedReason, { label: string; short: string; colo
   U5_swap_failed: { label: '再調整失敗', short: 'U5', color: '#6a1b9a', bg: '#f3e5f5', border: '#ce93d8' }
 };
 
-const REASON_ORDER: UnassignedReason[] = [
-  'U1_no_hard_candidate',
-  'U3_term_split_blocked',
-  'U4_room_count_short',
-  'U2_room_type_blocked',
-  'U5_swap_failed'
-];
-
-const toSubject = (item: UnassignedListItem): Subject => {
-  const { _realId, reason, ...subject } = item;
-  void _realId;
+const toSubject = (item: UnassignedListItem): UnassignedListItem => {
+  const { reason, ...subject } = item;
   void reason;
   return subject;
 };
@@ -140,6 +132,7 @@ export const UnassignedList = ({
   onReorder,
   onDragStart,
   onDragEnd,
+  draggingSubjectId,
   onEdit,
   onRemoveAllocation
 }: Props) => {
@@ -160,6 +153,12 @@ export const UnassignedList = ({
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isDeptOpen, setIsDeptOpen] = useState(false);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!draggingSubjectId) {
+      setDropIndex(null);
+    }
+  }, [draggingSubjectId]);
 
   const periodOptions = useMemo(() => ([
     { value: '0', label: '未定' },
@@ -194,12 +193,7 @@ export const UnassignedList = ({
   }, [subjects, selectedTerms, selectedDays, selectedPeriods, selectedDepartments, capacityMin, capacityMax]);
 
   const displaySubjects = useMemo(() => {
-    return [...filteredSubjects].sort((a, b) => {
-      const aRank = a.reason ? REASON_ORDER.indexOf(a.reason) : REASON_ORDER.length;
-      const bRank = b.reason ? REASON_ORDER.indexOf(b.reason) : REASON_ORDER.length;
-      if (aRank !== bRank) return aRank - bRank;
-      return a.name.localeCompare(b.name, 'ja');
-    });
+    return filteredSubjects;
   }, [filteredSubjects]);
 
   const toggleFilter = <T,>(set: Set<T>, setter: (s: Set<T>) => void, value: T) => {
@@ -229,7 +223,8 @@ export const UnassignedList = ({
     const fromClassroomId = e.dataTransfer.getData('fromClassroomId');
 
     if (fromClassroomId && subjectId && onRemoveAllocation) {
-      onRemoveAllocation(subjectId, fromClassroomId);
+      onRemoveAllocation(subjectId, fromClassroomId, index);
+      onDragEnd?.();
       return;
     }
 
@@ -251,6 +246,7 @@ export const UnassignedList = ({
     }).map(toSubject);
 
     onReorder(reordered);
+    onDragEnd?.();
   };
 
   const handleDragEnd = () => {

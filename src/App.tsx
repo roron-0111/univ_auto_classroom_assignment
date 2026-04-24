@@ -762,6 +762,47 @@ function App() {
     return Array.from(map.values());
   };
 
+  const getUnassignedSubjects = (subjectList: Subject[], allocationList: Allocation[]) => {
+    const allocationCounts = new Map<string, number>();
+    allocationList.forEach(allocation => {
+      allocationCounts.set(allocation.subjectId, (allocationCounts.get(allocation.subjectId) || 0) + 1);
+    });
+
+    return subjectList.filter(subject => {
+      const currentCount = allocationCounts.get(subject.id) || 0;
+      const requiredCount = subject.requiredRoomCount || 1;
+      return currentCount < requiredCount;
+    });
+  };
+
+  const reorderSubjectsByUnassignedOrder = (subjectList: Subject[], orderedUnassigned: Subject[]) => {
+    const unassignedSet = new Set(orderedUnassigned.map(subject => subject.id));
+    let unassignedIndex = 0;
+
+    return subjectList.map(subject => {
+      if (unassignedSet.has(subject.id)) {
+        return orderedUnassigned[unassignedIndex++];
+      }
+      return subject;
+    });
+  };
+
+  const rebuildUnassignedOrder = (
+    subjectList: Subject[],
+    allocationList: Allocation[],
+    movingSubjectId: string,
+    insertIndex: number
+  ) => {
+    const currentUnassigned = getUnassignedSubjects(subjectList, allocationList);
+    const movingSubject = currentUnassigned.find(subject => subject.id === movingSubjectId);
+    if (!movingSubject) return subjectList;
+
+    const nextOrder = currentUnassigned.filter(subject => subject.id !== movingSubjectId);
+    const safeIndex = Math.max(0, Math.min(insertIndex, nextOrder.length));
+    nextOrder.splice(safeIndex, 0, movingSubject);
+    return reorderSubjectsByUnassignedOrder(subjectList, nextOrder);
+  };
+
 
   const handleDrop = (vSubjectId: string, classroomId: string, period: Period, term: Term) => {
     const subjectId = vSubjectId.includes('__slot') ? vSubjectId.split('__slot')[0] : vSubjectId;
@@ -817,8 +858,12 @@ function App() {
     });
   };
 
-  const handleRemove = (subjectId: string, classroomId: string) => {
-    setAllocations(prev => prev.filter(a => !(a.subjectId === subjectId && a.classroomId === classroomId)));
+  const handleRemove = (subjectId: string, classroomId: string, insertIndex?: number) => {
+    const nextAllocations = allocations.filter(a => !(a.subjectId === subjectId && a.classroomId === classroomId));
+    setAllocations(nextAllocations);
+    if (typeof insertIndex === 'number') {
+      setSubjects(prev => rebuildUnassignedOrder(prev, nextAllocations, subjectId, insertIndex));
+    }
   };
 
   const finalizeAutoAllocation = (
@@ -1187,18 +1232,12 @@ function App() {
     }
   };
 
-  const handleReorderSubjects = (reorderedUnassigned: Subject[]) => {
-    const unassignedIds = new Set(reorderedUnassigned.map(s => s.id));
-    let unassignedIdx = 0;
+  const handleReorderSubjects = (reorderedUnassigned: UnassignedListItem[]) => {
+    const normalizedOrder = reorderedUnassigned
+      .map(subject => subjects.find(s => s.id === (subject._realId || subject.id)))
+      .filter((item): item is Subject => item !== undefined);
 
-    const newSubjects = subjects.map(s => {
-      if (unassignedIds.has(s.id)) {
-        return reorderedUnassigned[unassignedIdx++];
-      }
-      return s;
-    });
-
-    setSubjects(newSubjects);
+    setSubjects(prev => reorderSubjectsByUnassignedOrder(prev, normalizedOrder));
   };
 
   // Auth初期化中はローディング表示
@@ -1324,6 +1363,7 @@ function App() {
             onReorder={handleReorderSubjects}
             onDragStart={setDraggingSubjectId}
             onDragEnd={() => setDraggingSubjectId(null)}
+            draggingSubjectId={draggingSubjectId}
             onEdit={setEditingSubjectId}
             onRemoveAllocation={handleRemove}
           />
