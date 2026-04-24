@@ -161,23 +161,16 @@ export const UnassignedList = ({
   const [isDeptOpen, setIsDeptOpen] = useState(false);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  const periodPatterns = useMemo(() => {
-    const found = subjects
-      .map(s => {
-        if (!s.period || s.period <= 0) return null;
-        return s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
-      })
-      .filter((v): v is string => !!v);
-    return Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
-      const aIsMulti = a.includes('-');
-      const bIsMulti = b.includes('-');
-      if (aIsMulti !== bIsMulti) return aIsMulti ? 1 : -1;
-      const [aStart, aEnd] = a.split('-').map(Number);
-      const [bStart, bEnd] = b.split('-').map(Number);
-      if (aStart !== bStart) return aStart - bStart;
-      return (aEnd || 0) - (bEnd || 0);
-    });
-  }, [subjects]);
+  const periodOptions = useMemo(() => ([
+    { value: '0', label: '未定' },
+    { value: '1', label: '1講時' },
+    { value: '2', label: '2講時' },
+    { value: '3', label: '3講時' },
+    { value: '4', label: '4講時' },
+    { value: '5', label: '5講時' },
+    { value: '6', label: '6講時' },
+    { value: '7', label: '7講時' }
+  ]), []);
 
   const departments = useMemo(() => Array.from(new Set(subjects.map(s => s.department))).sort(), [subjects]);
 
@@ -188,8 +181,10 @@ export const UnassignedList = ({
       if (selectedTerms.size > 0 && !selectedTerms.has(s.term)) return false;
       if (selectedDays.size > 0 && !selectedDays.has(s.day)) return false;
       if (selectedPeriods.size > 0) {
-        const pattern = s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
-        if (!selectedPeriods.has(pattern)) return false;
+        const tokens = (!s.period || s.period <= 0)
+          ? ['0']
+          : Array.from({ length: Math.max(1, (s.endPeriod && s.endPeriod > s.period ? s.endPeriod : s.period) - s.period + 1) }, (_, index) => String(s.period + index));
+        if (!tokens.every(token => selectedPeriods.has(token))) return false;
       }
       if (selectedDepartments.size > 0 && !selectedDepartments.has(s.department)) return false;
       if (min !== null && Number.isFinite(min) && s.requiredCapacity < min) return false;
@@ -373,15 +368,12 @@ export const UnassignedList = ({
           <div style={{ display: 'flex', gap: '4px', minWidth: 0, minHeight: '32px' }}>
             <FilterDropdown
               label="講時"
-              options={[{ value: '0', label: '未定' }, ...periodPatterns.map(p => ({ value: p, label: `${getPeriodLabel(p)}講時` }))]}
+              options={periodOptions}
               selected={selectedPeriods}
               onToggle={(val: string) => toggleFilter(selectedPeriods, setSelectedPeriods, val)}
               isOpen={isPeriodOpen}
               setIsOpen={setIsPeriodOpen}
-              getLabel={(val: string) => {
-                const label = getPeriodLabel(val);
-                return label === '未定' ? '未定' : `${label}講時`;
-              }}
+              getLabel={(val: string) => periodOptions.find(opt => opt.value === val)?.label ?? '未定'}
             />
           </div>
 

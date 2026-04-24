@@ -3,7 +3,7 @@ import Papa from 'papaparse';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
-import { SUBJECT_IMPORT_REQUIRED_COLUMNS, exportToCSV } from '../utils/csvParser';
+import { exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
@@ -46,6 +46,21 @@ const hasCsvHeader = (headers: string[], aliases: string[]) => {
         aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
     );
 };
+
+const SUBJECT_IMPORT_REQUIRED_COLUMNS: { label: string; aliases: string[] }[] = [
+    { label: 'コード', aliases: ['コード', '時間割コード', 'Code', 'ID'] },
+    { label: '時間割名称', aliases: ['時間割名称', '授業名称', 'Name'] },
+    { label: '教員コード', aliases: ['教員コード', 'TeacherCode'] },
+    { label: '教員名', aliases: ['教員名', '教員', 'Teacher', '代表教員'] },
+    { label: '開講学部', aliases: ['開講学部', 'Faculty'] },
+    { label: '管轄', aliases: ['管轄', '学科', 'Department'] },
+    { label: '配当期', aliases: ['配当期', '学期', 'Term'] },
+    { label: '曜日', aliases: ['曜日', 'Day'] },
+    { label: '講時', aliases: ['講時', '開始講時', 'Period'] },
+    { label: 'キャンパス', aliases: ['キャンパス', 'Campus'] },
+    { label: '必要教室数', aliases: ['必要教室数', 'RequiredRoomCount'] },
+    { label: 'タイプ', aliases: ['タイプ', '希望教室タイプ', 'PreferredRoomType'] }
+] as const;
 
 type ParsedSubjectCsvRow = {
     subject: Subject;
@@ -513,29 +528,16 @@ export const SubjectManager = ({
 
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-    // 講時フィルタ用：実データから存在する単/複数講時パターンを抽出し、
-    // かつ「2-4」「3-5」などの標準的なパターンを確実に追加する
-    const periodOptions = useMemo(() => {
-        const found = subjects
-            .map(s => {
-                if (!s.period || s.period <= 0) return null;
-                return s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
-            })
-            .filter((v): v is string => !!v);
-        const patterns = Array.from(new Set([...found, '2-4', '3-5'])).sort((a, b) => {
-            const aIsMulti = a.includes('-');
-            const bIsMulti = b.includes('-');
-            if (aIsMulti !== bIsMulti) return aIsMulti ? 1 : -1;
-            const [aStart, aEnd] = a.split('-').map(Number);
-            const [bStart, bEnd] = b.split('-').map(Number);
-            if (aStart !== bStart) return aStart - bStart;
-            return (aEnd || 0) - (bEnd || 0);
-        });
-        return patterns.map(p => {
-            const label = getPeriodLabel(p);
-            return { value: p, label: label === '未定' ? '未定' : `${label}講時` };
-        });
-    }, [subjects]);
+    const periodFilterOptions = useMemo(() => ([
+        { value: '0' as const, label: '未定' },
+        { value: '1' as const, label: '1講時' },
+        { value: '2' as const, label: '2講時' },
+        { value: '3' as const, label: '3講時' },
+        { value: '4' as const, label: '4講時' },
+        { value: '5' as const, label: '5講時' },
+        { value: '6' as const, label: '6講時' },
+        { value: '7' as const, label: '7講時' }
+    ]), []);
 
     const termFilterOptions = useMemo(() => {
         const options = [
@@ -559,14 +561,15 @@ export const SubjectManager = ({
         return Array.from(new Map(options.map(item => [String(item.value), item])).values());
     }, []);
 
-    const periodFilterOptions = useMemo(() => {
-        const options = [{ value: '0', label: '未定' }, ...periodOptions];
-        return Array.from(new Map(options.map(item => [String(item.value), item])).values());
-    }, [periodOptions]);
-
     const handleEdit = (subject: Subject) => {
         setSubjectModalMode('edit');
         setEditingSubjectModal(subject);
+    };
+
+    const getSubjectPeriodTokens = (subject: Subject) => {
+        if (!subject.period || subject.period <= 0) return ['0'];
+        const end = subject.endPeriod && subject.endPeriod > subject.period ? subject.endPeriod : subject.period;
+        return Array.from({ length: Math.max(1, end - subject.period + 1) }, (_, index) => String(subject.period + index));
     };
 
     // フィルタリング処理（メモ化）
@@ -591,10 +594,10 @@ export const SubjectManager = ({
             if (filters.department.length > 0 && !filters.department.includes(s.department)) return false;
             if (filters.term.length > 0 && !filters.term.includes(s.term)) return false;
             if (filters.day.length > 0 && !filters.day.includes(s.day)) return false;
-            // 講時フィルタ: 「1-2」形式の文字列で比較
+            // 講時フィルタ: 選択された講時に、科目側の講時がすべて含まれるものを対象にする
             if (filters.period.length > 0) {
-                const pattern = s.endPeriod && s.endPeriod > s.period ? `${s.period}-${s.endPeriod}` : `${s.period}`;
-                if (!filters.period.includes(pattern)) return false;
+                const subjectPeriods = getSubjectPeriodTokens(s);
+                if (!subjectPeriods.every(period => filters.period.includes(period))) return false;
             }
             if (filters.priority.length > 0 && !filters.priority.includes(s.priority)) return false;
             if (filters.buildingPreference.length > 0 && (!s.buildingPreference || !filters.buildingPreference.some(b => s.buildingPreference?.includes(b)))) return false;
@@ -735,7 +738,7 @@ export const SubjectManager = ({
                     onUpdateAllocations(dedupedAllocations);
                 }
             } catch (err) {
-                alert('CSV読み込みエラー: ' + err);
+                alert(err instanceof Error ? err.message : `CSV読み込みエラー: ${String(err)}`);
             } finally {
                 input.value = '';
             }

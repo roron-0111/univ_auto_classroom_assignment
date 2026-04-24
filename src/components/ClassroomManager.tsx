@@ -298,7 +298,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                     onUpdate(mergeClassroomsById(classrooms, data));
                 }
             } catch (err) {
-                alert('CSV読み込みエラー: ' + err);
+                alert(err instanceof Error ? err.message : `CSV読み込みエラー: ${String(err)}`);
             } finally {
                 input.value = '';
             }
