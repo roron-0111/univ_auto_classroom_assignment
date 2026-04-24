@@ -47,7 +47,17 @@ const hasCsvHeader = (headers: string[], aliases: string[]) => {
     );
 };
 
-const parseSubjectCSVWithTbd = (file: File): Promise<Subject[]> => {
+type ParsedSubjectCsvRow = {
+    subject: Subject;
+    classroomId: string;
+};
+
+type ParsedSubjectCsv = {
+    subjects: Subject[];
+    rows: ParsedSubjectCsvRow[];
+};
+
+const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
     return new Promise((resolve, reject) => {
         Papa.parse(file, {
             header: true,
@@ -82,7 +92,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<Subject[]> => {
                     return;
                 }
 
-                const rawSubjects = rows.map((row) => ({
+                const rawRows = rows.map((row) => ({
                     id: row.ID || row['コード'] || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
                     code: row['コード'] || row['時間割コード'] || row.Code || row.ID,
                     name: row['時間割名称'] || row.Name || row['授業名称'],
@@ -137,8 +147,12 @@ const parseSubjectCSVWithTbd = (file: File): Promise<Subject[]> => {
                     mandatoryEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '◎').map(normalizeRequiredEquipmentName),
                     requiredEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '○').map(normalizeRequiredEquipmentName)
                 } as Subject));
+                const classroomRows = rows.map((row, index) => ({
+                    subject: rawRows[index],
+                    classroomId: getCsvValue(row, ['教室ID', 'classroomId', 'ClassroomId'])
+                }));
 
-                const normalizedSubjects = rawSubjects.map(s => ({
+                const normalizedSubjects = rawRows.map(s => ({
                     ...s,
                     campus: normalizeCampusLabel(s.campus || '') || '',
                     requiredEquipment: s.requiredEquipment || [],
@@ -159,7 +173,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<Subject[]> => {
                     }
                 });
 
-                resolve(Array.from(grouped.values()));
+                resolve({ subjects: Array.from(grouped.values()), rows: classroomRows });
             },
             error: (error) => reject(error)
         });
@@ -173,6 +187,7 @@ interface Props {
     currentCampusLabel: string;
     subjectTaxonomy: SubjectTaxonomy;
     onUpdate: (updated: Subject[]) => void;
+    onUpdateAllocations: (updated: Allocation[]) => void;
     onUpdateSubjectTaxonomy: (updated: SubjectTaxonomy) => void;
     onClose: () => void;
 }
@@ -418,6 +433,7 @@ export const SubjectManager = ({
     currentCampusLabel,
     subjectTaxonomy,
     onUpdate,
+    onUpdateAllocations,
     onUpdateSubjectTaxonomy,
     onClose
 }: Props) => {
@@ -661,11 +677,22 @@ export const SubjectManager = ({
             try {
                 const data = await parseSubjectCSVWithTbd(input.files[0]);
                 const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
-                if (data.some(subject => normalizeCampusLabel(subject.campus || '') !== campusLabel)) {
+                if (data.subjects.some(subject => normalizeCampusLabel(subject.campus || '') !== campusLabel)) {
                     alert('キャンパスが異なるレコードがあります');
                     return;
                 }
-                const invalidRows = data
+                const classroomIdSet = new Set(classrooms.map(room => room.id));
+                const invalidRoomRows = data.rows
+                    .map((row, index) => {
+                        if (!row.classroomId) return '';
+                        return classroomIdSet.has(row.classroomId) ? '' : `${index + 2}行目(${row.classroomId})`;
+                    })
+                    .filter(Boolean);
+                if (invalidRoomRows.length > 0) {
+                    alert(`教室IDが現在の教室マスタに存在しないレコードがあります: ${invalidRoomRows.slice(0, 10).join('、')}${invalidRoomRows.length > 10 ? '…' : ''}`);
+                    return;
+                }
+                const invalidRows = data.subjects
                     .map((subject, index) => {
                         const issues: string[] = [];
                         if (!facultyOptions.includes(subject.faculty || '')) issues.push('開講学部');
@@ -677,14 +704,35 @@ export const SubjectManager = ({
                     alert(`キャンパスの候補外レコードがあります: ${invalidRows.slice(0, 10).join('、')}${invalidRows.length > 10 ? '…' : ''}`);
                     return;
                 }
-                const sanitized = data.map(subject => ({
+                const sanitized = data.subjects.map(subject => ({
                     ...subject,
                     campus: campusLabel,
                     requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
                     mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
                 }));
-                if (confirm(`${data.length}件の授業データを読み込みます。コードが一致する授業は上書きし、一致しないものは追加します。よろしいですか？`)) {
-                    onUpdate(mergeSubjectsByCode(subjects, sanitized));
+                if (confirm(`${data.subjects.length}件の授業データを読み込みます。コードが一致する授業は上書きし、一致しないものは追加します。教室IDがある行は配当も復元します。よろしいですか？`)) {
+                    const mergedSubjects = mergeSubjectsByCode(subjects, sanitized);
+                    const importedCodes = new Set(sanitized.map(subject => (subject.code || '').trim()).filter(Boolean));
+                    const codeToSubjectId = new Map(
+                        mergedSubjects
+                            .filter(subject => importedCodes.has((subject.code || '').trim()))
+                            .map(subject => [(subject.code || '').trim(), subject.id] as const)
+                    );
+                    const importedSubjectIds = new Set(codeToSubjectId.values());
+                    const preservedAllocations = allocations.filter(allocation => !importedSubjectIds.has(allocation.subjectId));
+                    const importedAllocations = data.rows
+                        .map(row => {
+                            const subjectKey = (row.subject.code || '').trim();
+                            const subjectId = codeToSubjectId.get(subjectKey);
+                            if (!subjectId || !row.classroomId) return null;
+                            return { subjectId, classroomId: row.classroomId };
+                        })
+                        .filter((item): item is Allocation => item !== null);
+                    const dedupedAllocations = Array.from(new Map(
+                        [...preservedAllocations, ...importedAllocations].map(allocation => [`${allocation.subjectId}__${allocation.classroomId}`, allocation] as const)
+                    ).values());
+                    onUpdate(mergedSubjects);
+                    onUpdateAllocations(dedupedAllocations);
                 }
             } catch (err) {
                 alert('CSV読み込みエラー: ' + err);

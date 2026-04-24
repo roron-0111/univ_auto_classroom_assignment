@@ -1566,6 +1566,7 @@ function App() {
               currentCampusLabel={currentCampusLabel}
               subjectTaxonomy={subjectTaxonomy}
               onUpdate={handleSubjectUpdate}
+              onUpdateAllocations={setAllocations}
               onUpdateSubjectTaxonomy={setSubjectTaxonomy}
               onClose={() => setShowSubjectManager(false)}
             />
