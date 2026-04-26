@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react';
 import { db, auth } from './firebase';
-import { doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, runTransaction, deleteField } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import type { CloudData } from '../types_cloud';
-import { getCampusLabelFromEmail, normalizeCampusLabel } from '../types';
 
 type FirestoreValue = string | number | boolean | null | FirestoreValue[] | { [key: string]: FirestoreValue };
 type WriteLockDoc = {
@@ -15,7 +14,6 @@ type WriteLockDoc = {
 
 const WRITE_LOCK_TTL_MS = 15_000;
 const WRITE_LOCK_SESSION_KEY = 'subject_rooms_cloud_write_session';
-const WRITE_LOCK_KEY_PREFIX = 'subject_rooms_cloud_write_lock';
 
 const getWriteSessionId = () => {
   try {
@@ -29,11 +27,6 @@ const getWriteSessionId = () => {
   } catch {
     return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
-};
-
-const getWriteLockDocId = (currentUser: User) => {
-  const campusLabel = normalizeCampusLabel(getCampusLabelFromEmail(currentUser.email) || currentUser.email?.split('@')[0] || '');
-  return campusLabel || 'default';
 };
 
 const sanitizeData = (obj: unknown): FirestoreValue => {
@@ -60,16 +53,18 @@ export const useCloudSync = (user: User | null) => {
     if (!currentUser) return null;
 
     const sessionId = getWriteSessionId();
-    const lockDocId = getWriteLockDocId(currentUser);
-    const lockRef = doc(db, WRITE_LOCK_KEY_PREFIX, lockDocId);
+    const lockRef = doc(db, 'user_data', currentUser.uid);
     const now = Date.now();
 
     await runTransaction(db, async tx => {
       const snap = await tx.get(lockRef);
       if (snap.exists()) {
-        const current = snap.data() as Partial<WriteLockDoc>;
-        const expiresAt = typeof current.expiresAt === 'number' ? current.expiresAt : 0;
-        const lockedSessionId = typeof current.sessionId === 'string' ? current.sessionId : '';
+        const current = snap.data() as Partial<WriteLockDoc> & {
+          lockSessionId?: unknown;
+          lockExpiresAt?: unknown;
+        };
+        const expiresAt = typeof current.lockExpiresAt === 'number' ? current.lockExpiresAt : 0;
+        const lockedSessionId = typeof current.lockSessionId === 'string' ? current.lockSessionId : '';
 
         if (expiresAt > now && lockedSessionId && lockedSessionId !== sessionId) {
           throw new Error('WRITE_LOCKED');
@@ -82,7 +77,12 @@ export const useCloudSync = (user: User | null) => {
         acquiredAt: now,
         expiresAt: now + WRITE_LOCK_TTL_MS
       };
-      tx.set(lockRef, nextLock, { merge: true });
+      tx.set(lockRef, {
+        lockSessionId: nextLock.sessionId,
+        lockOwnerEmail: nextLock.ownerEmail,
+        lockAcquiredAt: nextLock.acquiredAt,
+        lockExpiresAt: nextLock.expiresAt
+      }, { merge: true });
     });
 
     return { lockRef, sessionId };
@@ -93,16 +93,22 @@ export const useCloudSync = (user: User | null) => {
     if (!currentUser) return;
 
     const sessionId = getWriteSessionId();
-    const lockDocId = getWriteLockDocId(currentUser);
-    const lockRef = doc(db, WRITE_LOCK_KEY_PREFIX, lockDocId);
+    const lockRef = doc(db, 'user_data', currentUser.uid);
 
     try {
       await runTransaction(db, async tx => {
         const snap = await tx.get(lockRef);
         if (!snap.exists()) return;
-        const current = snap.data() as Partial<WriteLockDoc>;
-        if (current.sessionId === sessionId) {
-          tx.delete(lockRef);
+        const current = snap.data() as Partial<WriteLockDoc> & {
+          lockSessionId?: unknown;
+        };
+        if (current.lockSessionId === sessionId) {
+          tx.update(lockRef, {
+            lockSessionId: deleteField(),
+            lockOwnerEmail: deleteField(),
+            lockAcquiredAt: deleteField(),
+            lockExpiresAt: deleteField()
+          });
         }
       });
     } catch (error) {

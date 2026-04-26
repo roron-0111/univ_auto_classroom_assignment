@@ -36,7 +36,7 @@ import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocat
 // Icons
 import {
   RefreshCw, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, CloudUpload, CloudDownload, Cloud
+  AlertTriangle, ListChecks, CloudUpload, CloudDownload, LogOut
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -760,6 +760,19 @@ function App() {
     exportToCSV(classroomExport, 'classrooms_export.csv');
   }, [subjects, allocations, classrooms, currentCampusLabel]);
 
+  const getCloudWriteErrorMessage = useCallback((error: unknown) => {
+    if (error instanceof Error) {
+      if (error.message === 'WRITE_LOCKED') {
+        return '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。';
+      }
+      if (/permission-denied/i.test(error.message)) {
+        return 'クラウドへの書き込み権限がありません。';
+      }
+      return error.message;
+    }
+    return 'Cloud write failed.';
+  }, []);
+
   const performCloudWrite = useCallback(async () => {
     if (!user) return;
     try {
@@ -768,11 +781,11 @@ function App() {
       alert('Cloud write complete.');
     } catch (error) {
       console.error(error);
-      alert('Cloud write failed.');
+      alert(getCloudWriteErrorMessage(error));
     } finally {
       setIsCloudLoading(false);
     }
-  }, [user, saveData, buildCloudSnapshot]);
+  }, [user, saveData, buildCloudSnapshot, getCloudWriteErrorMessage]);
 
   const handleCloudWrite = useCallback(async () => {
     if (!user) return;
@@ -824,11 +837,11 @@ function App() {
       alert('Cloud write complete.');
     } catch (error) {
       console.error(error);
-      alert('Cloud write failed.');
+      alert(getCloudWriteErrorMessage(error));
     } finally {
       setIsCloudLoading(false);
     }
-  }, [user, cloudWriteWarningSummary, refreshData, buildCloudSnapshot, saveData, cloudWriteFingerprint]);
+  }, [user, cloudWriteWarningSummary, refreshData, buildCloudSnapshot, saveData, cloudWriteFingerprint, getCloudWriteErrorMessage]);
 
   const handleCloudWriteWarningCancel = useCallback(() => {
     setShowCloudWriteWarningModal(false);
@@ -1624,20 +1637,22 @@ function App() {
             </>
           )}
 
-          <button
-            onClick={() => setShowCloudModal(true)}
-            style={{
-              display: 'flex', gap: '6px', alignItems: 'center',
-              background: '#0f172a', color: '#fff',
-              border: '1px solid #334155',
-              padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-              fontSize: '0.9rem', fontWeight: '500'
-            }}
-            title={user ? 'クラウド接続・ログアウト' : 'クラウド接続'}
-          >
-            <Cloud size={16} />
-            {user ? 'クラウド' : '接続'}
-          </button>
+          {user && (
+            <button
+              onClick={authLogout}
+              style={{
+                display: 'flex', gap: '6px', alignItems: 'center',
+                background: '#d32f2f', color: '#fff',
+                border: '1px solid #b71c1c',
+                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                fontSize: '0.9rem', fontWeight: '500'
+              }}
+              title="ログアウト"
+            >
+              <LogOut size={16} />
+              ログアウト
+            </button>
+          )}
 
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
