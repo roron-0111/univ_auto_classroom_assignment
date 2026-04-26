@@ -36,7 +36,7 @@ import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocat
 // Icons
 import {
   RefreshCw, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, CloudUpload, CloudDownload
+  AlertTriangle, ListChecks, CloudUpload, CloudDownload, Cloud
 } from 'lucide-react';
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -1600,10 +1600,10 @@ function App() {
                   fontSize: '0.9rem', fontWeight: '500'
                 }}
                 disabled={isCloudLoading}
-                title={"ローカルの内容をクラウドへ書き込みます"}
+                title={"ローカルデータをクラウドへ書き込みます"}
               >
                 <CloudUpload size={16} />
-                {"ローカル→クラウドへ書き込み"}
+                書込
               </button>
               <button
                 onClick={handleCloudRead}
@@ -1616,13 +1616,28 @@ function App() {
                   fontSize: '0.9rem', fontWeight: '500'
                 }}
                 disabled={isCloudLoading}
-                title={"クラウドの内容をローカルへ取得します"}
+                title={"クラウドデータをローカルへ取得します"}
               >
                 <CloudDownload size={16} className={isCloudLoading ? 'animate-pulse' : ''} />
-                {"クラウド→ローカルに取得"}
+                取得
               </button>
             </>
           )}
+
+          <button
+            onClick={() => setShowCloudModal(true)}
+            style={{
+              display: 'flex', gap: '6px', alignItems: 'center',
+              background: '#0f172a', color: '#fff',
+              border: '1px solid #334155',
+              padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+              fontSize: '0.9rem', fontWeight: '500'
+            }}
+            title={user ? 'クラウド接続・ログアウト' : 'クラウド接続'}
+          >
+            <Cloud size={16} />
+            {user ? 'クラウド' : '接続'}
+          </button>
 
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
