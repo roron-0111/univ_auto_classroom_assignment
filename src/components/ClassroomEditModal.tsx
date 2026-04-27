@@ -163,8 +163,6 @@ export const ClassroomEditModal = ({
                 style={inputStyle}
               />
               <div />
-              <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>例: A101 / 1F-201</div>
-
               <label style={requiredLabelStyle}>教室名</label>
               <input
                 value={form.name}
