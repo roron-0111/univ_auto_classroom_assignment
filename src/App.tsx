@@ -663,12 +663,39 @@ function App() {
     const rows: Record<string, unknown>[] = [];
 
     const asRecordArray = <T,>(items: T[]) => items.map(item => item as unknown as Record<string, unknown>);
+    const getString = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+    const getSubjectLabel = (item: Record<string, unknown>) => {
+      const code = getString(item.code);
+      const name = getString(item.name);
+      const id = getString(item.id);
+      const label = [code, name].filter(Boolean).join('_');
+      return label || id;
+    };
+    const getClassroomLabel = (item: Record<string, unknown>) => getString(item.name) || getString(item.id);
+    const getAllocationLabel = (
+      item: Record<string, unknown>,
+      subjectMap: Map<string, Record<string, unknown>>,
+      classroomMap: Map<string, Record<string, unknown>>
+    ) => {
+      const subjectId = getString(item.subjectId);
+      const classroomId = getString(item.classroomId);
+      const subject = subjectMap.get(subjectId);
+      const classroom = classroomMap.get(classroomId);
+      const subjectLabel = subject ? getSubjectLabel(subject) : subjectId;
+      const classroomLabel = classroom ? getClassroomLabel(classroom) : classroomId;
+      return [subjectLabel, classroomLabel].filter(Boolean).join(' / ');
+    };
 
     const addRows = (
       kind: string,
       localItems: Record<string, unknown>[],
       cloudItems: Record<string, unknown>[],
-      keyFn: (item: Record<string, unknown>) => string
+      keyFn: (item: Record<string, unknown>) => string,
+      labelFn?: (
+        item: Record<string, unknown>,
+        localMap: Map<string, Record<string, unknown>>,
+        cloudMap: Map<string, Record<string, unknown>>
+      ) => string
     ) => {
       const localMap = new Map(localItems.map(item => [keyFn(item), item]));
       const cloudMap = new Map(cloudItems.map(item => [keyFn(item), item]));
@@ -676,23 +703,32 @@ function App() {
       keys.forEach(key => {
         const localItem = localMap.get(key);
         const cloudItem = cloudMap.get(key);
+        const targetLabel = labelFn ? labelFn(localItem || cloudItem || {}, localMap, cloudMap) : key;
         if (!localItem && cloudItem) {
-          rows.push({ 種別: kind, 操作: '追加', キー: key, ローカル: '', クラウド: stableSerialize(cloudItem) });
+          rows.push({ 種別: kind, 操作: '追加', 対象: targetLabel, ローカル: '', クラウド: stableSerialize(cloudItem) });
         } else if (localItem && !cloudItem) {
-          rows.push({ 種別: kind, 操作: '削除', キー: key, ローカル: stableSerialize(localItem), クラウド: '' });
+          rows.push({ 種別: kind, 操作: '削除', 対象: targetLabel, ローカル: stableSerialize(localItem), クラウド: '' });
         } else if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-          rows.push({ 種別: kind, 操作: '変更', キー: key, ローカル: stableSerialize(localItem), クラウド: stableSerialize(cloudItem) });
+          rows.push({ 種別: kind, 操作: '変更', 対象: targetLabel, ローカル: stableSerialize(localItem), クラウド: stableSerialize(cloudItem) });
         }
       });
     };
 
-    addRows('授業', asRecordArray(localData.subjects), asRecordArray(cloudData.subjects), item => String(item.id ?? ''));
-    addRows('教室', asRecordArray(localData.classrooms), asRecordArray(cloudData.classrooms), item => String(item.id ?? ''));
+    const localSubjectMap = new Map(asRecordArray(localData.subjects).map(item => [String(item.id ?? ''), item] as const));
+    const cloudSubjectMap = new Map(asRecordArray(cloudData.subjects).map(item => [String(item.id ?? ''), item] as const));
+    const localClassroomMap = new Map(asRecordArray(localData.classrooms).map(item => [String(item.id ?? ''), item] as const));
+    const cloudClassroomMap = new Map(asRecordArray(cloudData.classrooms).map(item => [String(item.id ?? ''), item] as const));
+    const mergedSubjectMap = new Map([...localSubjectMap, ...cloudSubjectMap]);
+    const mergedClassroomMap = new Map([...localClassroomMap, ...cloudClassroomMap]);
+
+    addRows('授業', asRecordArray(localData.subjects), asRecordArray(cloudData.subjects), item => String(item.id ?? ''), item => getSubjectLabel(item));
+    addRows('教室', asRecordArray(localData.classrooms), asRecordArray(cloudData.classrooms), item => String(item.id ?? ''), item => getClassroomLabel(item));
     addRows(
       '配当',
       asRecordArray(localData.allocations),
       asRecordArray(cloudData.allocations),
-      item => `${String(item.subjectId ?? '')}__${String(item.classroomId ?? '')}`
+      item => `${String(item.subjectId ?? '')}__${String(item.classroomId ?? '')}`,
+      item => getAllocationLabel(item, mergedSubjectMap, mergedClassroomMap)
     );
 
     if (stableSerialize(localData.settings) !== stableSerialize(cloudData.settings)) {
