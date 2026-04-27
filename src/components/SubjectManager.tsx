@@ -471,6 +471,7 @@ export const SubjectManager = ({
     const subjectScrollRef = useRef<HTMLDivElement>(null);
     const [subjectViewportHeight, setSubjectViewportHeight] = useState(0);
     const [subjectScrollTop, setSubjectScrollTop] = useState(0);
+    const [subjectListReady, setSubjectListReady] = useState(false);
     useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
     useEffect(() => {
         if (!showColSettings) return;
@@ -669,6 +670,7 @@ export const SubjectManager = ({
 
         const updateHeight = () => setSubjectViewportHeight(el.clientHeight);
         updateHeight();
+        setSubjectListReady(true);
 
         if (typeof ResizeObserver === 'undefined') return;
 
@@ -975,7 +977,12 @@ export const SubjectManager = ({
                 style={{ flex: 1, overflow: 'auto' }}
             >
                 <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 30px 20px' }}>
-                    <div style={{ border: '1px solid #ddd', borderRadius: '4px' }}>
+                    <div style={{ border: '1px solid #ddd', borderRadius: '4px', background: '#fff' }}>
+                        {!subjectListReady ? (
+                            <div style={{ minHeight: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#777', fontSize: '0.95rem' }}>
+                                授業一覧を読み込み中...
+                            </div>
+                        ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse', borderSpacing: 0, background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
                             <thead>
                                 <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
@@ -1108,6 +1115,7 @@ export const SubjectManager = ({
                                 )}
                             </tbody>
                         </table>
+                        )}
                     </div>
                 </div>
             </div>

@@ -751,6 +751,13 @@ function App() {
     setAllocationSettings(migrateAllocationRules(cloudData.settings));
     setEquipmentSettings(normalizeEquipmentSettings(cloudData.equipmentSettings));
     setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
+    setLastUnassigned([]);
+    setAutoAllocationSummary(null);
+    setPendingAllocationBatch(null);
+    setPendingRelocationBatch(null);
+    setShowExceptionReviewModal(false);
+    setShowRelocationPreviewModal(false);
+    setPendingExceptionApprovedKeys([]);
   }, []);
 
   const exportCurrentSnapshotCsv = useCallback(() => {

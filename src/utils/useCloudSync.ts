@@ -20,8 +20,26 @@ type WriteLockDoc = {
   lockAcquiredAt: number;
   lockExpiresAt: number;
 };
+type CloudMetaDoc = {
+  snapshotRevision?: string;
+  lastUpdated?: number;
+  createdAt?: number;
+  email?: string | null;
+  schemaVersion?: number;
+  lockSessionId?: string | null;
+  lockOwnerEmail?: string | null;
+  lockAcquiredAt?: number;
+  lockExpiresAt?: number;
+};
+type ChunkedPayloadDoc = {
+  index?: number;
+  revision?: string;
+  items?: unknown;
+};
 
 const WRITE_LOCK_TTL_MS = 15_000;
+const CLOUD_SYNC_WAIT_MS = 250;
+const CLOUD_SYNC_WAIT_MAX_ATTEMPTS = 20;
 const WRITE_LOCK_SESSION_KEY = 'subject_rooms_cloud_write_session';
 const META_COLLECTION = 'user_data_meta';
 const PAYLOAD_COLLECTION = 'user_data_payload';
@@ -72,8 +90,13 @@ const getPayloadCollectionRef = (uid: string, name: string) => collection(db, PA
 const getChunkDocRef = (uid: string, name: string, index: number) =>
   doc(db, PAYLOAD_COLLECTION, uid, name, String(index).padStart(4, '0'));
 const getConfigDocRef = (uid: string) => doc(db, PAYLOAD_COLLECTION, uid, 'config', CONFIG_DOC_ID);
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const createSnapshotRevision = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `revision-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[]) => {
+const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[], revision: string) => {
   const collectionRef = getPayloadCollectionRef(uid, name);
   const existing = await getDocs(collectionRef);
   const batch = writeBatch(db);
@@ -85,6 +108,7 @@ const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[
   chunkArray(items, CHUNK_SIZE).forEach((chunk, index) => {
     batch.set(getChunkDocRef(uid, name, index), {
       index,
+      revision,
       items: sanitizeData(chunk)
     });
   });
@@ -94,22 +118,39 @@ const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[
   }
 };
 
-const readChunkedCollection = async <T,>(uid: string, name: string): Promise<T[] | null> => {
+const readChunkedCollection = async <T,>(uid: string, name: string, expectedRevision?: string): Promise<T[] | null> => {
   const collectionRef = getPayloadCollectionRef(uid, name);
   const snap = await getDocs(collectionRef);
   if (snap.empty) return null;
   const docs = snap.docs.slice().sort((a, b) => {
-    const ai = typeof a.data().index === 'number' ? a.data().index : Number(a.id);
-    const bi = typeof b.data().index === 'number' ? b.data().index : Number(b.id);
+    const aData = a.data() as ChunkedPayloadDoc;
+    const bData = b.data() as ChunkedPayloadDoc;
+    const ai = typeof aData.index === 'number' ? aData.index : Number(a.id);
+    const bi = typeof bData.index === 'number' ? bData.index : Number(b.id);
     return ai - bi;
   });
   const items: T[] = [];
-  docs.forEach(docSnap => {
-    const data = docSnap.data() as { items?: unknown };
+  let detectedRevision: string | null = null;
+  for (const docSnap of docs) {
+    const data = docSnap.data() as ChunkedPayloadDoc;
+    const docRevision = typeof data.revision === 'string' ? data.revision : null;
+    if (expectedRevision) {
+      if (docRevision !== expectedRevision) {
+        return null;
+      }
+    } else if (docRevision) {
+      if (detectedRevision === null) {
+        detectedRevision = docRevision;
+      } else if (detectedRevision !== docRevision) {
+        return null;
+      }
+    }
     if (Array.isArray(data.items)) {
       items.push(...(data.items as T[]));
     }
-  });
+  }
+  if (expectedRevision && items.length === 0 && snap.size > 0) return null;
+  if (!expectedRevision && detectedRevision === null && snap.size > 0) return null;
   return items;
 };
 
@@ -125,6 +166,22 @@ const loadLegacyCloudData = async (uid: string): Promise<CloudData | null> => {
 };
 
 const getLockRef = (uid: string) => getMetaRef(uid);
+
+const waitForUnlockedMeta = async (uid: string, sessionId: string) => {
+  const lockRef = getLockRef(uid);
+  for (let attempt = 0; attempt < CLOUD_SYNC_WAIT_MAX_ATTEMPTS; attempt += 1) {
+    const snap = await getDoc(lockRef);
+    if (!snap.exists()) return null;
+    const current = snap.data() as Partial<WriteLockDoc>;
+    const expiresAt = typeof current.lockExpiresAt === 'number' ? current.lockExpiresAt : 0;
+    const lockedSessionId = typeof current.lockSessionId === 'string' ? current.lockSessionId : '';
+    if (lockedSessionId === sessionId || expiresAt <= Date.now()) {
+      return current as Partial<WriteLockDoc>;
+    }
+    await delay(CLOUD_SYNC_WAIT_MS);
+  }
+  throw new Error('WRITE_LOCKED');
+};
 
 export const useCloudSync = (user: User | null) => {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
@@ -196,13 +253,15 @@ export const useCloudSync = (user: User | null) => {
       const metaRef = getMetaRef(currentUser.uid);
       const sanitized = sanitizeData(data) as Record<string, FirestoreValue>;
       const now = Date.now();
+      const revision = createSnapshotRevision();
 
-      await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(data.subjects) ? data.subjects : []);
-      await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(data.classrooms) ? data.classrooms : []);
-      await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(data.allocations) ? data.allocations : []);
+      await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(data.subjects) ? data.subjects : [], revision);
+      await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(data.classrooms) ? data.classrooms : [], revision);
+      await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(data.allocations) ? data.allocations : [], revision);
 
       const configRef = getConfigDocRef(currentUser.uid);
       await setDoc(configRef, {
+        revision,
         settings: sanitizeData(data.settings),
         equipmentSettings: sanitizeData(data.equipmentSettings),
         subjectTaxonomy: sanitizeData(data.subjectTaxonomy),
@@ -211,6 +270,7 @@ export const useCloudSync = (user: User | null) => {
       }, { merge: true });
 
       await setDoc(metaRef, {
+        snapshotRevision: revision,
         lastUpdated: now,
         createdAt: now,
         email: currentUser.email ?? null,
@@ -231,10 +291,17 @@ export const useCloudSync = (user: User | null) => {
     const currentUser = user || auth.currentUser;
     if (!currentUser) return null;
     try {
+      const metaRef = getMetaRef(currentUser.uid);
+      const sessionId = getWriteSessionId();
+      await waitForUnlockedMeta(currentUser.uid, sessionId);
+      const metaSnap = await getDoc(metaRef);
+      const metaData = metaSnap.exists() ? (metaSnap.data() as CloudMetaDoc) : null;
+      const expectedRevision = typeof metaData?.snapshotRevision === 'string' ? metaData.snapshotRevision : undefined;
+
       const [subjects, classrooms, allocations, legacyData] = await Promise.all([
-        readChunkedCollection(currentUser.uid, 'subjects'),
-        readChunkedCollection(currentUser.uid, 'classrooms'),
-        readChunkedCollection(currentUser.uid, 'allocations'),
+        readChunkedCollection(currentUser.uid, 'subjects', expectedRevision),
+        readChunkedCollection(currentUser.uid, 'classrooms', expectedRevision),
+        readChunkedCollection(currentUser.uid, 'allocations', expectedRevision),
         loadLegacyCloudData(currentUser.uid)
       ]);
 
@@ -242,6 +309,12 @@ export const useCloudSync = (user: User | null) => {
 
       if (subjects !== null || classrooms !== null || allocations !== null || configSnap.exists()) {
         const configData = configSnap.exists() ? configSnap.data() : {};
+        if (expectedRevision) {
+          const configRevision = typeof configData.revision === 'string' ? configData.revision : undefined;
+          if (!configSnap.exists() || configRevision !== expectedRevision) {
+            return null;
+          }
+        }
         setLastSynced(new Date());
         return {
           subjects: (subjects ?? []) as CloudData['subjects'],

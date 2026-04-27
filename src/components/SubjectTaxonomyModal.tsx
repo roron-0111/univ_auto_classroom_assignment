@@ -110,7 +110,7 @@ export const SubjectTaxonomyModal = ({ campusLabel, taxonomy, onSave, onClose }:
               <input
                 value={facultyInput}
                 onChange={e => setFacultyInput(e.target.value)}
-                placeholder="追加する開講学部（, 区切りで複数可）"
+                placeholder="追加する開講学部"
                 style={{ flex: 1, padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
               />
               <button
