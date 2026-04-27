@@ -16,7 +16,8 @@ const inputStyle: CSSProperties = {
   padding: '8px 10px',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  boxSizing: 'border-box'
+  boxSizing: 'border-box',
+  fontSize: '0.95rem'
 };
 
 const requiredLabelStyle: CSSProperties = {
@@ -40,14 +41,17 @@ const tagButtonStyle = (active: boolean, eq: string): CSSProperties => {
     padding: '6px 12px',
     cursor: 'pointer',
     fontSize: '0.85rem',
-    fontWeight: active ? 700 : 500
+    fontWeight: active ? 700 : 500,
+    whiteSpace: 'nowrap'
   };
 };
+
+const EQUIPMENT_FLAG_SET = new Set(['可動', '固定']);
 
 const buildFormFromClassroom = (classroom: Classroom): Classroom => ({
   ...classroom,
   campus: classroom.campus || '',
-  equipment: (classroom.equipment || []).filter(eq => eq !== '可動' && eq !== '固定'),
+  equipment: (classroom.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq)),
   isMovable: classroom.isMovable ?? (classroom.equipment || []).includes('可動')
 });
 
@@ -66,11 +70,20 @@ export const ClassroomEditModal = ({
 
   const toggleEquipment = (eq: string) => {
     if (eq === '可動') {
-      setForm(prev => ({ ...prev, isMovable: true, equipment: (prev.equipment || []).filter(item => item !== '可動' && item !== '固定') }));
+      setForm(prev => ({
+        ...prev,
+        isMovable: true,
+        equipment: (prev.equipment || []).filter(item => !EQUIPMENT_FLAG_SET.has(item))
+      }));
       return;
     }
+
     if (eq === '固定') {
-      setForm(prev => ({ ...prev, isMovable: false, equipment: (prev.equipment || []).filter(item => item !== '可動' && item !== '固定') }));
+      setForm(prev => ({
+        ...prev,
+        isMovable: false,
+        equipment: (prev.equipment || []).filter(item => !EQUIPMENT_FLAG_SET.has(item))
+      }));
       return;
     }
 
@@ -104,13 +117,13 @@ export const ClassroomEditModal = ({
       id: nextId,
       name: nextName,
       campus: classroom.campus || form.campus || '',
-      equipment: (form.equipment || []).filter(eq => eq !== '可動' && eq !== '固定'),
+      equipment: (form.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq)),
       isMovable: !!form.isMovable
     });
   };
 
   const isMovableActive = !!form.isMovable;
-  const activeEquipment = (form.equipment || []).filter(eq => eq !== '可動' && eq !== '固定');
+  const activeEquipment = (form.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq));
 
   return (
     <div
@@ -146,15 +159,36 @@ export const ClassroomEditModal = ({
           }}
         >
           <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{title}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }} aria-label="閉じる">
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#111827' }}
+            aria-label="閉じる"
+            type="button"
+          >
             <X />
           </button>
         </div>
 
-        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <section style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+        <div
+          style={{
+            padding: '20px 24px',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
+            gap: '16px'
+          }}
+        >
+          <section
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              padding: '16px',
+              background: '#f8f9fa',
+              borderRadius: '8px'
+            }}
+          >
             <h4 style={{ ...sectionTitleStyle, color: '#1976d2' }}>基本情報</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px minmax(0, 1fr)', gap: '10px', alignItems: 'center' }}>
               <label style={requiredLabelStyle}>教室ID</label>
               <input
                 value={form.id}
@@ -162,7 +196,7 @@ export const ClassroomEditModal = ({
                 placeholder="IDを入力"
                 style={inputStyle}
               />
-              <div />
+
               <label style={requiredLabelStyle}>教室名</label>
               <input
                 value={form.name}
@@ -171,19 +205,35 @@ export const ClassroomEditModal = ({
               />
 
               <label style={requiredLabelStyle}>キャンパス</label>
-              <input value={classroom.campus || form.campus || ''} readOnly style={{ ...inputStyle, background: '#f7f7f7', color: '#666' }} />
+              <input
+                value={classroom.campus || form.campus || ''}
+                readOnly
+                style={{ ...inputStyle, background: '#f7f7f7', color: '#666' }}
+              />
 
               <label style={requiredLabelStyle}>建物</label>
-              <select value={form.building} onChange={e => setForm({ ...form, building: e.target.value })} style={inputStyle}>
+              <select
+                value={form.building}
+                onChange={e => setForm({ ...form, building: e.target.value })}
+                style={inputStyle}
+              >
                 {BUILDINGS.map(building => (
-                  <option key={building} value={building}>{building}</option>
+                  <option key={building} value={building}>
+                    {building}
+                  </option>
                 ))}
               </select>
 
               <label style={requiredLabelStyle}>タイプ</label>
-              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value as Classroom['type'] })} style={inputStyle}>
+              <select
+                value={form.type}
+                onChange={e => setForm({ ...form, type: e.target.value as Classroom['type'] })}
+                style={inputStyle}
+              >
                 {Object.entries(ROOM_TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
                 ))}
               </select>
 
@@ -201,14 +251,30 @@ export const ClassroomEditModal = ({
                 type="number"
                 min="1"
                 value={form.examCapacity ?? ''}
-                onChange={e => setForm({ ...form, examCapacity: e.target.value ? Number(e.target.value) : undefined })}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    examCapacity: e.target.value ? Number(e.target.value) : undefined
+                  })
+                }
                 style={inputStyle}
               />
             </div>
           </section>
 
-          <section style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: '#fff', borderRadius: '8px', border: '1px solid #e3f2fd' }}>
+          <section
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              padding: '16px',
+              background: '#fff',
+              borderRadius: '8px',
+              border: '1px solid #e3f2fd'
+            }}
+          >
             <h4 style={{ ...sectionTitleStyle, color: '#2e7d32' }}>機材・設備</h4>
+
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {EQUIPMENT_LIST.map(eq => {
                 const active =
@@ -217,6 +283,7 @@ export const ClassroomEditModal = ({
                     : eq === '固定'
                       ? !isMovableActive
                       : activeEquipment.includes(eq);
+
                 return (
                   <button
                     key={eq}
@@ -229,8 +296,9 @@ export const ClassroomEditModal = ({
                 );
               })}
             </div>
+
             <div style={{ fontSize: '0.86rem', color: '#6b7280', lineHeight: 1.6 }}>
-              <div>・可動 / 固定は、教室の可動性を表します。</div>
+              <div>・可動 / 固定 は、教室の可動状態を表します。</div>
               <div>・その他のタグは、クリックでオン / オフを切り替えます。</div>
             </div>
           </section>
