@@ -1,20 +1,7 @@
 import { AlertTriangle, CheckCircle2, Download, X } from 'lucide-react';
+import type { CloudWriteWarningSummary } from '../utils/cloudDiff';
 
-type DiffCount = {
-  added: number;
-  removed: number;
-  updated: number;
-};
-
-export type CloudWriteWarningSummary = {
-  subjects: DiffCount;
-  classrooms: DiffCount;
-  allocations: DiffCount;
-  settingsChanged: boolean;
-  equipmentSettingsChanged: boolean;
-  subjectTaxonomyChanged: boolean;
-  hasDiff: boolean;
-};
+export type { CloudWriteWarningSummary } from '../utils/cloudDiff';
 
 interface Props {
   isOpen: boolean;

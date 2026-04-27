@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Download, X } from 'lucide-react';
-import type { CloudWriteWarningSummary } from './CloudWriteWarningModal';
+import type { CloudWriteWarningSummary } from '../utils/cloudDiff';
 
 interface Props {
   isOpen: boolean;

@@ -30,6 +30,7 @@ import { useAuth } from './utils/useAuth';
 import { useCloudSync } from './utils/useCloudSync';
 import type { CloudData } from './types_cloud';
 import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocation } from './utils/unassignedStreak';
+import { buildCloudDiffCsv as buildCloudDiffCsvRows, compareCloudSnapshots, type CloudWriteWarningSummary } from './utils/cloudDiff';
 
 // Icons
 import {
@@ -387,103 +388,6 @@ const normalizeAllocationsForPhase6 = (allocations: unknown) =>
     ? allocations.map(normalizeAllocationForPhase6).filter((item): item is Allocation => item !== null)
     : [];
 
-type DiffCount = {
-  added: number;
-  removed: number;
-  updated: number;
-};
-
-type CloudWriteWarningSummary = {
-  subjects: DiffCount;
-  classrooms: DiffCount;
-  allocations: DiffCount;
-  settingsChanged: boolean;
-  equipmentSettingsChanged: boolean;
-  subjectTaxonomyChanged: boolean;
-  hasDiff: boolean;
-};
-
-const createDiffCount = (): DiffCount => ({
-  added: 0,
-  removed: 0,
-  updated: 0
-});
-
-const stableSerialize = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(item => stableSerialize(item)).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, val]) => `${JSON.stringify(key)}:${stableSerialize(val)}`);
-    return `{${entries.join(',')}}`;
-  }
-  return JSON.stringify(value);
-};
-
-const compareCollections = <T,>(
-  localItems: T[],
-  cloudItems: T[],
-  getKey: (item: T) => string
-): DiffCount => {
-  const localMap = new Map(localItems.map(item => [getKey(item), item] as const));
-  const cloudMap = new Map(cloudItems.map(item => [getKey(item), item] as const));
-  const diff = createDiffCount();
-
-  cloudMap.forEach((cloudItem, key) => {
-    if (!localMap.has(key)) {
-      diff.added += 1;
-      return;
-    }
-    const localItem = localMap.get(key);
-    if (stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-      diff.updated += 1;
-    }
-  });
-
-  localMap.forEach((_, key) => {
-    if (!cloudMap.has(key)) {
-      diff.removed += 1;
-    }
-  });
-
-  return diff;
-};
-
-const hasAnyDiff = (summary: CloudWriteWarningSummary) =>
-  summary.subjects.added > 0 ||
-  summary.subjects.removed > 0 ||
-  summary.subjects.updated > 0 ||
-  summary.classrooms.added > 0 ||
-  summary.classrooms.removed > 0 ||
-  summary.classrooms.updated > 0 ||
-  summary.allocations.added > 0 ||
-  summary.allocations.removed > 0 ||
-  summary.allocations.updated > 0 ||
-  summary.settingsChanged ||
-  summary.equipmentSettingsChanged ||
-  summary.subjectTaxonomyChanged;
-
-const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): CloudWriteWarningSummary => {
-  const summary: CloudWriteWarningSummary = {
-    subjects: compareCollections(localData.subjects, cloudData.subjects, subject => subject.id),
-    classrooms: compareCollections(localData.classrooms, cloudData.classrooms, room => room.id),
-    allocations: compareCollections(
-      localData.allocations,
-      cloudData.allocations,
-      allocation => `${allocation.subjectId}__${allocation.classroomId}`
-    ),
-    settingsChanged: stableSerialize(localData.settings) !== stableSerialize(cloudData.settings),
-    equipmentSettingsChanged: stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings),
-    subjectTaxonomyChanged: stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy),
-    hasDiff: false
-  };
-  summary.hasDiff = hasAnyDiff(summary);
-  return summary;
-};
-
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
@@ -659,111 +563,13 @@ function App() {
     setPendingExceptionApprovedKeys([]);
   }, []);
 
-  const buildCloudDiffCsv = useCallback((localData: CloudData, cloudData: CloudData) => {
-    const rows: Record<string, unknown>[] = [];
-
-    const asRecordArray = <T,>(items: T[]) => items.map(item => item as unknown as Record<string, unknown>);
-    const getString = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : '');
-    const getSubjectLabel = (item: Record<string, unknown>) => {
-      const code = getString(item.code);
-      const name = getString(item.name);
-      const id = getString(item.id);
-      const label = [code, name].filter(Boolean).join('_');
-      return label || id;
-    };
-    const getClassroomLabel = (item: Record<string, unknown>) => getString(item.name) || getString(item.id);
-    const getAllocationLabel = (
-      item: Record<string, unknown>,
-      subjectMap: Map<string, Record<string, unknown>>,
-      classroomMap: Map<string, Record<string, unknown>>
-    ) => {
-      const subjectId = getString(item.subjectId);
-      const classroomId = getString(item.classroomId);
-      const subject = subjectMap.get(subjectId);
-      const classroom = classroomMap.get(classroomId);
-      const subjectLabel = subject ? getSubjectLabel(subject) : subjectId;
-      const classroomLabel = classroom ? getClassroomLabel(classroom) : classroomId;
-      return [subjectLabel, classroomLabel].filter(Boolean).join(' / ');
-    };
-
-    const addRows = (
-      kind: string,
-      localItems: Record<string, unknown>[],
-      cloudItems: Record<string, unknown>[],
-      keyFn: (item: Record<string, unknown>) => string,
-      labelFn?: (
-        item: Record<string, unknown>,
-        localMap: Map<string, Record<string, unknown>>,
-        cloudMap: Map<string, Record<string, unknown>>
-      ) => string
-    ) => {
-      const localMap = new Map(localItems.map(item => [keyFn(item), item]));
-      const cloudMap = new Map(cloudItems.map(item => [keyFn(item), item]));
-      const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
-      keys.forEach(key => {
-        const localItem = localMap.get(key);
-        const cloudItem = cloudMap.get(key);
-        const targetLabel = labelFn ? labelFn(localItem || cloudItem || {}, localMap, cloudMap) : key;
-        if (!localItem && cloudItem) {
-          rows.push({ 種別: kind, 操作: '追加', 対象: targetLabel, ローカル: '', クラウド: stableSerialize(cloudItem) });
-        } else if (localItem && !cloudItem) {
-          rows.push({ 種別: kind, 操作: '削除', 対象: targetLabel, ローカル: stableSerialize(localItem), クラウド: '' });
-        } else if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-          rows.push({ 種別: kind, 操作: '変更', 対象: targetLabel, ローカル: stableSerialize(localItem), クラウド: stableSerialize(cloudItem) });
-        }
-      });
-    };
-
-    const localSubjectMap = new Map(asRecordArray(localData.subjects).map(item => [String(item.id ?? ''), item] as const));
-    const cloudSubjectMap = new Map(asRecordArray(cloudData.subjects).map(item => [String(item.id ?? ''), item] as const));
-    const localClassroomMap = new Map(asRecordArray(localData.classrooms).map(item => [String(item.id ?? ''), item] as const));
-    const cloudClassroomMap = new Map(asRecordArray(cloudData.classrooms).map(item => [String(item.id ?? ''), item] as const));
-    const mergedSubjectMap = new Map([...localSubjectMap, ...cloudSubjectMap]);
-    const mergedClassroomMap = new Map([...localClassroomMap, ...cloudClassroomMap]);
-
-    addRows('授業', asRecordArray(localData.subjects), asRecordArray(cloudData.subjects), item => String(item.id ?? ''), item => getSubjectLabel(item));
-    addRows('教室', asRecordArray(localData.classrooms), asRecordArray(cloudData.classrooms), item => String(item.id ?? ''), item => getClassroomLabel(item));
-    addRows(
-      '配当',
-      asRecordArray(localData.allocations),
-      asRecordArray(cloudData.allocations),
-      item => `${String(item.subjectId ?? '')}__${String(item.classroomId ?? '')}`,
-      item => getAllocationLabel(item, mergedSubjectMap, mergedClassroomMap)
-    );
-
-    if (stableSerialize(localData.settings) !== stableSerialize(cloudData.settings)) {
-      rows.push({
-        種別: '設定',
-        操作: '変更',
-        キー: '配当ルール',
-        ローカル: stableSerialize(localData.settings),
-        クラウド: stableSerialize(cloudData.settings)
-      });
-    }
-    if (stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings)) {
-      rows.push({
-        種別: '設定',
-        操作: '変更',
-        キー: '機材設定',
-        ローカル: stableSerialize(localData.equipmentSettings),
-        クラウド: stableSerialize(cloudData.equipmentSettings)
-      });
-    }
-    if (stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy)) {
-      rows.push({
-        種別: '設定',
-        操作: '変更',
-        キー: '開講学部・管轄',
-        ローカル: stableSerialize(localData.subjectTaxonomy),
-        クラウド: stableSerialize(cloudData.subjectTaxonomy)
-      });
-    }
-
-    return rows;
-  }, []);
+  const buildCloudDiffCsv = useCallback((localData: CloudData, cloudData: CloudData) => buildCloudDiffCsvRows(localData, cloudData), []);
 
   const getCloudWriteErrorMessage = useCallback((error: unknown) => {
     if (error instanceof Error) {
+      if (error.message === 'CLOUD_CONFLICT') {
+        return '現在、閲覧のみ可能です。クラウドデータが更新されています。先に「取得」を行ってから書込してください。';
+      }
       if (error.message === 'WRITE_LOCKED') {
         return '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。';
       }
@@ -775,12 +581,18 @@ function App() {
     return 'Cloud write failed.';
   }, []);
 
+  const clearCloudReadWarningState = useCallback(() => {
+    setShowCloudReadWarningModal(false);
+    setCloudReadWarningSummary(null);
+    setPendingCloudReadData(null);
+  }, []);
+
   const performCloudWrite = useCallback(async () => {
     if (!user) return;
     try {
       setIsCloudLoading(true);
-      await saveData(buildCloudSnapshot());
-      alert('Cloud write complete.');
+      const wrote = await saveData(buildCloudSnapshot());
+      alert(wrote ? 'Cloud write complete.' : '変更はありませんでした。');
     } catch (error) {
       console.error(error);
       alert(getCloudWriteErrorMessage(error));
@@ -791,8 +603,9 @@ function App() {
 
   const handleCloudWrite = useCallback(async () => {
     if (!user) return;
+    clearCloudReadWarningState();
     await performCloudWrite();
-  }, [user, performCloudWrite]);
+  }, [user, performCloudWrite, clearCloudReadWarningState]);
 
   const handleCloudRead = useCallback(async () => {
     if (!user) return;
@@ -1637,7 +1450,6 @@ function App() {
             onReorder={handleReorderSubjects}
             onDragStart={setDraggingSubjectId}
             onDragEnd={() => setDraggingSubjectId(null)}
-            draggingSubjectId={draggingSubjectId}
             onEdit={setEditingSubjectId}
             onRemoveAllocation={handleRemove}
           />

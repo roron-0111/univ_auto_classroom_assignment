@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
 import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
 
@@ -16,7 +16,6 @@ interface Props {
   onReorder: (newOrder: UnassignedListItem[]) => void;
   onDragStart?: (id: string) => void;
   onDragEnd?: () => void;
-  draggingSubjectId?: string | null;
   onEdit?: (id: string) => void;
   onRemoveAllocation?: (subjectId: string, classroomId: string, insertIndex?: number) => void;
 }
@@ -132,7 +131,6 @@ export const UnassignedList = ({
   onReorder,
   onDragStart,
   onDragEnd,
-  draggingSubjectId,
   onEdit,
   onRemoveAllocation
 }: Props) => {
@@ -153,12 +151,6 @@ export const UnassignedList = ({
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isDeptOpen, setIsDeptOpen] = useState(false);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!draggingSubjectId) {
-      setDropIndex(null);
-    }
-  }, [draggingSubjectId]);
 
   const periodOptions = useMemo(() => ([
     { value: '0', label: '未定' },

@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { db, auth } from './firebase';
+import { stableSerialize } from './cloudDiff';
 import {
   collection,
   deleteField,
@@ -35,6 +36,10 @@ type ChunkedPayloadDoc = {
   index?: number;
   revision?: string;
   items?: unknown;
+};
+type CloudSnapshot = {
+  data: CloudData;
+  revision: string | null;
 };
 
 const WRITE_LOCK_TTL_MS = 15_000;
@@ -185,6 +190,7 @@ const waitForUnlockedMeta = async (uid: string, sessionId: string) => {
 
 export const useCloudSync = (user: User | null) => {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const lastSyncedRevisionRef = useRef<string | null>(null);
 
   const acquireWriteLock = useCallback(async () => {
     const currentUser = user || auth.currentUser;
@@ -244,50 +250,7 @@ export const useCloudSync = (user: User | null) => {
     }
   }, [user]);
 
-  const saveData = useCallback(async (data: CloudData) => {
-    const currentUser = user || auth.currentUser;
-    if (!currentUser) return;
-
-    await acquireWriteLock();
-    try {
-      const metaRef = getMetaRef(currentUser.uid);
-      const sanitized = sanitizeData(data) as Record<string, FirestoreValue>;
-      const now = Date.now();
-      const revision = createSnapshotRevision();
-
-      await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(data.subjects) ? data.subjects : [], revision);
-      await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(data.classrooms) ? data.classrooms : [], revision);
-      await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(data.allocations) ? data.allocations : [], revision);
-
-      const configRef = getConfigDocRef(currentUser.uid);
-      await setDoc(configRef, {
-        revision,
-        settings: sanitizeData(data.settings),
-        equipmentSettings: sanitizeData(data.equipmentSettings),
-        subjectTaxonomy: sanitizeData(data.subjectTaxonomy),
-        updatedAt: now,
-        schemaVersion: SCHEMA_VERSION
-      }, { merge: true });
-
-      await setDoc(metaRef, {
-        snapshotRevision: revision,
-        lastUpdated: now,
-        createdAt: now,
-        email: currentUser.email ?? null,
-        schemaVersion: SCHEMA_VERSION
-      }, { merge: true });
-
-      void sanitized;
-      setLastSynced(new Date());
-    } catch (error) {
-      console.error('Failed to save data:', error);
-      throw error;
-    } finally {
-      await releaseWriteLock();
-    }
-  }, [user, acquireWriteLock, releaseWriteLock]);
-
-  const refreshData = useCallback(async (): Promise<CloudData | null> => {
+  const readCloudSnapshot = useCallback(async (): Promise<CloudSnapshot | null> => {
     const currentUser = user || auth.currentUser;
     if (!currentUser) return null;
     try {
@@ -315,20 +278,24 @@ export const useCloudSync = (user: User | null) => {
             return null;
           }
         }
-        setLastSynced(new Date());
         return {
-          subjects: (subjects ?? []) as CloudData['subjects'],
-          classrooms: (classrooms ?? []) as CloudData['classrooms'],
-          allocations: (allocations ?? []) as CloudData['allocations'],
-          settings: (configData.settings ?? []) as CloudData['settings'],
-          equipmentSettings: (configData.equipmentSettings ?? {}) as CloudData['equipmentSettings'],
-          subjectTaxonomy: (configData.subjectTaxonomy ?? {}) as CloudData['subjectTaxonomy']
+          data: {
+            subjects: (subjects ?? []) as CloudData['subjects'],
+            classrooms: (classrooms ?? []) as CloudData['classrooms'],
+            allocations: (allocations ?? []) as CloudData['allocations'],
+            settings: (configData.settings ?? []) as CloudData['settings'],
+            equipmentSettings: (configData.equipmentSettings ?? {}) as CloudData['equipmentSettings'],
+            subjectTaxonomy: (configData.subjectTaxonomy ?? {}) as CloudData['subjectTaxonomy']
+          },
+          revision: expectedRevision ?? (typeof metaData?.snapshotRevision === 'string' ? metaData.snapshotRevision : null)
         };
       }
 
       if (legacyData) {
-        setLastSynced(new Date());
-        return legacyData;
+        return {
+          data: legacyData,
+          revision: null
+        };
       }
 
       return null;
@@ -337,6 +304,97 @@ export const useCloudSync = (user: User | null) => {
       throw error;
     }
   }, [user]);
+
+  const saveData = useCallback(async (data: CloudData) => {
+    const currentUser = user || auth.currentUser;
+    if (!currentUser) return false;
+
+    await acquireWriteLock();
+    try {
+      const metaRef = getMetaRef(currentUser.uid);
+      const now = Date.now();
+      const revision = createSnapshotRevision();
+      const currentCloudSnapshot = await readCloudSnapshot();
+      const currentCloud = currentCloudSnapshot?.data ?? null;
+      const currentCloudRevision = currentCloudSnapshot?.revision ?? null;
+      const lastSyncedRevision = lastSyncedRevisionRef.current;
+      if (currentCloudRevision && lastSyncedRevision && currentCloudRevision !== lastSyncedRevision) {
+        throw new Error('CLOUD_CONFLICT');
+      }
+      if (currentCloudRevision && !lastSyncedRevision) {
+        throw new Error('CLOUD_CONFLICT');
+      }
+      const shouldWriteSubjects = !currentCloud || stableSerialize(currentCloud.subjects) !== stableSerialize(data.subjects);
+      const shouldWriteClassrooms = !currentCloud || stableSerialize(currentCloud.classrooms) !== stableSerialize(data.classrooms);
+      const shouldWriteAllocations = !currentCloud || stableSerialize(currentCloud.allocations) !== stableSerialize(data.allocations);
+      const shouldWriteConfig =
+        !currentCloud ||
+        stableSerialize(currentCloud.settings) !== stableSerialize(data.settings) ||
+        stableSerialize(currentCloud.equipmentSettings) !== stableSerialize(data.equipmentSettings) ||
+        stableSerialize(currentCloud.subjectTaxonomy) !== stableSerialize(data.subjectTaxonomy);
+
+      const hasAnyChange =
+        shouldWriteSubjects ||
+        shouldWriteClassrooms ||
+        shouldWriteAllocations ||
+        shouldWriteConfig;
+
+      if (!hasAnyChange) {
+        setLastSynced(new Date());
+        return false;
+      }
+
+      if (shouldWriteSubjects) {
+        await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(data.subjects) ? data.subjects : [], revision);
+      }
+      if (shouldWriteClassrooms) {
+        await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(data.classrooms) ? data.classrooms : [], revision);
+      }
+      if (shouldWriteAllocations) {
+        await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(data.allocations) ? data.allocations : [], revision);
+      }
+
+      if (shouldWriteConfig) {
+        const configRef = getConfigDocRef(currentUser.uid);
+        await setDoc(configRef, {
+          revision,
+          settings: sanitizeData(data.settings),
+          equipmentSettings: sanitizeData(data.equipmentSettings),
+          subjectTaxonomy: sanitizeData(data.subjectTaxonomy),
+          updatedAt: now,
+          schemaVersion: SCHEMA_VERSION
+        }, { merge: true });
+      }
+
+      await setDoc(metaRef, {
+        snapshotRevision: revision,
+        lastUpdated: now,
+        createdAt: now,
+        email: currentUser.email ?? null,
+        schemaVersion: SCHEMA_VERSION
+      }, { merge: true });
+
+      setLastSynced(new Date());
+      lastSyncedRevisionRef.current = revision;
+      return true;
+    } catch (error) {
+      console.error('Failed to save data:', error);
+      throw error;
+    } finally {
+      await releaseWriteLock();
+    }
+  }, [user, acquireWriteLock, releaseWriteLock, readCloudSnapshot]);
+
+  const refreshData = useCallback(async (): Promise<CloudData | null> => {
+    const cloudSnapshot = await readCloudSnapshot();
+    if (cloudSnapshot) {
+      setLastSynced(new Date());
+      lastSyncedRevisionRef.current = cloudSnapshot.revision;
+      return cloudSnapshot.data;
+    }
+    lastSyncedRevisionRef.current = null;
+    return null;
+  }, [readCloudSnapshot]);
 
   return {
     lastSynced,

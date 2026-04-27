@@ -660,9 +660,7 @@ export const SubjectManager = ({
         });
     }, [filteredSubjects, sortConfig]);
 
-    const visibleSubjectColumns = useMemo(() => {
-        return SM_COL_DEFS.filter(col => smShow(col.key)).length + 1;
-    }, [colConfig]);
+    const visibleSubjectColumns = SM_COL_DEFS.filter(col => smShow(col.key)).length + 1;
 
     useEffect(() => {
         const el = subjectScrollRef.current;
