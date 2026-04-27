@@ -1606,11 +1606,11 @@ function App() {
                 onClick={handleCloudWrite}
                 style={{
                   display: 'flex', gap: '6px', alignItems: 'center',
-                  background: '#2e7d32', color: '#fff',
-                  border: 'none',
+                  background: '#2f7d32', color: '#fff',
+                  border: '1px solid #1b5e20',
                   padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
                   opacity: isCloudLoading ? 0.5 : 1,
-                  fontSize: '0.9rem', fontWeight: '500'
+                  fontSize: '0.9rem', fontWeight: '600'
                 }}
                 disabled={isCloudLoading}
                 title={"ローカルデータをクラウドへ書き込みます"}
@@ -1622,11 +1622,11 @@ function App() {
                 onClick={handleCloudRead}
                 style={{
                   display: 'flex', gap: '6px', alignItems: 'center',
-                  background: '#fff', color: '#666',
-                  border: '1px solid #ccc',
+                  background: '#f8fafc', color: '#475569',
+                  border: '1px solid #cbd5e1',
                   padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
                   opacity: isCloudLoading ? 0.5 : 1,
-                  fontSize: '0.9rem', fontWeight: '500'
+                  fontSize: '0.9rem', fontWeight: '600'
                 }}
                 disabled={isCloudLoading}
                 title={"クラウドデータをローカルへ取得します"}
@@ -1642,10 +1642,10 @@ function App() {
               onClick={authLogout}
               style={{
                 display: 'flex', gap: '6px', alignItems: 'center',
-                background: '#d32f2f', color: '#fff',
-                border: '1px solid #b71c1c',
+                background: '#dc2626', color: '#fff',
+                border: '1px solid #991b1b',
                 padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-                fontSize: '0.9rem', fontWeight: '500'
+                fontSize: '0.9rem', fontWeight: '600'
               }}
               title="ログアウト"
             >
@@ -1655,21 +1655,21 @@ function App() {
           )}
 
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-          <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+          <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: '1px solid #1b5e20', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
             <ListChecks size={16} /> {"配当ルール設定"}
           </button>
-          <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#d32f2f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#dc2626', color: '#fff', border: '1px solid #991b1b', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <RefreshCw size={16} /> {"クリア"}
           </button>
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-          <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <Settings size={16} /> {"教室管理"}
           </button>
-          <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <BookOpen size={16} /> {"授業管理"}
           </button>
           {SHOW_DISPLAY_SETTINGS_BUTTON && (
-            <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+            <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
               <Eye size={16} /> {"表示設定"}
             </button>
           )}
