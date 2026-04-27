@@ -159,9 +159,11 @@ export const ClassroomEditModal = ({
               <input
                 value={form.id}
                 onChange={e => setForm({ ...form, id: e.target.value })}
-                placeholder="F-201"
+                placeholder="IDを入力"
                 style={inputStyle}
               />
+              <div />
+              <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>例: A101 / 1F-201</div>
 
               <label style={requiredLabelStyle}>教室名</label>
               <input

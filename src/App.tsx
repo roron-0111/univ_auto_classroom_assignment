@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
-import { BUILDINGS, DAY_LABELS, ROOM_TYPE_LABELS, getDayLabel, getTermLabel } from './types';
+import { BUILDINGS, DAY_LABELS } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
@@ -15,14 +15,12 @@ import { AllocationRuleSettings } from './components/AllocationRuleSettings';
 import { AllocationResultModal } from './components/AllocationResultModal';
 import { ExceptionReviewModal } from './components/ExceptionReviewModal';
 import { RelocationPreviewModal } from './components/RelocationPreviewModal';
-import { CloudWriteWarningModal } from './components/CloudWriteWarningModal';
 import { CloudReadWarningModal } from './components/CloudReadWarningModal';
-import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeRequiredEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
+import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
 import { sanitizeSubjectEquipmentList } from './utils/equipmentVisibility';
-import { SUBJECT_EQUIPMENT_CHOICES } from './utils/equipmentVisibility';
 import { getDefaultSubjectTaxonomy, normalizeSubjectTaxonomy, type SubjectTaxonomy } from './utils/subjectTaxonomy';
 import { exportToCSV } from './utils/csvParser';
 
@@ -486,102 +484,6 @@ const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): Clou
   return summary;
 };
 
-const equipValue = (
-  eq: string,
-  requiresMovable?: boolean,
-  requiresProjector?: boolean,
-  mandatory?: string[],
-  preferred?: string[]
-): string => {
-  const man = (mandatory ?? []).map(normalizeRequiredEquipmentName);
-  const pref = (preferred ?? []).map(normalizeRequiredEquipmentName);
-  const normalizedEq = normalizeRequiredEquipmentName(eq);
-  const manHasProjector = man.some(item => item === 'PJ');
-  const prefHasProjector = pref.some(item => item === 'PJ');
-  if (requiresMovable && normalizedEq === '可動') return '◎';
-  if (normalizedEq === 'PJ') {
-    if (requiresProjector || manHasProjector) return '◎';
-    if (prefHasProjector) return '○';
-  }
-  if (man.includes(normalizedEq)) return '◎';
-  if (pref.includes(normalizedEq)) return '○';
-  return '';
-};
-
-const buildSubjectExportRows = (subjects: Subject[], allocations: Allocation[], classrooms: Classroom[]) => {
-  return subjects.flatMap(subject => {
-    const subjectAllocations = allocations.filter(a => a.subjectId === subject.id);
-    const exportTerm = subject.term ? getTermLabel(subject.term) : '0';
-    const exportDay = subject.day ? getDayLabel(subject.day) : '0';
-    const exportPeriod = subject.period && subject.period > 0 ? String(subject.period) : '0';
-    const exportEndPeriod = subject.endPeriod && subject.endPeriod > 0 ? String(subject.endPeriod) : '0';
-    const baseRow: Record<string, unknown> = {
-      'コード': subject.code,
-      '時間割名称': subject.name,
-      '教員コード': subject.teacherCode || '',
-      '教員名': subject.teacher,
-      '開講学部': subject.faculty,
-      '管轄': subject.department,
-      '配当期': exportTerm,
-      '曜日': exportDay,
-      '開始講時': exportPeriod,
-      '終了講時': exportEndPeriod,
-      'キャンパス': subject.campus,
-      '履修者数': subject.requiredCapacity,
-      '優先度': subject.priority,
-      '必要教室数': subject.requiredRoomCount,
-      '棟希望': subject.buildingPreference || '',
-      'タイプ': subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
-      '教室(過去教室)': subject.previousRooms?.join(', ') || ''
-    };
-    SUBJECT_EQUIPMENT_CHOICES.forEach(eq => {
-      baseRow[eq] = equipValue(eq, subject.requiresMovable, subject.requiresProjector, subject.mandatoryEquipment, subject.requiredEquipment);
-    });
-
-    if (subjectAllocations.length === 0) {
-      return [{ ...baseRow, '教室ID': '', '教室名': '', '建物': '', '教室定員': '', '教室試験定員': '', '教室タイプ': '', '教室設備': '' }];
-    }
-
-    return subjectAllocations.map(alloc => {
-      const room = classrooms.find(roomItem => roomItem.id === alloc.classroomId);
-      const eqList = room ? [...(room.equipment ?? [])] : [];
-      if (room?.isMovable) eqList.unshift('可動');
-      return {
-        ...baseRow,
-        '教室ID': room?.id ?? alloc.classroomId ?? '',
-        '教室名': room?.name ?? '',
-        '建物': room?.building ?? '',
-        '教室定員': room?.capacity ?? '',
-        '教室試験定員': room?.examCapacity ?? '',
-        '教室タイプ': room ? (ROOM_TYPE_LABELS[room.type] ?? room.type) : '',
-        '教室設備': eqList.join(', ')
-      };
-    });
-  });
-};
-
-const buildClassroomExportRows = (classrooms: Classroom[], currentCampusLabel: string) =>
-  classrooms.map(room => {
-    const base: Record<string, unknown> = {
-      'ID': room.id,
-      '教室名': room.name,
-      'キャンパス': room.campus || currentCampusLabel,
-      '建物': room.building,
-      '定員': room.capacity,
-      '試験時定員': room.examCapacity ?? '',
-      '教室タイプ': ROOM_TYPE_LABELS[room.type] ?? room.type,
-      '可動': room.isMovable ? '◎' : '',
-      '非表示': room.isExcluded ? '◎' : ''
-    };
-    EQUIPMENT_LIST.filter(eq => eq !== '可動' && eq !== '固定').forEach(eq => {
-      base[eq] = room.equipment.includes(eq) ? '◎' : '';
-    });
-    room.equipment.filter(eq => !EQUIPMENT_LIST.includes(eq)).forEach(eq => {
-      base[eq] = '◎';
-    });
-    return base;
-  });
-
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
@@ -636,9 +538,6 @@ function App() {
   const [autoAllocationSummary, setAutoAllocationSummary] = useState<AutoAllocationSummary | null>(null);
   const [pendingAllocationBatch, setPendingAllocationBatch] = useState<PendingAllocationBatch | null>(null);
   const [pendingRelocationBatch, setPendingRelocationBatch] = useState<PendingRelocationBatch | null>(null);
-  const [cloudWriteWarningSummary, setCloudWriteWarningSummary] = useState<CloudWriteWarningSummary | null>(null);
-  const [cloudWriteFingerprint, setCloudWriteFingerprint] = useState<string | null>(null);
-  const [showCloudWriteWarningModal, setShowCloudWriteWarningModal] = useState(false);
   const [cloudReadWarningSummary, setCloudReadWarningSummary] = useState<CloudWriteWarningSummary | null>(null);
   const [pendingCloudReadData, setPendingCloudReadData] = useState<CloudData | null>(null);
   const [showCloudReadWarningModal, setShowCloudReadWarningModal] = useState(false);
@@ -760,12 +659,72 @@ function App() {
     setPendingExceptionApprovedKeys([]);
   }, []);
 
-  const exportCurrentSnapshotCsv = useCallback(() => {
-    const subjectExport = buildSubjectExportRows(subjects, allocations, classrooms);
-    exportToCSV(subjectExport, 'subjects_export.csv');
-    const classroomExport = buildClassroomExportRows(classrooms, currentCampusLabel);
-    exportToCSV(classroomExport, 'classrooms_export.csv');
-  }, [subjects, allocations, classrooms, currentCampusLabel]);
+  const buildCloudDiffCsv = useCallback((localData: CloudData, cloudData: CloudData) => {
+    const rows: Record<string, unknown>[] = [];
+
+    const asRecordArray = <T,>(items: T[]) => items.map(item => item as unknown as Record<string, unknown>);
+
+    const addRows = (
+      kind: string,
+      localItems: Record<string, unknown>[],
+      cloudItems: Record<string, unknown>[],
+      keyFn: (item: Record<string, unknown>) => string
+    ) => {
+      const localMap = new Map(localItems.map(item => [keyFn(item), item]));
+      const cloudMap = new Map(cloudItems.map(item => [keyFn(item), item]));
+      const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
+      keys.forEach(key => {
+        const localItem = localMap.get(key);
+        const cloudItem = cloudMap.get(key);
+        if (!localItem && cloudItem) {
+          rows.push({ 種別: kind, 操作: '追加', キー: key, ローカル: '', クラウド: stableSerialize(cloudItem) });
+        } else if (localItem && !cloudItem) {
+          rows.push({ 種別: kind, 操作: '削除', キー: key, ローカル: stableSerialize(localItem), クラウド: '' });
+        } else if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
+          rows.push({ 種別: kind, 操作: '変更', キー: key, ローカル: stableSerialize(localItem), クラウド: stableSerialize(cloudItem) });
+        }
+      });
+    };
+
+    addRows('授業', asRecordArray(localData.subjects), asRecordArray(cloudData.subjects), item => String(item.id ?? ''));
+    addRows('教室', asRecordArray(localData.classrooms), asRecordArray(cloudData.classrooms), item => String(item.id ?? ''));
+    addRows(
+      '配当',
+      asRecordArray(localData.allocations),
+      asRecordArray(cloudData.allocations),
+      item => `${String(item.subjectId ?? '')}__${String(item.classroomId ?? '')}`
+    );
+
+    if (stableSerialize(localData.settings) !== stableSerialize(cloudData.settings)) {
+      rows.push({
+        種別: '設定',
+        操作: '変更',
+        キー: '配当ルール',
+        ローカル: stableSerialize(localData.settings),
+        クラウド: stableSerialize(cloudData.settings)
+      });
+    }
+    if (stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings)) {
+      rows.push({
+        種別: '設定',
+        操作: '変更',
+        キー: '機材設定',
+        ローカル: stableSerialize(localData.equipmentSettings),
+        クラウド: stableSerialize(cloudData.equipmentSettings)
+      });
+    }
+    if (stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy)) {
+      rows.push({
+        種別: '設定',
+        操作: '変更',
+        キー: '開講学部・管轄',
+        ローカル: stableSerialize(localData.subjectTaxonomy),
+        クラウド: stableSerialize(cloudData.subjectTaxonomy)
+      });
+    }
+
+    return rows;
+  }, []);
 
   const getCloudWriteErrorMessage = useCallback((error: unknown) => {
     if (error instanceof Error) {
@@ -796,65 +755,8 @@ function App() {
 
   const handleCloudWrite = useCallback(async () => {
     if (!user) return;
-    try {
-      setIsCloudLoading(true);
-      const cloudData = await refreshData();
-      if (cloudData) {
-        const summary = compareCloudSnapshots(buildCloudSnapshot(), cloudData);
-        if (summary.hasDiff) {
-          setCloudWriteWarningSummary(summary);
-          setCloudWriteFingerprint(stableSerialize(cloudData));
-          setShowCloudWriteWarningModal(true);
-          return;
-        }
-      }
-      await performCloudWrite();
-    } catch (error) {
-      console.error(error);
-      alert('Cloud write failed.');
-    } finally {
-      setIsCloudLoading(false);
-    }
-  }, [user, refreshData, buildCloudSnapshot, performCloudWrite]);
-
-  const handleCloudWriteWarningExport = useCallback(() => {
-    exportCurrentSnapshotCsv();
-  }, [exportCurrentSnapshotCsv]);
-
-  const handleCloudWriteWarningConfirm = useCallback(async () => {
-    if (!user || !cloudWriteWarningSummary) return;
-    try {
-      setIsCloudLoading(true);
-      const latestCloud = await refreshData();
-      if (latestCloud) {
-        const latestFingerprint = stableSerialize(latestCloud);
-        if (cloudWriteFingerprint && latestFingerprint !== cloudWriteFingerprint) {
-          const refreshedSummary = compareCloudSnapshots(buildCloudSnapshot(), latestCloud);
-          setCloudWriteWarningSummary(refreshedSummary);
-          setCloudWriteFingerprint(latestFingerprint);
-          setShowCloudWriteWarningModal(true);
-          alert('Cloud data has been updated. Please review the latest diff before writing.');
-          return;
-        }
-      }
-      setShowCloudWriteWarningModal(false);
-      setCloudWriteWarningSummary(null);
-      setCloudWriteFingerprint(null);
-      await saveData(buildCloudSnapshot());
-      alert('Cloud write complete.');
-    } catch (error) {
-      console.error(error);
-      alert(getCloudWriteErrorMessage(error));
-    } finally {
-      setIsCloudLoading(false);
-    }
-  }, [user, cloudWriteWarningSummary, refreshData, buildCloudSnapshot, saveData, cloudWriteFingerprint, getCloudWriteErrorMessage]);
-
-  const handleCloudWriteWarningCancel = useCallback(() => {
-    setShowCloudWriteWarningModal(false);
-    setCloudWriteWarningSummary(null);
-    setCloudWriteFingerprint(null);
-  }, []);
+    await performCloudWrite();
+  }, [user, performCloudWrite]);
 
   const handleCloudRead = useCallback(async () => {
     if (!user) return;
@@ -890,6 +792,12 @@ function App() {
     setPendingCloudReadData(null);
     alert('Cloud data loaded.');
   }, [pendingCloudReadData, applyCloudData, currentCampusLabel]);
+
+  const handleCloudReadWarningExport = useCallback(() => {
+    if (!cloudReadWarningSummary || !pendingCloudReadData) return;
+    const diffRows = buildCloudDiffCsv(buildCloudSnapshot(), pendingCloudReadData);
+    exportToCSV(diffRows, 'cloud_diff_export.csv');
+  }, [cloudReadWarningSummary, pendingCloudReadData, buildCloudSnapshot, buildCloudDiffCsv]);
 
   const handleCloudReadWarningCancel = useCallback(() => {
     setShowCloudReadWarningModal(false);
@@ -2060,22 +1968,11 @@ function App() {
         }
 
         {
-          showCloudWriteWarningModal && cloudWriteWarningSummary && (
-            <CloudWriteWarningModal
-              isOpen={showCloudWriteWarningModal}
-              summary={cloudWriteWarningSummary}
-              onExportCsv={handleCloudWriteWarningExport}
-              onConfirm={handleCloudWriteWarningConfirm}
-              onCancel={handleCloudWriteWarningCancel}
-            />
-          )
-        }
-
-        {
           showCloudReadWarningModal && cloudReadWarningSummary && (
             <CloudReadWarningModal
               isOpen={showCloudReadWarningModal}
               summary={cloudReadWarningSummary}
+              onExportCsv={handleCloudReadWarningExport}
               onConfirm={handleCloudReadWarningConfirm}
               onCancel={handleCloudReadWarningCancel}
             />

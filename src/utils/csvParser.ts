@@ -66,7 +66,7 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                     };
 
                     const isTrue = (val: string) =>
-                        val === 'true' || val === 'TRUE' || val === '1' || val === '○' || val === 'あり';
+                        val === 'true' || val === 'TRUE' || val === '1' || val === '○' || val === '◯' || val === 'あり';
 
                     // 収容人数
                     const cap = parseInt(getVal(['Capacity', '収容人数', '定員']), 10) || 0;
@@ -301,7 +301,7 @@ export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
                         return key ? row[key] : '';
                     };
                     const isTrue = (val: string) =>
-                        val === 'true' || val === 'TRUE' || val === '1' || val === '◯' || val === 'あり';
+                        val === 'true' || val === 'TRUE' || val === '1' || val === '○' || val === '◯' || val === 'あり';
 
                     const equipment: string[] = [];
                     Object.keys(row).forEach((k) => {
