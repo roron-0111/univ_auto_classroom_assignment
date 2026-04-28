@@ -101,6 +101,48 @@ const createSnapshotRevision = () =>
     ? crypto.randomUUID()
     : `revision-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const toStableMap = <T,>(items: T[], getKey: (item: T) => string) =>
+  new Map(items.map(item => [getKey(item), item] as const));
+
+const mergeByBaseline = <T,>(baseline: T | null | undefined, localValue: T, cloudValue: T): T => {
+  if (baseline === null || baseline === undefined) return localValue;
+  return stableSerialize(localValue) === stableSerialize(baseline) ? cloudValue : localValue;
+};
+
+const mergeAllocationsByBaseline = (
+  baselineAllocations: CloudData['allocations'],
+  localAllocations: CloudData['allocations'],
+  cloudAllocations: CloudData['allocations']
+) => {
+  const getKey = (item: CloudData['allocations'][number]) => `${item.subjectId}__${item.classroomId}`;
+  const baselineMap = toStableMap(baselineAllocations, getKey);
+  const localMap = toStableMap(localAllocations, getKey);
+  const mergedMap = toStableMap(cloudAllocations, getKey);
+
+  const keys = new Set([...baselineMap.keys(), ...localMap.keys()]);
+
+  keys.forEach(key => {
+    const baselineItem = baselineMap.get(key);
+    const localItem = localMap.get(key);
+
+    if (!baselineItem && localItem) {
+      mergedMap.set(key, localItem);
+      return;
+    }
+
+    if (baselineItem && !localItem) {
+      mergedMap.delete(key);
+      return;
+    }
+
+    if (baselineItem && localItem && stableSerialize(baselineItem) !== stableSerialize(localItem)) {
+      mergedMap.set(key, localItem);
+    }
+  });
+
+  return [...mergedMap.values()];
+};
+
 const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[], revision: string) => {
   const collectionRef = getPayloadCollectionRef(uid, name);
   const existing = await getDocs(collectionRef);
@@ -121,6 +163,18 @@ const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[
   if (!existing.empty || items.length > 0) {
     await batch.commit();
   }
+};
+
+const touchChunkedCollectionRevision = async (uid: string, name: string, revision: string) => {
+  const collectionRef = getPayloadCollectionRef(uid, name);
+  const existing = await getDocs(collectionRef);
+  if (existing.empty) return;
+
+  const batch = writeBatch(db);
+  existing.docs.forEach(snapshot => {
+    batch.update(snapshot.ref, { revision });
+  });
+  await batch.commit();
 };
 
 const readChunkedCollection = async <T,>(uid: string, name: string, expectedRevision?: string): Promise<T[] | null> => {
@@ -190,7 +244,9 @@ const waitForUnlockedMeta = async (uid: string, sessionId: string) => {
 
 export const useCloudSync = (user: User | null) => {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
-  const lastSyncedRevisionRef = useRef<string | null>(null);
+  const lastCloudRevisionRef = useRef<string | null>(null);
+  const lastCloudSnapshotRef = useRef<CloudData | null>(null);
+  const lastLocalBaselineRef = useRef<CloudData | null>(null);
 
   const acquireWriteLock = useCallback(async () => {
     const currentUser = user || auth.currentUser;
@@ -223,6 +279,10 @@ export const useCloudSync = (user: User | null) => {
 
     return { lockRef, sessionId };
   }, [user]);
+
+  const markLocalBaseline = useCallback((snapshot: CloudData | null) => {
+    lastLocalBaselineRef.current = snapshot;
+  }, []);
 
   const releaseWriteLock = useCallback(async () => {
     const currentUser = user || auth.currentUser;
@@ -316,22 +376,49 @@ export const useCloudSync = (user: User | null) => {
       const revision = createSnapshotRevision();
       const currentCloudSnapshot = await readCloudSnapshot();
       const currentCloud = currentCloudSnapshot?.data ?? null;
-      const currentCloudRevision = currentCloudSnapshot?.revision ?? null;
-      const lastSyncedRevision = lastSyncedRevisionRef.current;
-      if (currentCloudRevision && lastSyncedRevision && currentCloudRevision !== lastSyncedRevision) {
-        throw new Error('CLOUD_CONFLICT');
-      }
-      if (currentCloudRevision && !lastSyncedRevision) {
-        throw new Error('CLOUD_CONFLICT');
-      }
-      const shouldWriteSubjects = !currentCloud || stableSerialize(currentCloud.subjects) !== stableSerialize(data.subjects);
-      const shouldWriteClassrooms = !currentCloud || stableSerialize(currentCloud.classrooms) !== stableSerialize(data.classrooms);
-      const shouldWriteAllocations = !currentCloud || stableSerialize(currentCloud.allocations) !== stableSerialize(data.allocations);
+      const baselineCloud = lastLocalBaselineRef.current ?? currentCloud;
+      const nextData: CloudData = {
+        subjects: mergeByBaseline(
+          baselineCloud?.subjects,
+          data.subjects,
+          currentCloud?.subjects ?? data.subjects
+        ),
+        classrooms: mergeByBaseline(
+          baselineCloud?.classrooms,
+          data.classrooms,
+          currentCloud?.classrooms ?? data.classrooms
+        ),
+        allocations: currentCloud
+          ? mergeAllocationsByBaseline(
+              baselineCloud?.allocations ?? currentCloud.allocations,
+              data.allocations,
+              currentCloud.allocations
+            )
+          : data.allocations,
+        settings: mergeByBaseline(
+          baselineCloud?.settings,
+          data.settings,
+          currentCloud?.settings ?? data.settings
+        ),
+        equipmentSettings: mergeByBaseline(
+          baselineCloud?.equipmentSettings,
+          data.equipmentSettings,
+          currentCloud?.equipmentSettings ?? data.equipmentSettings
+        ),
+        subjectTaxonomy: mergeByBaseline(
+          baselineCloud?.subjectTaxonomy,
+          data.subjectTaxonomy,
+          currentCloud?.subjectTaxonomy ?? data.subjectTaxonomy
+        )
+      };
+      const shouldWriteSubjects = !currentCloud || stableSerialize(currentCloud.subjects) !== stableSerialize(nextData.subjects);
+      const shouldWriteClassrooms = !currentCloud || stableSerialize(currentCloud.classrooms) !== stableSerialize(nextData.classrooms);
+      const shouldWriteAllocations = !currentCloud || stableSerialize(currentCloud.allocations) !== stableSerialize(nextData.allocations);
       const shouldWriteConfig =
         !currentCloud ||
-        stableSerialize(currentCloud.settings) !== stableSerialize(data.settings) ||
-        stableSerialize(currentCloud.equipmentSettings) !== stableSerialize(data.equipmentSettings) ||
-        stableSerialize(currentCloud.subjectTaxonomy) !== stableSerialize(data.subjectTaxonomy);
+        stableSerialize(currentCloud.settings) !== stableSerialize(nextData.settings) ||
+        stableSerialize(currentCloud.equipmentSettings) !== stableSerialize(nextData.equipmentSettings) ||
+        stableSerialize(currentCloud.subjectTaxonomy) !== stableSerialize(nextData.subjectTaxonomy);
 
       const hasAnyChange =
         shouldWriteSubjects ||
@@ -345,22 +432,28 @@ export const useCloudSync = (user: User | null) => {
       }
 
       if (shouldWriteSubjects) {
-        await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(data.subjects) ? data.subjects : [], revision);
+        await replaceChunkedCollection(currentUser.uid, 'subjects', Array.isArray(nextData.subjects) ? nextData.subjects : [], revision);
+      } else if (currentCloud) {
+        await touchChunkedCollectionRevision(currentUser.uid, 'subjects', revision);
       }
       if (shouldWriteClassrooms) {
-        await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(data.classrooms) ? data.classrooms : [], revision);
+        await replaceChunkedCollection(currentUser.uid, 'classrooms', Array.isArray(nextData.classrooms) ? nextData.classrooms : [], revision);
+      } else if (currentCloud) {
+        await touchChunkedCollectionRevision(currentUser.uid, 'classrooms', revision);
       }
       if (shouldWriteAllocations) {
-        await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(data.allocations) ? data.allocations : [], revision);
+        await replaceChunkedCollection(currentUser.uid, 'allocations', Array.isArray(nextData.allocations) ? nextData.allocations : [], revision);
+      } else if (currentCloud) {
+        await touchChunkedCollectionRevision(currentUser.uid, 'allocations', revision);
       }
 
-      if (shouldWriteConfig) {
+      if (hasAnyChange) {
         const configRef = getConfigDocRef(currentUser.uid);
         await setDoc(configRef, {
           revision,
-          settings: sanitizeData(data.settings),
-          equipmentSettings: sanitizeData(data.equipmentSettings),
-          subjectTaxonomy: sanitizeData(data.subjectTaxonomy),
+          settings: sanitizeData(nextData.settings),
+          equipmentSettings: sanitizeData(nextData.equipmentSettings),
+          subjectTaxonomy: sanitizeData(nextData.subjectTaxonomy),
           updatedAt: now,
           schemaVersion: SCHEMA_VERSION
         }, { merge: true });
@@ -375,7 +468,9 @@ export const useCloudSync = (user: User | null) => {
       }, { merge: true });
 
       setLastSynced(new Date());
-      lastSyncedRevisionRef.current = revision;
+      lastCloudRevisionRef.current = revision;
+      lastCloudSnapshotRef.current = nextData;
+      lastLocalBaselineRef.current = nextData;
       return true;
     } catch (error) {
       console.error('Failed to save data:', error);
@@ -389,16 +484,19 @@ export const useCloudSync = (user: User | null) => {
     const cloudSnapshot = await readCloudSnapshot();
     if (cloudSnapshot) {
       setLastSynced(new Date());
-      lastSyncedRevisionRef.current = cloudSnapshot.revision;
+      lastCloudRevisionRef.current = cloudSnapshot.revision;
+      lastCloudSnapshotRef.current = cloudSnapshot.data;
       return cloudSnapshot.data;
     }
-    lastSyncedRevisionRef.current = null;
+    lastCloudRevisionRef.current = null;
+    lastCloudSnapshotRef.current = null;
     return null;
   }, [readCloudSnapshot]);
 
   return {
     lastSynced,
     saveData,
-    refreshData
+    refreshData,
+    markLocalBaseline
   };
 };

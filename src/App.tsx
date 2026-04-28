@@ -391,7 +391,7 @@ const normalizeAllocationsForPhase6 = (allocations: unknown) =>
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
-  const { saveData, refreshData } = useCloudSync(user);
+  const { saveData, refreshData, markLocalBaseline } = useCloudSync(user);
   const currentCampusLabel = useMemo(() => getCampusLabelFromEmail(user?.email), [user?.email]);
 
   const [showCloudModal, setShowCloudModal] = useState(false);
@@ -403,11 +403,33 @@ function App() {
     }
   }, [authLoading, user]);
 
+  const applyCampusState = useCallback((campusLabel: string) => {
+    const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
+    const localCampusState = loadCampusLocalState(normalizedCampus);
+    activeCampusRef.current = normalizedCampus;
+    loadedCampusRef.current = normalizedCampus;
+    setClassrooms(localCampusState.classrooms.length > 0 ? localCampusState.classrooms : normalizeClassrooms(mockClassrooms, normalizedCampus));
+    setSubjects(localCampusState.subjects.length > 0 ? localCampusState.subjects : normalizeSubjectsForCampus(mockSubjects, normalizedCampus));
+    setAllocations(localCampusState.allocations);
+    setAllocationSettings(localCampusState.allocationSettings);
+    setEquipmentSettings(localCampusState.equipmentSettings);
+    setDisplayConfig(localCampusState.displayConfig);
+    setSubjectTaxonomy(localCampusState.subjectTaxonomy);
+    markLocalBaseline({
+      classrooms: localCampusState.classrooms,
+      subjects: localCampusState.subjects,
+      allocations: localCampusState.allocations,
+      settings: localCampusState.allocationSettings,
+      equipmentSettings: localCampusState.equipmentSettings,
+      subjectTaxonomy: localCampusState.subjectTaxonomy
+    });
+  }, [markLocalBaseline]);
+
   useEffect(() => {
     if (authLoading || !user) return;
     if (loadedCampusRef.current === currentCampusLabel) return;
     applyCampusState(currentCampusLabel);
-  }, [authLoading, user, currentCampusLabel]);
+  }, [authLoading, user, currentCampusLabel, applyCampusState]);
 
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     try {
@@ -486,20 +508,6 @@ function App() {
   const activeCampusRef = useRef(currentCampusLabel);
   const loadedCampusRef = useRef(currentCampusLabel);
 
-  const applyCampusState = (campusLabel: string) => {
-    const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
-    const localCampusState = loadCampusLocalState(normalizedCampus);
-    activeCampusRef.current = normalizedCampus;
-    loadedCampusRef.current = normalizedCampus;
-    setClassrooms(localCampusState.classrooms.length > 0 ? localCampusState.classrooms : normalizeClassrooms(mockClassrooms, normalizedCampus));
-    setSubjects(localCampusState.subjects.length > 0 ? localCampusState.subjects : normalizeSubjectsForCampus(mockSubjects, normalizedCampus));
-    setAllocations(localCampusState.allocations);
-    setAllocationSettings(localCampusState.allocationSettings);
-    setEquipmentSettings(localCampusState.equipmentSettings);
-    setDisplayConfig(localCampusState.displayConfig);
-    setSubjectTaxonomy(localCampusState.subjectTaxonomy);
-  };
-
   // 永続化（ローカルストレージ）
   // クラウド接続中もローカルバックアップとして機能させるが、
   // クラウドからのロード直後は上書きしないよう注意が必要（現状は単純に保存）
@@ -554,6 +562,7 @@ function App() {
     setAllocationSettings(migrateAllocationRules(cloudData.settings));
     setEquipmentSettings(normalizeEquipmentSettings(cloudData.equipmentSettings));
     setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
+    markLocalBaseline(cloudData);
     setLastUnassigned([]);
     setAutoAllocationSummary(null);
     setPendingAllocationBatch(null);
@@ -561,7 +570,7 @@ function App() {
     setShowExceptionReviewModal(false);
     setShowRelocationPreviewModal(false);
     setPendingExceptionApprovedKeys([]);
-  }, []);
+  }, [markLocalBaseline]);
 
   const buildCloudDiffCsv = useCallback((localData: CloudData, cloudData: CloudData) => buildCloudDiffCsvRows(localData, cloudData), []);
 
@@ -591,6 +600,13 @@ function App() {
     if (!user) return;
     try {
       setIsCloudLoading(true);
+      await new Promise<void>(resolve => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => resolve());
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
       const wrote = await saveData(buildCloudSnapshot());
       alert(wrote ? 'Cloud write complete.' : '変更はありませんでした。');
     } catch (error) {

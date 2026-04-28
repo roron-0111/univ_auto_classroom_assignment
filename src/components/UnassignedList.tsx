@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
 import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
 
@@ -52,35 +52,46 @@ const FilterDropdown = <T extends string,>({
   isOpen,
   setIsOpen,
   getLabel
-}: FilterDropdownProps<T>) => (
-  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-    <button
-      onClick={() => setIsOpen(!isOpen)}
-      style={{
-        width: '100%',
-        fontSize: '0.75rem',
-        padding: '4px 6px',
-        borderRadius: '4px',
-        border: '1px solid #ccc',
-        background: '#fff',
-        textAlign: 'left',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        cursor: 'pointer'
-      }}
-    >
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-        {selected.size === 0 ? label : Array.from(selected).map(getLabel).join(', ')}
-      </span>
-      <span style={{ fontSize: '0.6rem' }}>{isOpen ? '▲' : '▼'}</span>
-    </button>
-    {isOpen && (
-      <>
-        <div
-          style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100 }}
-          onClick={() => setIsOpen(false)}
-        />
+}: FilterDropdownProps<T>) => {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      if (!root.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [isOpen, setIsOpen]);
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          width: '100%',
+          fontSize: '0.75rem',
+          padding: '4px 6px',
+          borderRadius: '4px',
+          border: '1px solid #ccc',
+          background: '#fff',
+          textAlign: 'left',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {selected.size === 0 ? label : Array.from(selected).map(getLabel).join(', ')}
+        </span>
+        <span style={{ fontSize: '0.6rem' }}>{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && (
         <div
           style={{
             position: 'absolute',
@@ -120,11 +131,10 @@ const FilterDropdown = <T extends string,>({
             </label>
           ))}
         </div>
-      </>
-    )}
-  </div>
-);
-
+      )}
+    </div>
+  );
+};
 export const UnassignedList = ({
   subjects,
   allocations,
@@ -611,4 +621,3 @@ export const UnassignedList = ({
     </div>
   );
 };
-

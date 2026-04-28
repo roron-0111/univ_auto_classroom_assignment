@@ -6,11 +6,9 @@ export type DiffCount = {
   updated: number;
 };
 
-export type CloudDiffKind = 'subjects' | 'classrooms' | 'allocations' | 'settings' | 'equipmentSettings' | 'subjectTaxonomy';
 export type CloudDiffOperation = 'added' | 'removed' | 'updated';
 
 export type CloudDiffEntry = {
-  kind: CloudDiffKind;
   operation: CloudDiffOperation;
   label: string;
   localValue: string;
@@ -18,12 +16,7 @@ export type CloudDiffEntry = {
 };
 
 export type CloudWriteWarningSummary = {
-  subjects: DiffCount;
-  classrooms: DiffCount;
   allocations: DiffCount;
-  settingsChanged: boolean;
-  equipmentSettingsChanged: boolean;
-  subjectTaxonomyChanged: boolean;
   hasDiff: boolean;
 };
 
@@ -47,13 +40,9 @@ export const stableSerialize = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-const compareCollections = <T,>(
-  localItems: T[],
-  cloudItems: T[],
-  getKey: (item: T) => string
-): DiffCount => {
-  const localMap = new Map(localItems.map(item => [getKey(item), item] as const));
-  const cloudMap = new Map(cloudItems.map(item => [getKey(item), item] as const));
+const compareAllocations = (localItems: CloudData['allocations'], cloudItems: CloudData['allocations']): DiffCount => {
+  const localMap = new Map(localItems.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
+  const cloudMap = new Map(cloudItems.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
   const diff = createDiffCount();
 
   cloudMap.forEach((cloudItem, key) => {
@@ -77,45 +66,35 @@ const compareCollections = <T,>(
 };
 
 const hasAnyDiff = (summary: CloudWriteWarningSummary) =>
-  summary.subjects.added > 0 ||
-  summary.subjects.removed > 0 ||
-  summary.subjects.updated > 0 ||
-  summary.classrooms.added > 0 ||
-  summary.classrooms.removed > 0 ||
-  summary.classrooms.updated > 0 ||
   summary.allocations.added > 0 ||
   summary.allocations.removed > 0 ||
-  summary.allocations.updated > 0 ||
-  summary.settingsChanged ||
-  summary.equipmentSettingsChanged ||
-  summary.subjectTaxonomyChanged;
+  summary.allocations.updated > 0;
 
-const buildDiffEntry = (
-  kind: CloudDiffKind,
-  operation: CloudDiffOperation,
-  label: string,
-  localValue: string,
-  cloudValue: string
-): CloudDiffEntry => ({
-  kind,
-  operation,
-  label,
-  localValue,
-  cloudValue
-});
+const getString = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : '');
+
+type SubjectLike = {
+  id: string;
+  code?: string;
+  name?: string;
+};
+
+type ClassroomLike = {
+  id: string;
+  name?: string;
+};
+
+const getSubjectLabel = (item: SubjectLike) => {
+  const code = getString(item.code);
+  const name = getString(item.name);
+  const id = getString(item.id);
+  return [code, name].filter(Boolean).join('_') || id;
+};
+
+const getClassroomLabel = (item: ClassroomLike) => getString(item.name) || getString(item.id);
 
 export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): CloudWriteWarningSummary => {
   const summary: CloudWriteWarningSummary = {
-    subjects: compareCollections(localData.subjects, cloudData.subjects, subject => subject.id),
-    classrooms: compareCollections(localData.classrooms, cloudData.classrooms, room => room.id),
-    allocations: compareCollections(
-      localData.allocations,
-      cloudData.allocations,
-      allocation => `${allocation.subjectId}__${allocation.classroomId}`
-    ),
-    settingsChanged: stableSerialize(localData.settings) !== stableSerialize(cloudData.settings),
-    equipmentSettingsChanged: stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings),
-    subjectTaxonomyChanged: stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy),
+    allocations: compareAllocations(localData.allocations, cloudData.allocations),
     hasDiff: false
   };
   summary.hasDiff = hasAnyDiff(summary);
@@ -124,93 +103,67 @@ export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData
 
 export const buildCloudDiffEntries = (localData: CloudData, cloudData: CloudData): CloudDiffEntry[] => {
   const entries: CloudDiffEntry[] = [];
+  const localSubjectMap = new Map(localData.subjects.map(item => [item.id, item as SubjectLike] as const));
+  const cloudSubjectMap = new Map(cloudData.subjects.map(item => [item.id, item as SubjectLike] as const));
+  const localClassroomMap = new Map(localData.classrooms.map(item => [item.id, item as ClassroomLike] as const));
+  const cloudClassroomMap = new Map(cloudData.classrooms.map(item => [item.id, item as ClassroomLike] as const));
 
-  const asRecordArray = <T,>(items: T[]) => items.map(item => item as unknown as Record<string, unknown>);
-  const getString = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : '');
-
-  const getSubjectLabel = (item: Record<string, unknown>) => {
-    const code = getString(item.code);
-    const name = getString(item.name);
-    const id = getString(item.id);
-    return [code, name].filter(Boolean).join('_') || id;
-  };
-
-  const getClassroomLabel = (item: Record<string, unknown>) => getString(item.name) || getString(item.id);
-
-  const getAllocationLabel = (
-    item: Record<string, unknown>,
-    subjectMap: Map<string, Record<string, unknown>>,
-    classroomMap: Map<string, Record<string, unknown>>
-  ) => {
-    const subjectId = getString(item.subjectId);
-    const classroomId = getString(item.classroomId);
-    const subject = subjectMap.get(subjectId);
-    const classroom = classroomMap.get(classroomId);
-    const subjectLabel = subject ? getSubjectLabel(subject) : subjectId;
-    const classroomLabel = classroom ? getClassroomLabel(classroom) : classroomId;
-    return [subjectLabel, classroomLabel].filter(Boolean).join(' / ');
-  };
-
-  const addEntries = (
-    kind: CloudDiffKind,
-    localItems: Record<string, unknown>[],
-    cloudItems: Record<string, unknown>[],
-    keyFn: (item: Record<string, unknown>) => string,
-    labelFn?: (item: Record<string, unknown>) => string
-  ) => {
-    const localMap = new Map(localItems.map(item => [keyFn(item), item]));
-    const cloudMap = new Map(cloudItems.map(item => [keyFn(item), item]));
-    const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
-
-    keys.forEach(key => {
-      const localItem = localMap.get(key);
-      const cloudItem = cloudMap.get(key);
-      const label = labelFn?.(localItem || cloudItem || {}) || key;
-
-      if (!localItem && cloudItem) {
-        entries.push(buildDiffEntry(kind, 'added', label, '', stableSerialize(cloudItem)));
-      } else if (localItem && !cloudItem) {
-        entries.push(buildDiffEntry(kind, 'removed', label, stableSerialize(localItem), ''));
-      } else if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-        entries.push(buildDiffEntry(kind, 'updated', label, stableSerialize(localItem), stableSerialize(cloudItem)));
-      }
-    });
-  };
-
-  const localSubjectMap = new Map(asRecordArray(localData.subjects).map(item => [String(item.id ?? ''), item] as const));
-  const cloudSubjectMap = new Map(asRecordArray(cloudData.subjects).map(item => [String(item.id ?? ''), item] as const));
-  const localClassroomMap = new Map(asRecordArray(localData.classrooms).map(item => [String(item.id ?? ''), item] as const));
-  const cloudClassroomMap = new Map(asRecordArray(cloudData.classrooms).map(item => [String(item.id ?? ''), item] as const));
   const mergedSubjectMap = new Map([...localSubjectMap, ...cloudSubjectMap]);
   const mergedClassroomMap = new Map([...localClassroomMap, ...cloudClassroomMap]);
 
-  addEntries('subjects', asRecordArray(localData.subjects), asRecordArray(cloudData.subjects), item => String(item.id ?? ''), item => getSubjectLabel(item));
-  addEntries('classrooms', asRecordArray(localData.classrooms), asRecordArray(cloudData.classrooms), item => String(item.id ?? ''), item => getClassroomLabel(item));
-  addEntries(
-    'allocations',
-    asRecordArray(localData.allocations),
-    asRecordArray(cloudData.allocations),
-    item => `${String(item.subjectId ?? '')}__${String(item.classroomId ?? '')}`,
-    item => getAllocationLabel(item, mergedSubjectMap, mergedClassroomMap)
-  );
+  const localMap = new Map(localData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
+  const cloudMap = new Map(cloudData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
+  const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
 
-  if (stableSerialize(localData.settings) !== stableSerialize(cloudData.settings)) {
-    entries.push(buildDiffEntry('settings', 'updated', '配当ルール', stableSerialize(localData.settings), stableSerialize(cloudData.settings)));
-  }
-  if (stableSerialize(localData.equipmentSettings) !== stableSerialize(cloudData.equipmentSettings)) {
-    entries.push(buildDiffEntry('equipmentSettings', 'updated', '機材設定', stableSerialize(localData.equipmentSettings), stableSerialize(cloudData.equipmentSettings)));
-  }
-  if (stableSerialize(localData.subjectTaxonomy) !== stableSerialize(cloudData.subjectTaxonomy)) {
-    entries.push(buildDiffEntry('subjectTaxonomy', 'updated', '開講学部・管轄', stableSerialize(localData.subjectTaxonomy), stableSerialize(cloudData.subjectTaxonomy)));
-  }
+  keys.forEach(key => {
+    const localItem = localMap.get(key);
+    const cloudItem = cloudMap.get(key);
+    const sourceItem = localItem || cloudItem;
+    if (!sourceItem) return;
+
+    const subject = mergedSubjectMap.get(sourceItem.subjectId);
+    const classroom = mergedClassroomMap.get(sourceItem.classroomId);
+    const subjectLabel = subject ? getSubjectLabel(subject) : getString(sourceItem.subjectId);
+    const classroomLabel = classroom ? getClassroomLabel(classroom) : getString(sourceItem.classroomId);
+    const label = `${subjectLabel} / ${classroomLabel}`.trim();
+
+    if (!localItem && cloudItem) {
+      entries.push({
+        operation: 'added',
+        label,
+        localValue: '',
+        cloudValue: stableSerialize(cloudItem)
+      });
+      return;
+    }
+
+    if (localItem && !cloudItem) {
+      entries.push({
+        operation: 'removed',
+        label,
+        localValue: stableSerialize(localItem),
+        cloudValue: ''
+      });
+      return;
+    }
+
+    if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
+      entries.push({
+        operation: 'updated',
+        label,
+        localValue: stableSerialize(localItem),
+        cloudValue: stableSerialize(cloudItem)
+      });
+    }
+  });
 
   return entries;
 };
 
 export const buildCloudDiffCsv = (localData: CloudData, cloudData: CloudData) =>
   buildCloudDiffEntries(localData, cloudData).map(entry => ({
-    種別: entry.kind,
-    操作: entry.operation === 'added' ? '追加' : entry.operation === 'removed' ? '削除' : '変更',
+    種別: '配当',
+    操作: entry.operation === 'added' ? '追加' : entry.operation === 'removed' ? '削除' : '更新',
     対象: entry.label,
     ローカル: entry.localValue,
     クラウド: entry.cloudValue

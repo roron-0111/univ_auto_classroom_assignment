@@ -1,5 +1,6 @@
 ﻿import { useState, useRef, useEffect, useMemo } from 'react';
 import Papa from 'papaparse';
+import { flushSync } from 'react-dom';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
@@ -48,12 +49,11 @@ const hasCsvHeader = (headers: string[], aliases: string[]) => {
 };
 
 const SUBJECT_IMPORT_REQUIRED_COLUMNS: { label: string; aliases: string[] }[] = [
-    { label: 'コード', aliases: ['コード', '時間割コード', 'Code', 'ID'] },
-    { label: '時間割名称', aliases: ['時間割名称', '授業名称', 'Name'] },
-    { label: '教員コード', aliases: ['教員コード', 'TeacherCode'] },
-    { label: '教員名', aliases: ['教員名', '教員', 'Teacher', '代表教員'] },
-    { label: '開講学部', aliases: ['開講学部', 'Faculty'] },
-    { label: '管轄', aliases: ['管轄', '学科', 'Department'] },
+  { label: 'コード', aliases: ['コード', '時間割コード', 'Code', 'ID'] },
+  { label: '時間割名称', aliases: ['時間割名称', '授業名称', 'Name'] },
+  { label: '教員名', aliases: ['教員名', '教員', 'Teacher', '代表教員'] },
+  { label: '開講学部', aliases: ['開講学部', 'Faculty'] },
+  { label: '管轄', aliases: ['管轄', '学科', 'Department'] },
     { label: '配当期', aliases: ['配当期', '学期', 'Term'] },
     { label: '曜日', aliases: ['曜日', 'Day'] },
     { label: '講時', aliases: ['講時', '開始講時', 'Period'] },
@@ -764,18 +764,6 @@ export const SubjectManager = ({
                     alert(`教室IDが現在の教室マスタに存在しないレコードがあります: ${invalidRoomRows.slice(0, 10).join('、')}${invalidRoomRows.length > 10 ? '…' : ''}`);
                     return;
                 }
-                const invalidRows = data.subjects
-                    .map((subject, index) => {
-                        const issues: string[] = [];
-                        if (!facultyOptions.includes(subject.faculty || '')) issues.push('開講学部');
-                        if (!departmentOptions.includes(subject.department || '')) issues.push('管轄');
-                        return issues.length > 0 ? `${index + 2}行目(${issues.join('・')})` : '';
-                    })
-                    .filter(Boolean);
-                if (invalidRows.length > 0) {
-                    alert(`キャンパスの候補外レコードがあります: ${invalidRows.slice(0, 10).join('、')}${invalidRows.length > 10 ? '…' : ''}`);
-                    return;
-                }
                 const sanitized = data.subjects.map(subject => ({
                     ...subject,
                     campus: campusLabel,
@@ -803,8 +791,19 @@ export const SubjectManager = ({
                     const dedupedAllocations = Array.from(new Map(
                         [...preservedAllocations, ...importedAllocations].map(allocation => [`${allocation.subjectId}__${allocation.classroomId}`, allocation] as const)
                     ).values());
-                    onUpdate(mergedSubjects);
-                    onUpdateAllocations(dedupedAllocations);
+                    console.debug('subject import allocations', {
+                        subjects: data.subjects.length,
+                        rows: data.rows.length,
+                        importedCodes: importedCodes.size,
+                        codeToSubjectId: codeToSubjectId.size,
+                        preservedAllocations: preservedAllocations.length,
+                        importedAllocations: importedAllocations.length,
+                        dedupedAllocations: dedupedAllocations.length
+                    });
+                    flushSync(() => {
+                        onUpdate(mergedSubjects);
+                        onUpdateAllocations(dedupedAllocations);
+                    });
                 }
             } catch (err) {
                 alert(err instanceof Error ? err.message : `CSV読み込みエラー: ${String(err)}`);

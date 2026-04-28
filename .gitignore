@@ -29,3 +29,6 @@ npm-debug.log*
 .agent/
 .claude/
 .claude.bak/
+AGENTS.md
+playwright-report/
+test-results/

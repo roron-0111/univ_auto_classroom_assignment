@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Download, X } from 'lucide-react';
 import type { CloudWriteWarningSummary } from '../utils/cloudDiff';
 
+export type { CloudWriteWarningSummary } from '../utils/cloudDiff';
+
 interface Props {
   isOpen: boolean;
   summary: CloudWriteWarningSummary | null;
@@ -9,24 +11,29 @@ interface Props {
   onCancel: () => void;
 }
 
-const totalDiffCount = (summary: CloudWriteWarningSummary) =>
-  summary.subjects.added +
-  summary.subjects.removed +
-  summary.subjects.updated +
-  summary.classrooms.added +
-  summary.classrooms.removed +
-  summary.classrooms.updated +
-  summary.allocations.added +
-  summary.allocations.removed +
-  summary.allocations.updated +
-  (summary.settingsChanged ? 1 : 0) +
-  (summary.equipmentSettingsChanged ? 1 : 0) +
-  (summary.subjectTaxonomyChanged ? 1 : 0);
+const DiffBadge = ({ label, value, color }: { label: string; value: number; color: string }) => (
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '10px 12px',
+      borderRadius: '10px',
+      background: '#fff',
+      border: `1px solid ${color}`,
+      color: '#334155'
+    }}
+  >
+    <div style={{ fontWeight: 'bold' }}>{label}</div>
+    <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{value} 件</div>
+  </div>
+);
 
 export const CloudReadWarningModal = ({ isOpen, summary, onExportCsv, onConfirm, onCancel }: Props) => {
   if (!isOpen || !summary) return null;
 
-  const count = totalDiffCount(summary);
+  const count = summary.allocations.added + summary.allocations.removed + summary.allocations.updated;
 
   return (
     <div
@@ -38,14 +45,14 @@ export const CloudReadWarningModal = ({ isOpen, summary, onExportCsv, onConfirm,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 2310,
+        zIndex: 2300,
         padding: '20px'
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: 'min(640px, 100%)',
+          width: 'min(860px, 100%)',
           maxHeight: '90vh',
           overflow: 'auto',
           background: '#fff',
@@ -82,6 +89,7 @@ export const CloudReadWarningModal = ({ isOpen, summary, onExportCsv, onConfirm,
         </div>
 
         <div style={{ padding: '20px', display: 'grid', gap: '16px' }}>
+          <DiffBadge label="差分の件数" value={count} color="#3b82f6" />
           <div style={{ color: '#475569', fontSize: '0.92rem' }}>
             詳細は CSV をエクスポートしてご確認ください。
           </div>
