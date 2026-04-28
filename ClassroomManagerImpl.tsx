@@ -451,7 +451,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 </th>
                             </tr>
                             {/* 検索行 */}
-                            <tr style={{ background: '#fafafa', position: 'sticky', top: 37, zIndex: 9 }}>
+                            <tr style={{ background: '#fafafa', position: 'sticky', top: 44, zIndex: 9 }}>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
                                 {crShow('id') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}

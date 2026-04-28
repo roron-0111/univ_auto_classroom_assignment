@@ -2,7 +2,7 @@
 import Papa from 'papaparse';
 import { flushSync } from 'react-dom';
 import type { Subject, Allocation, Classroom, Term, DayOfWeek, Period } from '../types';
-import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel } from '../types';
+import { DAY_LABELS, BUILDINGS, ROOM_TYPE_LABELS, normalizeCampusLabel, getDayLabel, getPeriodLabel, getTermLabel, getEquipmentStyle } from '../types';
 import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import { exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
@@ -146,7 +146,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                     requiredCapacity: parseInt(row['履修者数'] || row.RequiredCapacity || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
                     campus: row['キャンパス'] || row.Campus || '',
                     requiredRoomCount: parseInt(row['必要教室数'] || row.RequiredRoomCount, 10) || 1,
-                    previousRooms: row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)'] ? (row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    previousRooms: row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)'] ? (row.PreviousRooms || row['過去教室'] || row['過去教室(区切り)']).split(/[;,\s、]+/).map((s: string) => s.trim()).filter(Boolean) : [],
                     preferredRoomType: (() => {
                         const t = row['タイプ'] || row.PreferredRoomType || '';
                         if (t === 'PC') return 'pc';
@@ -158,7 +158,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                     requiresMovable: SUBJECT_EQUIPMENT_CHOICES.some(eq => normalizeRequiredEquipmentName(eq) === '可動' && row[eq] === '◎') || row.RequiresMovable === 'true' || row.RequiresMovable === '1',
                     priority: parseInt(row['優先度'] || row.Priority, 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
-                    buildingPreference: row['棟希望'] || row.BuildingPreference || '',
+                    buildingPreference: row['希望建物'] || row['棟希望'] || row.BuildingPreference || '',
                     mandatoryEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '◎').map(normalizeRequiredEquipmentName),
                     requiredEquipment: SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '○').map(normalizeRequiredEquipmentName)
                 } as Subject));
@@ -184,7 +184,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                             existing.previousRooms = Array.from(new Set([...(existing.previousRooms || []), ...s.previousRooms]));
                         }
                     } else {
-                        grouped.set(key, { ...s, requiredRoomCount: 1 });
+                        grouped.set(key, { ...s });
                     }
                 });
 
@@ -897,9 +897,9 @@ export const SubjectManager = ({
                                             '履修者数': s.requiredCapacity,
                                             '優先度': s.priority,
                                             '必要教室数': s.requiredRoomCount,
-                                            '棟希望': s.buildingPreference || '',
+                                            '希望建物': s.buildingPreference || '',
                                             'タイプ': s.preferredRoomType === 'pc' ? 'PC' : s.preferredRoomType === 'seminar' ? 'ゼミ' : '一般',
-                                            '教室(過去教室)': s.previousRooms?.join(', ') || '',
+                                            '過去教室': s.previousRooms?.join(', ') || '',
                                         };
                                         // 設備: 1列につき1設備、◎=必須 ○=希望 空=不要
                                         SUBJECT_EQUIPMENT_CHOICES.forEach(eq => {
@@ -912,7 +912,7 @@ export const SubjectManager = ({
                                         }
                                         // 配当済み：1教室1行
                                         return subjectAllocations.map(alloc => {
-                                            const r = classrooms.find(rm => rm.id === alloc.classroomId);
+                                            const r = classrooms.find(rm => rm.id === alloc.classroomId || rm.name === alloc.classroomId);
                                             const eqList = r ? [...(r.equipment ?? [])] : [];
                                             if (r?.isMovable) eqList.unshift('可動');
                                             return {
@@ -1061,11 +1061,37 @@ export const SubjectManager = ({
                                         {smShow('buildingPreference') && <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>{subject.buildingPreference}</td>}
                                         {smShow('preferredRoomType') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.preferredRoomType === 'normal' ? '一般' : subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '-'}</td>}
                                         {smShow('requiredEquipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
-                                                {subject.requiredEquipment?.filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)).map(eq => (
-                                                    <span key={eq} style={{ background: '#eee', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>{eq}</span>
-                                                ))}
-                                                {subject.requiresMovable && <span style={{ background: '#e1bee7', padding: '2px 4px', borderRadius: '3px', fontSize: '0.9em' }}>可動</span>}
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                {subject.requiredEquipment?.filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)).map(eq => {
+                                                    const style = getEquipmentStyle(eq);
+                                                    return (
+                                                        <span key={eq} style={{
+                                                            background: style.bg,
+                                                            color: style.text,
+                                                            border: `1px solid ${style.border}`,
+                                                            padding: '2px 8px',
+                                                            borderRadius: '999px',
+                                                            fontSize: '0.8em',
+                                                            fontWeight: 600,
+                                                            whiteSpace: 'nowrap'
+                                                        }}>{eq}</span>
+                                                    );
+                                                })}
+                                                {subject.requiresMovable && (() => {
+                                                    const style = getEquipmentStyle('可動');
+                                                    return (
+                                                        <span style={{
+                                                            background: style.bg,
+                                                            color: style.text,
+                                                            border: `1px solid ${style.border}`,
+                                                            padding: '2px 8px',
+                                                            borderRadius: '999px',
+                                                            fontSize: '0.8em',
+                                                            fontWeight: 600,
+                                                            whiteSpace: 'nowrap'
+                                                        }}>可動</span>
+                                                    );
+                                                })()}
                                             </div>
                                         </td>}
                                         {smShow('previousRooms') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em', color: '#666' }}>{subject.previousRooms?.join(', ')}</td>}

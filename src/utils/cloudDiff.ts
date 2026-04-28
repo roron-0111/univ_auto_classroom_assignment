@@ -1,4 +1,6 @@
+import type { Classroom, Subject } from '../types';
 import type { CloudData } from '../types_cloud';
+import { getDayLabel, getPeriodLabel } from '../types';
 
 export type DiffCount = {
   added: number;
@@ -13,6 +15,17 @@ export type CloudDiffEntry = {
   label: string;
   localValue: string;
   cloudValue: string;
+};
+
+export type CloudDiffCsvRow = {
+  種別: string;
+  操作: string;
+  ローカル: string;
+  クラウド: string;
+  教室: string;
+  曜日: string;
+  講時: string;
+  科目名: string;
 };
 
 export type CloudWriteWarningSummary = {
@@ -76,6 +89,8 @@ type SubjectLike = {
   id: string;
   code?: string;
   name?: string;
+  day?: string;
+  period?: number | string;
 };
 
 type ClassroomLike = {
@@ -92,6 +107,15 @@ const getSubjectLabel = (item: SubjectLike) => {
 
 const getClassroomLabel = (item: ClassroomLike) => getString(item.name) || getString(item.id);
 
+const getPresenceState = (operation: CloudDiffOperation, localExists: boolean, cloudExists: boolean) => {
+  if (operation === 'added') return { local: 'なし', cloud: 'なし→あり' };
+  if (operation === 'removed') return { local: 'あり→なし', cloud: 'あり' };
+  return {
+    local: localExists ? 'あり→あり' : 'なし',
+    cloud: cloudExists ? 'あり→あり' : 'なし'
+  };
+};
+
 export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): CloudWriteWarningSummary => {
   const summary: CloudWriteWarningSummary = {
     allocations: compareAllocations(localData.allocations, cloudData.allocations),
@@ -103,10 +127,10 @@ export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData
 
 export const buildCloudDiffEntries = (localData: CloudData, cloudData: CloudData): CloudDiffEntry[] => {
   const entries: CloudDiffEntry[] = [];
-  const localSubjectMap = new Map(localData.subjects.map(item => [item.id, item as SubjectLike] as const));
-  const cloudSubjectMap = new Map(cloudData.subjects.map(item => [item.id, item as SubjectLike] as const));
-  const localClassroomMap = new Map(localData.classrooms.map(item => [item.id, item as ClassroomLike] as const));
-  const cloudClassroomMap = new Map(cloudData.classrooms.map(item => [item.id, item as ClassroomLike] as const));
+  const localSubjectMap = new Map(localData.subjects.map(item => [item.id, item] as const));
+  const cloudSubjectMap = new Map(cloudData.subjects.map(item => [item.id, item] as const));
+  const localClassroomMap = new Map(localData.classrooms.map(item => [item.id, item] as const));
+  const cloudClassroomMap = new Map(cloudData.classrooms.map(item => [item.id, item] as const));
 
   const mergedSubjectMap = new Map([...localSubjectMap, ...cloudSubjectMap]);
   const mergedClassroomMap = new Map([...localClassroomMap, ...cloudClassroomMap]);
@@ -160,11 +184,64 @@ export const buildCloudDiffEntries = (localData: CloudData, cloudData: CloudData
   return entries;
 };
 
-export const buildCloudDiffCsv = (localData: CloudData, cloudData: CloudData) =>
-  buildCloudDiffEntries(localData, cloudData).map(entry => ({
+const buildSubjectMap = (cloudData: CloudData, localData: CloudData) =>
+  new Map([...localData.subjects, ...cloudData.subjects].map(item => [item.id, item] as const));
+
+const buildClassroomMap = (cloudData: CloudData, localData: CloudData) =>
+  new Map([...localData.classrooms, ...cloudData.classrooms].map(item => [item.id, item] as const));
+
+const buildDiffCsvRow = (
+  entry: CloudDiffEntry,
+  operation: CloudDiffOperation,
+  localItem: CloudData['allocations'][number] | undefined,
+  cloudItem: CloudData['allocations'][number] | undefined,
+  subjectMap: Map<string, Subject>,
+  classroomMap: Map<string, Classroom>
+): CloudDiffCsvRow => {
+  const sourceItem = localItem || cloudItem;
+  const subject = sourceItem ? subjectMap.get(sourceItem.subjectId) : undefined;
+  const classroom = sourceItem ? classroomMap.get(sourceItem.classroomId) : undefined;
+  const subjectCode = getString(subject?.code);
+  const subjectName = getString(subject?.name);
+  const classroomName = getString(classroom?.name) || getString(sourceItem?.classroomId);
+  const day = subject ? getDayLabel(subject.day) : '';
+  const period = subject ? getPeriodLabel(subject.period) : '';
+  const presence = getPresenceState(operation, !!localItem, !!cloudItem);
+
+  return {
     種別: '配当',
-    操作: entry.operation === 'added' ? '追加' : entry.operation === 'removed' ? '削除' : '更新',
-    対象: entry.label,
-    ローカル: entry.localValue,
-    クラウド: entry.cloudValue
-  }));
+    操作: operation === 'added' ? '追加' : operation === 'removed' ? '削除' : '更新',
+    ローカル: presence.local,
+    クラウド: presence.cloud,
+    教室: classroomName || '',
+    曜日: day || '',
+    講時: period || '',
+    科目名: [subjectCode, subjectName].filter(Boolean).join('_') || entry.label
+  };
+};
+
+export const buildCloudDiffCsv = (localData: CloudData, cloudData: CloudData): CloudDiffCsvRow[] => {
+  const localMap = new Map(localData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
+  const cloudMap = new Map(cloudData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
+  const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
+  const subjectMap = buildSubjectMap(cloudData, localData);
+  const classroomMap = buildClassroomMap(cloudData, localData);
+
+  return keys.flatMap(key => {
+    const localItem = localMap.get(key);
+    const cloudItem = cloudMap.get(key);
+    if (!localItem && !cloudItem) return [];
+
+    const operation: CloudDiffOperation =
+      !localItem && cloudItem ? 'added' : localItem && !cloudItem ? 'removed' : 'updated';
+
+    const entry: CloudDiffEntry = {
+      operation,
+      label: '',
+      localValue: localItem ? stableSerialize(localItem) : '',
+      cloudValue: cloudItem ? stableSerialize(cloudItem) : ''
+    };
+
+    return [buildDiffCsvRow(entry, operation, localItem, cloudItem, subjectMap, classroomMap)];
+  });
+};

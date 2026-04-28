@@ -194,7 +194,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                     requiredCapacity: parseInt(row.RequiredCapacity || row['履修者数'] || row['履修予定人数'] || row['履修想定人数'] || row['定員'], 10) || 0,
                     campus: row['キャンパス'] || row.Campus,
                     requiredRoomCount: parseInt(row.RequiredRoomCount || row['必要教室数'], 10) || 1,
-                    previousRooms: row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室'] ? (row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室']).split(/[;\s]+/).map((s: string) => s.trim()).filter(Boolean) : [],
+                    previousRooms: row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室'] || row['過去教室(区切り)'] ? (row.PreviousRooms || row['教室(過去教室)'] || row['教室'] || row['過去教室'] || row['過去教室(区切り)']).split(/[;,\s、]+/).map((s: string) => s.trim()).filter(Boolean) : [],
                     preferredRoomType: (() => {
                         const t = row['タイプ'] || row.PreferredRoomType || row['希望教室タイプ'] || row['教室タイプ'];
                         if (t === 'PC' || t === 'PC室') return 'pc';
@@ -213,7 +213,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                         row['可動席'] === '○' || row['可動式'] === '○',
                     priority: parseInt(row.Priority || row['優先度[1(低)～3(高)]'] || row['優先度'], 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
-                    buildingPreference: row.BuildingPreference || row['棟希望'],
+                    buildingPreference: row['希望建物'] || row.BuildingPreference || row['棟希望'],
                     // 必須設備: 設備列の値が◎のもの（新形式）、または旧形式の必須_X列
                     mandatoryEquipment: (() => {
                         const fromNew = SUBJECT_EQUIPMENT_CHOICES.filter(eq => row[eq] === '◎').map(normalizeEquipmentName);
@@ -250,7 +250,7 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
                             existing.previousRooms = Array.from(new Set([...(existing.previousRooms || []), ...s.previousRooms]));
                         }
                     } else {
-                        grouped.set(key, { ...s, requiredRoomCount: 1 });
+                        grouped.set(key, { ...s });
                     }
                 });
 

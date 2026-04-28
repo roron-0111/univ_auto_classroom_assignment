@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { X, Check } from 'lucide-react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, getEquipmentStyle } from '../types';
@@ -43,6 +43,22 @@ const checkboxLabelStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: '6px',
   cursor: 'pointer'
+};
+
+const equipmentTagStyle = (active: boolean, eq: string): CSSProperties => {
+  const style = getEquipmentStyle(eq);
+  return {
+    background: active ? style.bg : '#f3f4f6',
+    color: active ? style.text : '#9ca3af',
+    border: `1px solid ${active ? style.border : '#d1d5db'}`,
+    borderRadius: '999px',
+    padding: '5px 10px',
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+    fontWeight: active ? 700 : 500,
+    whiteSpace: 'nowrap',
+    transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease'
+  };
 };
 
 export const SubjectEditModal = ({
@@ -256,24 +272,17 @@ export const SubjectEditModal = ({
               <label style={{ ...labelStyle, display: 'block', marginBottom: '8px' }}>機材・設備</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {availableEquipment.map(eq => {
-                  const style = getEquipmentStyle(eq);
                   const isRequired = (form.requiredEquipment || []).includes(eq);
                   const isMandatory = (form.mandatoryEquipment || []).includes(eq);
+                  const active = isRequired || isMandatory;
                   return (
                     <button
                       key={eq}
                       type="button"
                       onClick={() => toggleListValue('requiredEquipment', eq)}
-                      style={{
-                        background: isRequired ? style.bg : '#fff',
-                        color: style.text,
-                        border: `1px solid ${isRequired ? style.border : '#ddd'}`,
-                        borderRadius: '999px',
-                        padding: '5px 10px',
-                        cursor: 'pointer'
-                      }}
+                      style={equipmentTagStyle(active, eq)}
                     >
-                      {eq}{isMandatory ? '◎' : isRequired ? '○' : ''}
+                      {eq}
                     </button>
                   );
                 })}

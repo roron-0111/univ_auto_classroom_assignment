@@ -34,15 +34,16 @@ const sectionTitleStyle: CSSProperties = {
 const tagButtonStyle = (active: boolean, eq: string): CSSProperties => {
   const style = getEquipmentStyle(eq);
   return {
-    background: active ? style.bg : '#fff',
-    color: style.text,
-    border: `1px solid ${active ? style.border : '#ddd'}`,
+    background: active ? style.bg : '#f3f4f6',
+    color: active ? style.text : '#9ca3af',
+    border: `1px solid ${active ? style.border : '#d1d5db'}`,
     borderRadius: '999px',
     padding: '6px 12px',
     cursor: 'pointer',
     fontSize: '0.85rem',
     fontWeight: active ? 700 : 500,
-    whiteSpace: 'nowrap'
+    whiteSpace: 'nowrap',
+    transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease'
   };
 };
 
