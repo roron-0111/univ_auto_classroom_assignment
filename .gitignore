@@ -4,6 +4,9 @@ node_modules/.tmp/
 
 # Build output
 dist/
+src/scratch.txt
+test_write_probe.txt
+useCloudSync.ts.tmp
 
 # Environment variables (NEVER commit these)
 .env
