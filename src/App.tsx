@@ -2,7 +2,6 @@
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
 import { BUILDINGS, DAY_LABELS, sortBuildingsByCanonicalOrder } from './types';
-import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
 import { ClassroomManager } from './components/ClassroomManager';
@@ -413,8 +412,8 @@ function App() {
     const localCampusState = loadCampusLocalState(normalizedCampus);
     activeCampusRef.current = normalizedCampus;
     loadedCampusRef.current = normalizedCampus;
-    setClassrooms(localCampusState.classrooms.length > 0 ? localCampusState.classrooms : normalizeClassrooms(mockClassrooms, normalizedCampus));
-    setSubjects(localCampusState.subjects.length > 0 ? localCampusState.subjects : normalizeSubjectsForCampus(mockSubjects, normalizedCampus));
+    setClassrooms(localCampusState.classrooms);
+    setSubjects(localCampusState.subjects);
     setAllocations(localCampusState.allocations);
     setAllocationSettings(localCampusState.allocationSettings);
     setEquipmentSettings(localCampusState.equipmentSettings);
@@ -438,15 +437,13 @@ function App() {
 
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
     try {
-      const loaded = loadCampusLocalState(currentCampusLabel).classrooms;
-      return loaded.length > 0 ? loaded : normalizeClassrooms(mockClassrooms, currentCampusLabel);
-    } catch { return mockClassrooms; }
+      return loadCampusLocalState(currentCampusLabel).classrooms;
+    } catch { return []; }
   });
   const [subjects, setSubjects] = useState<Subject[]>(() => {
     try {
-      const loaded = loadCampusLocalState(currentCampusLabel).subjects;
-      return loaded.length > 0 ? loaded : normalizeSubjectsForCampus(mockSubjects, currentCampusLabel);
-    } catch { return normalizeSubjectsForCampus(mockSubjects, currentCampusLabel); }
+      return loadCampusLocalState(currentCampusLabel).subjects;
+    } catch { return []; }
   });
   const [allocations, setAllocations] = useState<Allocation[]>(() => {
     try {
