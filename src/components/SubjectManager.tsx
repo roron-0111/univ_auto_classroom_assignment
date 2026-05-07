@@ -36,6 +36,28 @@ function equipValue(
 
 const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim();
 
+const SUBJECT_IMPORT_TEXT_ENCODINGS = ['utf-8', 'shift_jis', 'windows-31j'] as const;
+
+const decodeCsvFile = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const encoderNames = SUBJECT_IMPORT_TEXT_ENCODINGS as readonly string[];
+    for (const encoding of encoderNames) {
+        try {
+            const decoded = new TextDecoder(encoding).decode(buffer);
+            const headerLine = decoded.split(/\r?\n/, 1)[0] ?? '';
+            const headerLooksValid = SUBJECT_IMPORT_REQUIRED_COLUMNS.some(col =>
+                col.aliases.some(alias => normalizeCsvHeader(headerLine).includes(normalizeCsvHeader(alias)))
+            );
+            if (encoding === 'utf-8' || headerLooksValid) {
+                return decoded;
+            }
+        } catch {
+            // 次の候補へフォールバックする
+        }
+    }
+    return new TextDecoder('utf-8').decode(buffer);
+};
+
 const getCsvValue = (row: Record<string, string>, aliases: string[]) => {
     const key = Object.keys(row).find(header =>
         aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
@@ -76,7 +98,8 @@ type ParsedSubjectCsv = {
 
 const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
     return new Promise((resolve, reject) => {
-        Papa.parse(file, {
+        void decodeCsvFile(file).then((text) => {
+            Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
@@ -192,8 +215,9 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
 
                 resolve({ subjects: Array.from(grouped.values()), rows: classroomRows });
             },
-            error: (error) => reject(error)
-        });
+            error: (error: unknown) => reject(error instanceof Error ? error : new Error(String(error)))
+            });
+        }).catch(reject);
     });
 };
 
@@ -898,6 +922,7 @@ export const SubjectManager = ({
                                                 <div style={{ marginBottom: '4px' }}>教室IDがある行は配当を復元できます</div>
                                                 <div style={{ marginBottom: '4px' }}>教室名 / 建物 / 教室定員 / 教室試験定員 / 教室タイプ / 教室設備 があっても再インポート可能です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                                <div style={{ marginBottom: '4px' }}>UTF-8(BOMあり/なし)・Shift_JIS系のCSVに対応しています</div>
                                                 <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                             </div>
                                         )}
