@@ -52,6 +52,7 @@ const hasCsvHeader = (headers: string[], aliases: string[]) => {
 const SUBJECT_IMPORT_REQUIRED_COLUMNS: { label: string; aliases: string[] }[] = [
   { label: 'コード', aliases: ['コード', '時間割コード', 'Code', 'ID'] },
   { label: '時間割名称', aliases: ['時間割名称', '授業名称', 'Name'] },
+  { label: '教員コード', aliases: ['教員コード', 'TeacherCode'] },
   { label: '教員名', aliases: ['教員名', '教員', 'Teacher', '代表教員'] },
   { label: '開講学部', aliases: ['開講学部', 'Faculty'] },
   { label: '管轄', aliases: ['管轄', '学科', 'Department'] },
