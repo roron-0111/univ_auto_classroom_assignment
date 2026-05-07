@@ -1,8 +1,8 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+﻿import { useMemo, useState, type CSSProperties } from 'react';
 import { X, Check } from 'lucide-react';
 import type { Subject, Term, DayOfWeek, Period } from '../types';
 import { DAY_LABELS, BUILDINGS, getEquipmentStyle } from '../types';
-import { SUBJECT_EQUIPMENT_CHOICES } from '../utils/equipmentVisibility';
+import { SUBJECT_EQUIPMENT_CHOICES, sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 
 interface Props {
   subject: Subject;
@@ -51,7 +51,7 @@ const equipmentTagStyle = (active: boolean, eq: string): CSSProperties => {
     background: active ? style.bg : '#f3f4f6',
     color: active ? style.text : '#9ca3af',
     border: `1px solid ${active ? style.border : '#d1d5db'}`,
-    borderRadius: '999px',
+    borderRadius: '4px',
     padding: '5px 10px',
     cursor: 'pointer',
     fontSize: '0.85rem',
@@ -82,17 +82,32 @@ export const SubjectEditModal = ({
     previousRooms: subject.previousRooms || []
   });
 
-  const allowedEquipment = useMemo(
-    () => new Set<string>([...SUBJECT_EQUIPMENT_CHOICES, ...availableEquipment]),
+  const orderedEquipment = useMemo(
+    () => sortEquipmentByCanonicalOrder(availableEquipment),
     [availableEquipment]
   );
 
-  const toggleListValue = (key: 'requiredEquipment' | 'mandatoryEquipment', value: string) => {
+  const allowedEquipment = useMemo(
+    () => new Set<string>([...SUBJECT_EQUIPMENT_CHOICES, ...orderedEquipment]),
+    [orderedEquipment]
+  );
+
+  const toggleEquipmentValue = (value: string) => {
     setForm(prev => {
-      const current = prev[key] || [];
+      const currentRequired = prev.requiredEquipment || [];
+      const currentMandatory = prev.mandatoryEquipment || [];
+      const isActive = currentRequired.includes(value) || currentMandatory.includes(value);
+      const opposite = value === '可動' ? '固定' : value === '固定' ? '可動' : '';
+      const updateList = (items: string[]) => {
+        const next = isActive
+          ? items.filter(v => v !== value)
+          : [...items.filter(v => v !== value && v !== opposite), value];
+        return sortEquipmentByCanonicalOrder(next);
+      };
       return {
         ...prev,
-        [key]: current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+        requiredEquipment: updateList(currentRequired),
+        mandatoryEquipment: updateList(currentMandatory)
       } as Subject;
     });
   };
@@ -103,14 +118,30 @@ export const SubjectEditModal = ({
       return;
     }
 
+    const normalizedEquipment = sortEquipmentByCanonicalOrder([
+      ...(form.mandatoryEquipment || []),
+      ...(form.requiredEquipment || [])
+    ]);
+    const hasMovableEquipment = normalizedEquipment.includes('可動');
+    const hasProjectorEquipment = normalizedEquipment.some(eq => eq.startsWith('PJ'));
+
+    if (form.requiresMovable && !hasMovableEquipment) {
+      alert('可動必須にする場合は、機材・設備の「可動」を選択してください。');
+      return;
+    }
+    if (form.requiresProjector && !hasProjectorEquipment) {
+      alert('プロジェクター必須にする場合は、機材・設備の「PJ(中)」または「PJ(横)」を選択してください。');
+      return;
+    }
+
     const saved: Subject = {
       ...form,
       campus: currentCampusLabel,
       faculty: form.faculty,
       department: form.department,
       priority: form.priority ?? 1,
-      requiredEquipment: (form.requiredEquipment || []).filter(eq => allowedEquipment.has(eq)),
-      mandatoryEquipment: (form.mandatoryEquipment || []).filter(eq => allowedEquipment.has(eq)),
+      requiredEquipment: sortEquipmentByCanonicalOrder((form.requiredEquipment || []).filter(eq => allowedEquipment.has(eq))),
+      mandatoryEquipment: sortEquipmentByCanonicalOrder((form.mandatoryEquipment || []).filter(eq => allowedEquipment.has(eq))),
       previousRooms: form.previousRooms || []
     };
 
@@ -271,7 +302,7 @@ export const SubjectEditModal = ({
             <div>
               <label style={{ ...labelStyle, display: 'block', marginBottom: '8px' }}>機材・設備</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {availableEquipment.map(eq => {
+                {orderedEquipment.map(eq => {
                   const isRequired = (form.requiredEquipment || []).includes(eq);
                   const isMandatory = (form.mandatoryEquipment || []).includes(eq);
                   const active = isRequired || isMandatory;
@@ -279,7 +310,7 @@ export const SubjectEditModal = ({
                     <button
                       key={eq}
                       type="button"
-                      onClick={() => toggleListValue('requiredEquipment', eq)}
+                      onClick={() => toggleEquipmentValue(eq)}
                       style={equipmentTagStyle(active, eq)}
                     >
                       {eq}

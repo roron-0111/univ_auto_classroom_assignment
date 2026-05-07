@@ -5,6 +5,7 @@ import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, Arr
 import { parseClassroomCSVStrict, exportToCSV } from './src/utils/csvParser';
 import { getEquipmentStyle, getImportantEquipmentStyle } from './src/types';
 import { ClassroomEditModal } from './src/components/ClassroomEditModal';
+import { sortEquipmentByCanonicalOrder } from './src/utils/equipmentVisibility';
 
 const MultiSelectFilter = ({
     options, selected, onChange, placeholder = '全て'
@@ -154,7 +155,9 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
 
     const allEquipmentOptions = useMemo(() => {
         const set = new Set<string>(EQUIPMENT_LIST);
-        return Array.from(set).filter(e => e !== '可動' && e !== '固定').map(e => ({ value: e, label: e }));
+        return sortEquipmentByCanonicalOrder(Array.from(set))
+            .filter(e => e !== '可動' && e !== '固定')
+            .map(e => ({ value: e, label: e }));
     }, []);
     const [newEquipment, setNewEquipment] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -236,7 +239,8 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
             ...classrooms,
             {
                 ...(editForm as Classroom),
-                campus: normalizeCampusLabel(editForm.campus || currentCampusLabel) || currentCampusLabel
+                campus: normalizeCampusLabel(editForm.campus || currentCampusLabel) || currentCampusLabel,
+                equipment: sortEquipmentByCanonicalOrder((editForm.equipment || []).filter(e => e !== '可動' && e !== '固定'))
             }
         ]);
         setIsAdding(false);
@@ -309,13 +313,13 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         if (!newEquipment.trim()) return;
         const currentEq = editForm.equipment || [];
         if (!currentEq.includes(newEquipment.trim())) {
-            setEditForm({ ...editForm, equipment: [...currentEq, newEquipment.trim()] });
+            setEditForm({ ...editForm, equipment: sortEquipmentByCanonicalOrder([...currentEq, newEquipment.trim()]) });
         }
         setNewEquipment('');
     };
 
     const removeEq = (name: string) => {
-        setEditForm({ ...editForm, equipment: (editForm.equipment || []).filter(e => e !== name) });
+        setEditForm({ ...editForm, equipment: sortEquipmentByCanonicalOrder((editForm.equipment || []).filter(e => e !== name)) });
     };
 
     return (
@@ -451,7 +455,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 </th>
                             </tr>
                             {/* 検索行 */}
-                            <tr style={{ background: '#fafafa', position: 'sticky', top: 44, zIndex: 9 }}>
+                            <tr style={{ background: '#fafafa', position: 'sticky', top: 44, zIndex: 12, boxShadow: '0 1px 0 #ddd' }}>
                                 <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }} />
                                 {crShow('id') && <td style={{ padding: '4px', border: '1px solid #ddd', background: '#fafafa' }}>
                                     <input style={{ width: '100%', padding: '3px', fontSize: '0.78rem', border: '1px solid #ddd', borderRadius: '3px', boxSizing: 'border-box' }}

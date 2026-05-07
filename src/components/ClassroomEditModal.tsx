@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { Check, X } from 'lucide-react';
 import type { Classroom } from '../types';
 import { BUILDINGS, EQUIPMENT_LIST, ROOM_TYPE_LABELS, getEquipmentStyle } from '../types';
+import { sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 
 interface Props {
   classroom: Classroom;
@@ -37,11 +38,11 @@ const tagButtonStyle = (active: boolean, eq: string): CSSProperties => {
     background: active ? style.bg : '#f3f4f6',
     color: active ? style.text : '#9ca3af',
     border: `1px solid ${active ? style.border : '#d1d5db'}`,
-    borderRadius: '999px',
+    borderRadius: '4px',
     padding: '6px 12px',
     cursor: 'pointer',
     fontSize: '0.85rem',
-    fontWeight: active ? 700 : 500,
+    fontWeight: active ? 700 : 600,
     whiteSpace: 'nowrap',
     transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease'
   };
@@ -52,7 +53,7 @@ const EQUIPMENT_FLAG_SET = new Set(['可動', '固定']);
 const buildFormFromClassroom = (classroom: Classroom): Classroom => ({
   ...classroom,
   campus: classroom.campus || '',
-  equipment: (classroom.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq)),
+  equipment: sortEquipmentByCanonicalOrder((classroom.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq))),
   isMovable: classroom.isMovable ?? (classroom.equipment || []).includes('可動')
 });
 
@@ -118,7 +119,7 @@ export const ClassroomEditModal = ({
       id: nextId,
       name: nextName,
       campus: classroom.campus || form.campus || '',
-      equipment: (form.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq)),
+      equipment: sortEquipmentByCanonicalOrder((form.equipment || []).filter(eq => !EQUIPMENT_FLAG_SET.has(eq))),
       isMovable: !!form.isMovable
     });
   };

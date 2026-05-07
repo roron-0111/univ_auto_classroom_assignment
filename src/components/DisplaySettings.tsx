@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DisplayConfig, SubjectMainDisplay } from '../types';
 import { getEquipmentStyle } from '../types';
+import { sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 import { X, Eye } from 'lucide-react';
 
 interface Props {
@@ -18,6 +19,7 @@ const subjectMainDisplayOptions: Array<{ id: SubjectMainDisplay; label: string }
 
 export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose }: Props) => {
     const [localConfig, setLocalConfig] = useState<DisplayConfig>({ ...config });
+    const orderedEquipment = sortEquipmentByCanonicalOrder(availableEquipment);
 
     const toggleEq = (eq: string) => {
         const current = localConfig.highlightedEquipment;
@@ -131,8 +133,8 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
                         </h4>
                         <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '10px' }}>選択した機材がグリッド左側の教室情報欄に表示されます。</p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {availableEquipment.length === 0 && <span style={{ color: '#999', fontSize: '0.9em' }}>表示できる機材がありません</span>}
-                            {availableEquipment.map(eq => {
+                            {orderedEquipment.length === 0 && <span style={{ color: '#999', fontSize: '0.9em' }}>表示できる機材がありません</span>}
+                            {orderedEquipment.map(eq => {
                                 const style = getEquipmentStyle(eq);
                                 const isSelected = localConfig.highlightedEquipment.includes(eq);
                                 return (

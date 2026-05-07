@@ -6,21 +6,35 @@ export const SUBJECT_EQUIPMENT_CHOICES = EQUIPMENT_LIST.filter(eq => !HIDDEN_EQU
 
 export const isHiddenEquipment = (name: string) => HIDDEN_EQUIPMENT.has(normalizeEquipmentName(name));
 
+export const sortEquipmentByCanonicalOrder = (items: string[] = []) => {
+  const normalized = items
+    .map(normalizeEquipmentName)
+    .filter(item => item && !isHiddenEquipment(item));
+
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  EQUIPMENT_LIST.forEach(eq => {
+    if (normalized.includes(eq) && !seen.has(eq)) {
+      ordered.push(eq);
+      seen.add(eq);
+    }
+  });
+
+  normalized.forEach(eq => {
+    if (!seen.has(eq)) {
+      ordered.push(eq);
+      seen.add(eq);
+    }
+  });
+
+  return ordered;
+};
+
 export const sanitizeSubjectEquipmentList = (items: unknown): string[] => {
   if (!Array.isArray(items)) return [];
-  const seen = new Set<string>();
-  return items
-    .filter((item): item is string => typeof item === 'string')
-    .map(normalizeEquipmentName)
-    .filter(item => !isHiddenEquipment(item))
-    .filter(item => {
-      if (seen.has(item)) return false;
-      seen.add(item);
-      return true;
-    });
+  return sortEquipmentByCanonicalOrder(items.filter((item): item is string => typeof item === 'string'));
 };
 
 export const filterVisibleRoomEquipment = (items: string[] = []) =>
-  items
-    .map(normalizeEquipmentName)
-    .filter(item => !isHiddenEquipment(item));
+  sortEquipmentByCanonicalOrder(items);

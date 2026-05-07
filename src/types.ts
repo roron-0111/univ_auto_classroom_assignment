@@ -145,6 +145,19 @@ export type Department = typeof DEPARTMENTS[number];
 export const BUILDINGS = ['フォーサイト', '3号館', '7号館', '8号館', 'SCC'] as const;
 export type Building = typeof BUILDINGS[number];
 
+export const sortBuildingsByCanonicalOrder = (items: string[] = []) => {
+    const normalized = [...new Set(items.filter(item => typeof item === 'string' && item.trim()))];
+    const order = [...BUILDINGS];
+    return [...normalized].sort((a, b) => {
+        const indexA = order.indexOf(a as Building);
+        const indexB = order.indexOf(b as Building);
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b, 'ja');
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+    });
+};
+
 export type Campus = {
     id: string;
     name: string;
@@ -230,7 +243,8 @@ const PROJECTOR_EQUIPMENT = ['PJ(中)', 'PJ(横)'] as const;
 const isProjectorEquipment = (name: string) => PROJECTOR_EQUIPMENT.includes(name as typeof PROJECTOR_EQUIPMENT[number]);
 
 export const normalizeRequiredEquipmentName = (name: string) => {
-    if (name === 'PJ' || isProjectorEquipment(name)) return 'PJ';
+    if (name === 'PJ') return 'PJ(中)';
+    if (isProjectorEquipment(name)) return name;
     return name;
 };
 
@@ -247,6 +261,7 @@ export const getEquipmentStyle = (name: string) => {
 };
 
 const IMPORTANT_EQUIPMENT_ALIASES: Record<string, string> = {
+    PJ: 'PJ(中)',
     可動: '可動',
     移動: '可動',
     固定: '固定',

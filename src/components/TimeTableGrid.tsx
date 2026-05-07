@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Classroom, Period, Allocation, Subject, DayOfWeek, Term, DisplayConfig } from '../types';
-import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, EQUIPMENT_LIST, matchesEquipmentRequirement } from '../types';
-import { isHiddenEquipment } from '../utils/equipmentVisibility';
+import { ROOM_TYPE_LABELS, getEquipmentStyle, getImportantEquipmentStyle, matchesEquipmentRequirement } from '../types';
+import { isHiddenEquipment, sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 import { checkConstraints } from '../utils/validation';
 import { AlertTriangle } from 'lucide-react';
 
@@ -90,12 +90,10 @@ export const TimeTableGrid = ({
     const showViolationIcon = displayConfig.showViolationAlerts && violations.length > 0;
     const violationTitle = violations.map(v => v.message).join(' / ');
 
-    const allEqSet = new Set([...(subject.mandatoryEquipment || []), ...(subject.requiredEquipment || [])]);
-    allEqSet.delete('可動');
-    const sortedEq = [
-      ...EQUIPMENT_LIST.filter(e => allEqSet.has(e)),
-      ...Array.from(allEqSet).filter(e => !EQUIPMENT_LIST.includes(e))
-    ];
+    const sortedEq = sortEquipmentByCanonicalOrder([
+      ...(subject.mandatoryEquipment || []),
+      ...(subject.requiredEquipment || [])
+    ]).filter(eq => eq !== '可動');
 
     return (
       <div

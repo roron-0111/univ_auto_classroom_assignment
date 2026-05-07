@@ -7,7 +7,7 @@ import { BookOpen, Plus, Edit2, Trash2, X, Upload, Download, Search } from 'luci
 import { exportToCSV } from '../utils/csvParser';
 import { SubjectEditModal } from './SubjectEditModal';
 import { normalizeRequiredEquipmentName } from '../types';
-import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment } from '../utils/equipmentVisibility';
+import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment, sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 import type { SubjectTaxonomy } from '../utils/subjectTaxonomy';
 import { SubjectTaxonomyModal } from './SubjectTaxonomyModal';
 
@@ -21,12 +21,13 @@ function equipValue(
     const man = (mandatory ?? []).map(normalizeRequiredEquipmentName);
     const pref = (preferred ?? []).map(normalizeRequiredEquipmentName);
     const normalizedEq = normalizeRequiredEquipmentName(eq);
-    const manHasProjector = man.some(item => item === 'PJ');
-    const prefHasProjector = pref.some(item => item === 'PJ');
+    const manHasProjector = man.some(item => item.startsWith('PJ'));
+    const prefHasProjector = pref.some(item => item.startsWith('PJ'));
     if (requiresMovable && normalizedEq === '可動') return '◎';
-    if (normalizedEq === 'PJ') {
-        if (requiresProjector || manHasProjector) return '◎';
-        if (prefHasProjector) return '○';
+    if (normalizedEq.startsWith('PJ')) {
+        if (man.includes(normalizedEq)) return '◎';
+        if (pref.includes(normalizedEq)) return '○';
+        if (requiresProjector && normalizedEq === 'PJ(中)' && !manHasProjector && !prefHasProjector) return '◎';
     }
     if (man.includes(normalizedEq)) return '◎';
     if (pref.includes(normalizedEq)) return '○';
@@ -154,7 +155,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                         if (t === '一般') return 'normal';
                         return t ? (t as Subject['preferredRoomType']) : undefined;
                     })(),
-                    requiresProjector: SUBJECT_EQUIPMENT_CHOICES.some(eq => normalizeRequiredEquipmentName(eq) === 'PJ' && row[eq] === '◎') || row.RequiresProjector === 'true' || row.RequiresProjector === '1',
+                    requiresProjector: SUBJECT_EQUIPMENT_CHOICES.some(eq => eq.startsWith('PJ') && row[eq] === '◎') || row.RequiresProjector === 'true' || row.RequiresProjector === '1',
                     requiresMovable: SUBJECT_EQUIPMENT_CHOICES.some(eq => normalizeRequiredEquipmentName(eq) === '可動' && row[eq] === '◎') || row.RequiresMovable === 'true' || row.RequiresMovable === '1',
                     priority: parseInt(row['優先度'] || row.Priority, 10) || 1,
                     isContinuous: row.IsContinuous === 'true' || row.IsContinuous === '1',
@@ -511,7 +512,7 @@ export const SubjectManager = ({
     const availableEquipment = useMemo(() => {
         const set = new Set<string>(SUBJECT_EQUIPMENT_CHOICES);
         classrooms.forEach(c => filterVisibleRoomEquipment(c.equipment).forEach(e => set.add(e)));
-        return Array.from(set);
+        return sortEquipmentByCanonicalOrder(Array.from(set));
     }, [classrooms]);
     const facultyOptions = subjectTaxonomy.faculties;
     const departmentOptions = subjectTaxonomy.departments;
@@ -624,7 +625,13 @@ export const SubjectManager = ({
             // テキスト系（配列など）
             if (filters.campus && !checkText(s.campus || '', filters.campus)) return false;
             if (filters.previousRooms && !checkText(s.previousRooms?.join(' ') || '', filters.previousRooms)) return false;
-            if (filters.requiredEquipment && !checkText(s.requiredEquipment?.join(' ') || '', filters.requiredEquipment)) return false;
+            if (filters.requiredEquipment) {
+                const equipmentText = sortEquipmentByCanonicalOrder([
+                    ...(s.mandatoryEquipment || []),
+                    ...(s.requiredEquipment || [])
+                ]).join(' ');
+                if (!checkText(equipmentText, filters.requiredEquipment)) return false;
+            }
 
             return true;
         });
@@ -863,7 +870,7 @@ export const SubjectManager = ({
                                             <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
                                                 <div style={{ marginBottom: '4px' }}>本ページの赤字が必須項目</div>
-                                                <div style={{ marginBottom: '4px' }}>機材･設備：◎=必須 ○=希望</div>
+                                                <div style={{ marginBottom: '4px' }}>機材･設備：色付きタグで必須・希望を表示</div>
                                                 <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
                                             </div>
@@ -1062,34 +1069,47 @@ export const SubjectManager = ({
                                         {smShow('preferredRoomType') && <td style={{ padding: '10px', border: '1px solid #ddd' }}>{subject.preferredRoomType === 'normal' ? '一般' : subject.preferredRoomType === 'pc' ? 'PC' : subject.preferredRoomType === 'seminar' ? 'ゼミ' : '-'}</td>}
                                         {smShow('requiredEquipment') && <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '0.85em' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                                {subject.requiredEquipment?.filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)).map(eq => {
-                                                    const style = getEquipmentStyle(eq);
+                                                {(() => {
+                                                    const displayEquipment = sortEquipmentByCanonicalOrder([
+                                                        ...(subject.mandatoryEquipment || []),
+                                                        ...(subject.requiredEquipment || [])
+                                                    ]).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq) && eq !== '可動');
+                                                    const showMovable = subject.requiresMovable
+                                                        || (subject.mandatoryEquipment || []).includes('可動')
+                                                        || (subject.requiredEquipment || []).includes('可動');
                                                     return (
-                                                        <span key={eq} style={{
-                                                            background: style.bg,
-                                                            color: style.text,
-                                                            border: `1px solid ${style.border}`,
-                                                            padding: '2px 8px',
-                                                            borderRadius: '999px',
-                                                            fontSize: '0.8em',
-                                                            fontWeight: 600,
-                                                            whiteSpace: 'nowrap'
-                                                        }}>{eq}</span>
-                                                    );
-                                                })}
-                                                {subject.requiresMovable && (() => {
-                                                    const style = getEquipmentStyle('可動');
-                                                    return (
-                                                        <span style={{
-                                                            background: style.bg,
-                                                            color: style.text,
-                                                            border: `1px solid ${style.border}`,
-                                                            padding: '2px 8px',
-                                                            borderRadius: '999px',
-                                                            fontSize: '0.8em',
-                                                            fontWeight: 600,
-                                                            whiteSpace: 'nowrap'
-                                                        }}>可動</span>
+                                                        <>
+                                                            {displayEquipment.map(eq => {
+                                                                const style = getEquipmentStyle(eq);
+                                                                return (
+                                                                    <span key={eq} style={{
+                                                                        background: style.bg,
+                                                                        color: style.text,
+                                                                        border: `1px solid ${style.border}`,
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '4px',
+                                                                        fontSize: '0.8em',
+                                                                        fontWeight: 600,
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}>{eq}</span>
+                                                                );
+                                                            })}
+                                                            {showMovable && (() => {
+                                                                const style = getEquipmentStyle('可動');
+                                                                return (
+                                                                    <span style={{
+                                                                        background: style.bg,
+                                                                        color: style.text,
+                                                                        border: `1px solid ${style.border}`,
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '4px',
+                                                                        fontSize: '0.8em',
+                                                                        fontWeight: 600,
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}>可動</span>
+                                                                );
+                                                            })()}
+                                                        </>
                                                     );
                                                 })()}
                                             </div>

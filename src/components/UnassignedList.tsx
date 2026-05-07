@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Allocation, DayOfWeek, Subject, Term, UnassignedReason } from '../types';
-import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, EQUIPMENT_LIST, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
+import { DAY_LABELS, getEquipmentStyle, getImportantEquipmentStyle, ROOM_TYPE_LABELS, getTermLabel, getDayLabel, getPeriodLabel } from '../types';
+import { sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 
 export type UnassignedListItem = Subject & {
   _realId?: string;
@@ -511,14 +512,10 @@ export const UnassignedList = ({
                   </span>
                 )}
                 {(() => {
-                  const allEqSet = new Set([
+                  const sortedEq = sortEquipmentByCanonicalOrder([
                     ...(subject.mandatoryEquipment || []),
                     ...(subject.requiredEquipment || [])
-                  ]);
-                  const sortedEq = [
-                    ...EQUIPMENT_LIST.filter(e => allEqSet.has(e)),
-                    ...Array.from(allEqSet).filter(e => !EQUIPMENT_LIST.includes(e))
-                  ];
+                  ]).filter(eq => eq !== '可動');
                   return sortedEq.map(eq => {
                     const style = getEquipmentStyle(eq);
                     const isMandatory = (subject.mandatoryEquipment || []).includes(eq);

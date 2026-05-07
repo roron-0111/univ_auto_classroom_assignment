@@ -1,7 +1,7 @@
 ﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './App.css';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
-import { BUILDINGS, DAY_LABELS } from './types';
+import { BUILDINGS, DAY_LABELS, sortBuildingsByCanonicalOrder } from './types';
 import { mockClassrooms, mockSubjects } from './data/mockData';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
@@ -20,7 +20,12 @@ import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, m
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
-import { sanitizeSubjectEquipmentList } from './utils/equipmentVisibility';
+import {
+  SUBJECT_EQUIPMENT_CHOICES,
+  filterVisibleRoomEquipment,
+  sanitizeSubjectEquipmentList,
+  sortEquipmentByCanonicalOrder
+} from './utils/equipmentVisibility';
 import { getDefaultSubjectTaxonomy, normalizeSubjectTaxonomy, type SubjectTaxonomy } from './utils/subjectTaxonomy';
 import { exportToCSV } from './utils/csvParser';
 
@@ -714,17 +719,7 @@ function App() {
 
   const buildings = useMemo(() => {
     const list = Array.from(new Set(classrooms.map(c => c.building)));
-    // BUILDINGS 定数の順序でソート。含まれないものは末尾へ。
-    const sortedList = [...list].sort((a, b) => {
-      const order = ['フォーサイト', '3号館', '7号館', '8号館', 'SCC'];
-      const indexA = order.indexOf(a);
-      const indexB = order.indexOf(b);
-      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
-    });
-    return ['all', ...sortedList];
+    return ['all', ...sortBuildingsByCanonicalOrder(list)];
   }, [classrooms]);
 
   const allEquipment = useMemo(() => {
@@ -732,7 +727,15 @@ function App() {
     classrooms.forEach(c => {
       c.equipment.forEach(e => set.add(e));
     });
-    return Array.from(set);
+    return sortEquipmentByCanonicalOrder(Array.from(set));
+  }, [classrooms]);
+
+  const subjectEquipmentOptions = useMemo(() => {
+    const set = new Set<string>(SUBJECT_EQUIPMENT_CHOICES);
+    classrooms.forEach(c => {
+      filterVisibleRoomEquipment(c.equipment).forEach(e => set.add(e));
+    });
+    return sortEquipmentByCanonicalOrder(Array.from(set));
   }, [classrooms]);
 
   const hasInitializedEquipment = useRef(false);
@@ -1727,7 +1730,7 @@ function App() {
           editingSubject && (
             <SubjectEditModal
               subject={editingSubject}
-              availableEquipment={allEquipment}
+              availableEquipment={subjectEquipmentOptions}
               currentCampusLabel={currentCampusLabel}
               facultyOptions={subjectTaxonomy.faculties}
               departmentOptions={subjectTaxonomy.departments}
