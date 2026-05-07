@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { db, auth } from './firebase';
+import { mergeAllocationsBySubjectBaseline } from './cloudAllocationMerge';
 import { stableSerialize } from './cloudDiff';
 import {
   collection,
@@ -101,46 +102,9 @@ const createSnapshotRevision = () =>
     ? crypto.randomUUID()
     : `revision-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const toStableMap = <T,>(items: T[], getKey: (item: T) => string) =>
-  new Map(items.map(item => [getKey(item), item] as const));
-
 const mergeByBaseline = <T,>(baseline: T | null | undefined, localValue: T, cloudValue: T): T => {
   if (baseline === null || baseline === undefined) return localValue;
   return stableSerialize(localValue) === stableSerialize(baseline) ? cloudValue : localValue;
-};
-
-const mergeAllocationsByBaseline = (
-  baselineAllocations: CloudData['allocations'],
-  localAllocations: CloudData['allocations'],
-  cloudAllocations: CloudData['allocations']
-) => {
-  const getKey = (item: CloudData['allocations'][number]) => `${item.subjectId}__${item.classroomId}`;
-  const baselineMap = toStableMap(baselineAllocations, getKey);
-  const localMap = toStableMap(localAllocations, getKey);
-  const mergedMap = toStableMap(cloudAllocations, getKey);
-
-  const keys = new Set([...baselineMap.keys(), ...localMap.keys()]);
-
-  keys.forEach(key => {
-    const baselineItem = baselineMap.get(key);
-    const localItem = localMap.get(key);
-
-    if (!baselineItem && localItem) {
-      mergedMap.set(key, localItem);
-      return;
-    }
-
-    if (baselineItem && !localItem) {
-      mergedMap.delete(key);
-      return;
-    }
-
-    if (baselineItem && localItem && stableSerialize(baselineItem) !== stableSerialize(localItem)) {
-      mergedMap.set(key, localItem);
-    }
-  });
-
-  return [...mergedMap.values()];
 };
 
 const replaceChunkedCollection = async <T,>(uid: string, name: string, items: T[], revision: string) => {
@@ -389,7 +353,7 @@ export const useCloudSync = (user: User | null) => {
           currentCloud?.classrooms ?? data.classrooms
         ),
         allocations: currentCloud
-          ? mergeAllocationsByBaseline(
+          ? mergeAllocationsBySubjectBaseline(
               baselineCloud?.allocations ?? currentCloud.allocations,
               data.allocations,
               currentCloud.allocations
