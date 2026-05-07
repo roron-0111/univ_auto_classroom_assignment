@@ -126,22 +126,33 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
             {CAMPUSES.map(campus => (
+              (() => {
+                const isAvailable = campus.id === 'hakkei';
+                return (
               <button
                 key={campus.id}
-                disabled={isConnecting}
-                onClick={() => handleCampusSelect(campus.id)}
+                disabled={isConnecting || !isAvailable}
+                onClick={() => {
+                  if (!isAvailable) return;
+                  handleCampusSelect(campus.id);
+                }}
                 className="primary-button"
                 style={{
-                  background: '#fff',
-                  color: '#333',
-                  border: '2px solid #eee',
+                  background: isAvailable ? '#fff' : '#f3f4f6',
+                  color: isAvailable ? '#333' : '#9ca3af',
+                  border: `2px solid ${isAvailable ? '#eee' : '#e5e7eb'}`,
                   boxShadow: 'none',
                   height: '64px',
-                  fontSize: '1.1rem'
+                  fontSize: '1.1rem',
+                  cursor: isAvailable ? 'pointer' : 'not-allowed',
+                  opacity: isAvailable ? 1 : 0.75
                 }}
+                aria-disabled={!isAvailable}
               >
                 {campus.name}
               </button>
+                );
+              })()
             ))}
           </div>
 

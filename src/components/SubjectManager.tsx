@@ -772,6 +772,28 @@ export const SubjectManager = ({
                     alert(`教室IDが現在の教室マスタに存在しないレコードがあります: ${invalidRoomRows.slice(0, 10).join('、')}${invalidRoomRows.length > 10 ? '…' : ''}`);
                     return;
                 }
+                const requiredRoomCountByCode = new Map<string, number>();
+                data.subjects.forEach(subject => {
+                    const code = (subject.code || '').trim();
+                    if (!code) return;
+                    const count = subject.requiredRoomCount || 1;
+                    requiredRoomCountByCode.set(code, Math.max(requiredRoomCountByCode.get(code) || 0, count));
+                });
+                const classroomRowsByCode = new Map<string, string[]>();
+                data.rows.forEach((row, index) => {
+                    const code = (row.subject.code || '').trim();
+                    if (!code || !row.classroomId) return;
+                    const list = classroomRowsByCode.get(code) ?? [];
+                    list.push(`${index + 2}行目(${row.classroomId})`);
+                    classroomRowsByCode.set(code, list);
+                });
+                const roomOverflowIssues = Array.from(classroomRowsByCode.entries())
+                    .filter(([code, rows]) => rows.length > (requiredRoomCountByCode.get(code) || 1))
+                    .map(([code, rows]) => `${code}(${rows.length}行 / 必要教室数${requiredRoomCountByCode.get(code) || 1})`);
+                if (roomOverflowIssues.length > 0) {
+                    alert(`必要教室数を超える配当行があります: ${roomOverflowIssues.slice(0, 10).join('、')}${roomOverflowIssues.length > 10 ? '…' : ''}`);
+                    return;
+                }
                 const sanitized = data.subjects.map(subject => ({
                     ...subject,
                     campus: campusLabel,
@@ -868,12 +890,15 @@ export const SubjectManager = ({
                                     <div ref={csvHintRef} style={{ position: 'relative' }}>
                                         <button onClick={() => setShowCsvHint(s => !s)} style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#888', border: '1px solid #bbb', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none', flexShrink: 0, background: showCsvHint ? '#f0f4ff' : '#fff', padding: 0 }}>?</button>
                                         {showCsvHint && (
-                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '300px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 500, background: '#fff', border: '1px solid #ccc', borderRadius: '6px', padding: '10px 14px', width: '420px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', lineHeight: '1.6', marginTop: '4px' }}>
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
-                                                <div style={{ marginBottom: '4px' }}>本ページの赤字が必須項目</div>
-                                                <div style={{ marginBottom: '4px' }}>機材･設備：色付きタグで必須・希望を表示</div>
-                                                <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
+                                                <div style={{ marginBottom: '4px' }}>左から「教室ID」までの列を受け入れます</div>
+                                                <div style={{ marginBottom: '4px' }}>必須は本ページの赤字項目です</div>
+                                                <div style={{ marginBottom: '4px' }}>機材・設備は ◎=必須、○=希望 です</div>
+                                                <div style={{ marginBottom: '4px' }}>教室IDがある行は配当を復元できます</div>
+                                                <div style={{ marginBottom: '4px' }}>教室名 / 建物 / 教室定員 / 教室試験定員 / 教室タイプ / 教室設備 があっても再インポート可能です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                                <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                             </div>
                                         )}
                                     </div>
