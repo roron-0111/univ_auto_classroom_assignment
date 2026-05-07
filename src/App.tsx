@@ -19,6 +19,7 @@ import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, m
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
 import { buildApprovalKey } from './utils/approvalKey';
+import { stableSerialize } from './utils/cloudDiff';
 import {
   SUBJECT_EQUIPMENT_CHOICES,
   filterVisibleRoomEquipment,
@@ -32,6 +33,7 @@ import { exportToCSV } from './utils/csvParser';
 import { CloudConnectionModal } from './components/CloudConnectionModal';
 import { useAuth } from './utils/useAuth';
 import { useCloudSync } from './utils/useCloudSync';
+import { auth } from './utils/firebase';
 import type { CloudData } from './types_cloud';
 import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocation } from './utils/unassignedStreak';
 import { buildCloudDiffCsv as buildCloudDiffCsvRows, compareCloudSnapshots, type CloudWriteWarningSummary } from './utils/cloudDiff';
@@ -193,19 +195,6 @@ const readScopedStorage = (campusLabel: string, key: string) => {
 
 const writeScopedStorage = (campusLabel: string, key: string, value: string) => {
   localStorage.setItem(getScopedStorageKey(campusLabel, key), value);
-};
-
-const hasScopedLocalCampusData = (campusLabel: string) => {
-  const keys = [
-    'classrooms',
-    'subjects',
-    'allocations',
-    'allocationSettings',
-    'equipmentSettings',
-    'displayConfig',
-    'subjectTaxonomy'
-  ];
-  return keys.some(key => readScopedStorage(campusLabel, key) !== null);
 };
 
 const parseJsonOrNull = <T,>(raw: string | null): T | null => {
@@ -400,6 +389,8 @@ function App() {
 
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const localSnapshotBaselineRef = useRef<CloudData | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -407,7 +398,7 @@ function App() {
     }
   }, [authLoading, user]);
 
-  const applyCampusState = useCallback((campusLabel: string) => {
+  const applyCampusState = useCallback((campusLabel: string): CloudData => {
     const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
     const localCampusState = loadCampusLocalState(normalizedCampus);
     activeCampusRef.current = normalizedCampus;
@@ -419,6 +410,14 @@ function App() {
     setEquipmentSettings(localCampusState.equipmentSettings);
     setDisplayConfig(localCampusState.displayConfig);
     setSubjectTaxonomy(localCampusState.subjectTaxonomy);
+    localSnapshotBaselineRef.current = {
+      classrooms: localCampusState.classrooms,
+      subjects: localCampusState.subjects,
+      allocations: localCampusState.allocations,
+      settings: localCampusState.allocationSettings,
+      equipmentSettings: localCampusState.equipmentSettings,
+      subjectTaxonomy: localCampusState.subjectTaxonomy
+    };
     markLocalBaseline({
       classrooms: localCampusState.classrooms,
       subjects: localCampusState.subjects,
@@ -427,6 +426,14 @@ function App() {
       equipmentSettings: localCampusState.equipmentSettings,
       subjectTaxonomy: localCampusState.subjectTaxonomy
     });
+    return {
+      classrooms: localCampusState.classrooms,
+      subjects: localCampusState.subjects,
+      allocations: localCampusState.allocations,
+      settings: localCampusState.allocationSettings,
+      equipmentSettings: localCampusState.equipmentSettings,
+      subjectTaxonomy: localCampusState.subjectTaxonomy
+    };
   }, [markLocalBaseline]);
 
   useEffect(() => {
@@ -557,6 +564,12 @@ function App() {
     subjectTaxonomy
   }), [subjects, classrooms, allocations, allocationSettings, equipmentSettings, subjectTaxonomy]);
 
+  const isLocalSnapshotDirty = useCallback((snapshot: CloudData) => {
+    const baseline = localSnapshotBaselineRef.current;
+    if (!baseline) return false;
+    return stableSerialize(snapshot) !== stableSerialize(baseline);
+  }, []);
+
   const applyCloudData = useCallback((cloudData: CloudData, campusLabel: string) => {
     setClassrooms(normalizeClassrooms(cloudData.classrooms, campusLabel));
     setSubjects(normalizeSubjectsForCampus(cloudData.subjects, campusLabel));
@@ -564,6 +577,7 @@ function App() {
     setAllocationSettings(migrateAllocationRules(cloudData.settings));
     setEquipmentSettings(normalizeEquipmentSettings(cloudData.equipmentSettings));
     setSubjectTaxonomy(normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel));
+    localSnapshotBaselineRef.current = cloudData;
     markLocalBaseline(cloudData);
     setLastUnassigned([]);
     setAutoAllocationSummary(null);
@@ -609,8 +623,10 @@ function App() {
           setTimeout(resolve, 0);
         }
       });
-      const wrote = await saveData(buildCloudSnapshot());
+      const currentSnapshot = buildCloudSnapshot();
+      const wrote = await saveData(currentSnapshot);
       alert(wrote ? 'Cloud write complete.' : '変更はありませんでした。');
+      localSnapshotBaselineRef.current = currentSnapshot;
     } catch (error) {
       console.error(error);
       alert(getCloudWriteErrorMessage(error));
@@ -631,8 +647,9 @@ function App() {
       setIsCloudLoading(true);
       const cloudData = await refreshData();
       if (cloudData) {
-        const summary = compareCloudSnapshots(buildCloudSnapshot(), cloudData);
-        if (summary.hasDiff) {
+        const currentSnapshot = buildCloudSnapshot();
+        if (isLocalSnapshotDirty(currentSnapshot)) {
+          const summary = compareCloudSnapshots(currentSnapshot, cloudData);
           setCloudReadWarningSummary(summary);
           setPendingCloudReadData(cloudData);
           setShowCloudReadWarningModal(true);
@@ -649,7 +666,7 @@ function App() {
     } finally {
       setIsCloudLoading(false);
     }
-  }, [user, refreshData, applyCloudData, currentCampusLabel, buildCloudSnapshot]);
+  }, [user, refreshData, applyCloudData, currentCampusLabel, buildCloudSnapshot, isLocalSnapshotDirty]);
 
   const handleCloudReadWarningConfirm = useCallback(() => {
     if (!pendingCloudReadData) return;
@@ -674,20 +691,36 @@ function App() {
 
 
   const handleCloudConnect = async (email: string) => {
+    const campusLabel = getCampusLabelFromEmail(email);
     try {
       setIsCloudLoading(true);
+      setIsCloudSyncing(true);
       await loginByCampus(email);
-      const campusLabel = getCampusLabelFromEmail(email);
       applyCampusState(campusLabel);
-
-      const cloudData = await refreshData();
-      if (cloudData && !hasScopedLocalCampusData(campusLabel)) {
-        applyCloudData(cloudData, campusLabel);
-        alert('Cloud data loaded.');
-      }
       setShowCloudModal(false);
+      for (let i = 0; i < 40 && !auth.currentUser; i += 1) {
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+      }
+      await new Promise<void>(resolve => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => resolve());
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+      const cloudData = await refreshData();
+      if (cloudData) {
+        const currentSnapshot = buildCloudSnapshot();
+        if (!isLocalSnapshotDirty(currentSnapshot)) {
+          applyCloudData(cloudData, campusLabel);
+        }
+      }
+    } catch (error) {
+      setIsCloudSyncing(false);
+      throw error;
     } finally {
       setIsCloudLoading(false);
+      setIsCloudSyncing(false);
     }
   };
 
@@ -1392,7 +1425,7 @@ function App() {
                   opacity: isCloudLoading ? 0.5 : 1,
                   fontSize: '0.9rem', fontWeight: '600'
                 }}
-                disabled={isCloudLoading}
+                disabled={isCloudLoading || isCloudSyncing}
                 title={"ローカルデータをクラウドへ書き込みます"}
               >
                 <CloudUpload size={16} />
@@ -1408,7 +1441,7 @@ function App() {
                   opacity: isCloudLoading ? 0.5 : 1,
                   fontSize: '0.9rem', fontWeight: '600'
                 }}
-                disabled={isCloudLoading}
+                disabled={isCloudLoading || isCloudSyncing}
                 title={"クラウドデータをローカルへ取得します"}
               >
                 <CloudDownload size={16} className={isCloudLoading ? 'animate-pulse' : ''} />
@@ -1855,6 +1888,40 @@ function App() {
               isConnecting={isCloudLoading}
               user={user}
             />
+          )
+        }
+
+        {
+          isCloudSyncing && (
+            <div
+              aria-live="polite"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 3000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(15, 23, 42, 0.18)',
+                backdropFilter: 'blur(1px)',
+                pointerEvents: 'auto'
+              }}
+            >
+              <div
+                style={{
+                  background: '#fff',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '18px',
+                  padding: '16px 22px',
+                  boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+                  fontSize: '0.95rem',
+                  fontWeight: 700
+                }}
+              >
+                クラウド同期中...
+              </div>
+            </div>
           )
         }
       </div>

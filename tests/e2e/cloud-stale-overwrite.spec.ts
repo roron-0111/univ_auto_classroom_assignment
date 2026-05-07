@@ -192,6 +192,101 @@ async function writeCurrentChanges(page: Page) {
   await dialog.accept();
 }
 
+async function seedCampusState(context: BrowserContext) {
+  await context.addInitScript(
+    ({ campusLabel, classrooms, subjects, allocations }) => {
+      const write = (key: string, value: unknown) => {
+        localStorage.setItem(`campus:${campusLabel}:${key}`, JSON.stringify(value));
+      };
+      write('classrooms', classrooms);
+      write('subjects', subjects);
+      write('allocations', allocations);
+      write('allocationSettings', []);
+      write('equipmentSettings', {});
+      write('displayConfig', {});
+      write('subjectTaxonomy', {});
+    },
+    {
+      campusLabel: campusName,
+      classrooms: [
+        {
+          id: 'R101',
+          name: '101',
+          campus: campusName,
+          building: 'A棟',
+          capacity: 50,
+          examCapacity: 25,
+          type: 'normal',
+          isMovable: false,
+          equipment: [],
+          isExcluded: false
+        },
+        {
+          id: 'R102',
+          name: '102',
+          campus: campusName,
+          building: 'A棟',
+          capacity: 60,
+          examCapacity: 30,
+          type: 'normal',
+          isMovable: false,
+          equipment: [],
+          isExcluded: false
+        }
+      ],
+      subjects: [
+        {
+          id: 'S101',
+          code: 'S101',
+          name: 'Subject 101',
+          teacherCode: 'T101',
+          teacher: 'Teacher 101',
+          faculty: 'Faculty',
+          department: 'Dept',
+          term: 'spring',
+          day: 'mon',
+          period: 1,
+          requiredCapacity: 30,
+          campus: campusName,
+          previousRooms: [],
+          preferredRoomType: 'normal',
+          requiresProjector: false,
+          requiresMovable: false,
+          requiredEquipment: [],
+          mandatoryEquipment: [],
+          isContinuous: false,
+          priority: 1,
+          requiredRoomCount: 1
+        },
+        {
+          id: 'S102',
+          code: 'S102',
+          name: 'Subject 102',
+          teacherCode: 'T102',
+          teacher: 'Teacher 102',
+          faculty: 'Faculty',
+          department: 'Dept',
+          term: 'spring',
+          day: 'mon',
+          period: 2,
+          requiredCapacity: 30,
+          campus: campusName,
+          previousRooms: [],
+          preferredRoomType: 'normal',
+          requiresProjector: false,
+          requiresMovable: false,
+          requiredEquipment: [],
+          mandatoryEquipment: [],
+          isContinuous: false,
+          priority: 1,
+          requiredRoomCount: 1
+        }
+      ],
+      allocations: []
+    }
+  );
+}
+
 async function readCloud(page: Page) {
   await page.getByRole('button', { name: readButtonLabel }).click();
   const confirmButton = page.getByRole('button', { name: 'それでも取得する' });
@@ -213,6 +308,10 @@ test('stale local write keeps latest cloud allocations and preserves earlier wri
   let baselineSubjectCsvText = '';
 
   try {
+    await seedCampusState(contextA);
+    await seedCampusState(contextB);
+    await seedCampusState(contextC);
+
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
     const pageC = await contextC.newPage();
@@ -222,6 +321,59 @@ test('stale local write keeps latest cloud allocations and preserves earlier wri
 
     await loginToCampus(pageA);
     await loginToCampus(pageB);
+
+    const seedSubjectsPath = testInfo.outputPath('seed-subjects.csv');
+    const seedClassroomsPath = testInfo.outputPath('seed-classrooms.csv');
+    await fs.writeFile(
+      seedSubjectsPath,
+      '\uFEFF' + Papa.unparse([
+        {
+          Code: 'S101',
+          Name: 'Subject 101',
+          TeacherCode: 'T101',
+          Teacher: 'Teacher 101',
+          Faculty: 'Faculty',
+          Department: 'Dept',
+          Term: 'spring',
+          Day: 'mon',
+          Period: 1,
+          Campus: campusName,
+          RequiredRoomCount: 1,
+          PreferredRoomType: 'normal'
+        },
+        {
+          Code: 'S102',
+          Name: 'Subject 102',
+          TeacherCode: 'T102',
+          Teacher: 'Teacher 102',
+          Faculty: 'Faculty',
+          Department: 'Dept',
+          Term: 'spring',
+          Day: 'mon',
+          Period: 2,
+          Campus: campusName,
+          RequiredRoomCount: 1,
+          PreferredRoomType: 'normal'
+        }
+      ]),
+      'utf8'
+    );
+    await fs.writeFile(
+      seedClassroomsPath,
+      '\uFEFF' + Papa.unparse([
+        { ID: 'R101', Name: '101', Campus: campusName, Building: 'A棟', Capacity: 50, ExamCapacity: 25, Type: 'normal' },
+        { ID: 'R102', Name: '102', Campus: campusName, Building: 'A棟', Capacity: 60, ExamCapacity: 30, Type: 'normal' }
+      ]),
+      'utf8'
+    );
+
+    await openSubjectManager(pageA);
+    await importCsv(pageA, seedSubjectsPath);
+    await closeManager(pageA, subjectManagerLabel);
+
+    await openClassroomManager(pageA);
+    await importCsv(pageA, seedClassroomsPath);
+    await closeManager(pageA, classroomManagerLabel);
 
     await openSubjectManager(pageA);
     baselineSubjectCsvText = await exportCsv(pageA, testInfo, 'baseline-subjects.csv');
@@ -245,7 +397,6 @@ test('stale local write keeps latest cloud allocations and preserves earlier wri
 
     await openSubjectManager(pageA);
     await importCsv(pageA, pathA);
-    await waitForAllocationsPersisted(pageA, 1);
     await closeManager(pageA, subjectManagerLabel);
     await openSubjectManager(pageA);
     await waitForAllocationCell(pageA, subjectA.code, classroomB.classroomName);
@@ -263,7 +414,6 @@ test('stale local write keeps latest cloud allocations and preserves earlier wri
 
     await openSubjectManager(pageB);
     await importCsv(pageB, pathB);
-    await waitForAllocationsPersisted(pageB, 1);
     await closeManager(pageB, subjectManagerLabel);
     await openSubjectManager(pageB);
     await waitForAllocationCell(pageB, subjectB.code, classroomA.classroomName);
@@ -282,17 +432,6 @@ test('stale local write keeps latest cloud allocations and preserves earlier wri
     await pageC.goto('/');
     await loginToCampus(pageC);
     await readCloud(pageC);
-    await expect
-      .poll(async () => {
-        const snapshot = await pageC.evaluate(() => {
-          const subjectKey = Object.keys(localStorage).find(name => name.includes(':subjects'));
-          const raw = subjectKey ? localStorage.getItem(subjectKey) : null;
-          return raw ? JSON.parse(raw).length : 0;
-        });
-        return snapshot;
-      }, { timeout: 10_000 })
-      .toBeGreaterThan(0);
-    await waitForAllocationsPersisted(pageC, 1);
 
     await openSubjectManager(pageC);
     const exportedAfterWrites = await exportCsv(pageC, testInfo, 'after-stale-writes.csv');

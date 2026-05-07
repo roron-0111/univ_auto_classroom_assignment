@@ -87,6 +87,8 @@ export const SubjectEditModal = ({
     [availableEquipment]
   );
 
+  const periodOptions = useMemo(() => [1, 2, 3, 4, 5, 6, 7] as Period[], []);
+
   const allowedEquipment = useMemo(
     () => new Set<string>([...SUBJECT_EQUIPMENT_CHOICES, ...orderedEquipment]),
     [orderedEquipment]
@@ -262,10 +264,44 @@ export const SubjectEditModal = ({
                 ))}
               </select>
 
-              <label style={requiredLabelStyle}>講時</label>
-              <select value={form.period || ''} onChange={e => setForm({ ...form, period: Number(e.target.value) as Period })} style={inputStyle}>
+              <label style={requiredLabelStyle}>開始講時</label>
+              <select
+                value={form.period || ''}
+                onChange={e => {
+                  const nextPeriod = Number(e.target.value);
+                  setForm(prev => ({
+                    ...prev,
+                    period: (Number.isFinite(nextPeriod) && nextPeriod > 0 ? nextPeriod : prev.period) as Period,
+                    endPeriod: prev.endPeriod && prev.endPeriod < nextPeriod ? (nextPeriod as Period) : prev.endPeriod
+                  }));
+                }}
+                style={inputStyle}
+              >
                 <option value="">未定</option>
-                {[1, 2, 3, 4, 5, 6, 7].map(v => (
+                {periodOptions.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+
+              <label>終了講時</label>
+              <select
+                value={form.endPeriod || ''}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (!raw) {
+                    setForm({ ...form, endPeriod: undefined });
+                    return;
+                  }
+                  const nextEnd = Number(raw) as Period;
+                  setForm(prev => ({
+                    ...prev,
+                    endPeriod: nextEnd < prev.period ? prev.period : nextEnd
+                  }));
+                }}
+                style={inputStyle}
+              >
+                <option value="">なし</option>
+                {periodOptions.map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>

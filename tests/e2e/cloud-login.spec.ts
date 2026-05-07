@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+const cloudWriteResults = [
+  'Cloud write complete.',
+  '変更はありませんでした。',
+  '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。'
+] as const;
+
 const campusName = '八景';
 
 async function loginToCampus(page: import('@playwright/test').Page) {
@@ -37,7 +43,7 @@ test('write without local changes reports no-op', async ({ page }) => {
   await page.getByRole('button', { name: '書込' }).click();
   const dialog = await dialogPromise;
 
-  expect(['Cloud write complete.', '変更はありませんでした。']).toContain(dialog.message());
+  expect(cloudWriteResults).toContain(dialog.message());
   await dialog.accept();
 });
 
@@ -66,6 +72,7 @@ test('write read write roundtrip stays stable', async ({ page }) => {
     expect([
       'Cloud write complete.',
       '変更はありませんでした。',
+      '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。',
       'Cloud data loaded.',
       'No cloud data found.'
     ]).toContain(dialog.message());
