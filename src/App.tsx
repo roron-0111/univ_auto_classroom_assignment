@@ -1439,7 +1439,7 @@ function App() {
             <ListChecks size={16} /> {"配当ルール設定"}
           </button>
           <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#dc2626', color: '#fff', border: '1px solid #991b1b', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <RefreshCw size={16} /> {"クリア"}
+            <RefreshCw size={16} /> {"配当クリア"}
           </button>
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
           <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
