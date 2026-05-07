@@ -39,6 +39,14 @@ const createDiffCount = (): DiffCount => ({
   updated: 0
 });
 
+type AllocationLike = CloudData['allocations'][number];
+
+type AllocationDiffRow = {
+  operation: CloudDiffOperation;
+  localItem?: AllocationLike;
+  cloudItem?: AllocationLike;
+};
+
 export const stableSerialize = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map(item => stableSerialize(item)).join(',')}]`;
@@ -53,28 +61,64 @@ export const stableSerialize = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+const getAllocationSubjectMap = (items: AllocationLike[]) => {
+  const map = new Map<string, AllocationLike[]>();
+  items.forEach(item => {
+    const list = map.get(item.subjectId) ?? [];
+    list.push(item);
+    map.set(item.subjectId, list);
+  });
+  map.forEach(list => list.sort((a, b) => a.classroomId.localeCompare(b.classroomId, 'ja')));
+  return map;
+};
+
+const buildAllocationDiffRows = (localItems: AllocationLike[], cloudItems: AllocationLike[]): AllocationDiffRow[] => {
+  const localGroups = getAllocationSubjectMap(localItems);
+  const cloudGroups = getAllocationSubjectMap(cloudItems);
+  const subjectIds = [...new Set([...localGroups.keys(), ...cloudGroups.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
+  const rows: AllocationDiffRow[] = [];
+
+  subjectIds.forEach(subjectId => {
+    const localGroup = localGroups.get(subjectId) ?? [];
+    const cloudGroup = cloudGroups.get(subjectId) ?? [];
+    const cloudByClassroom = new Map(cloudGroup.map(item => [item.classroomId, item] as const));
+    const localByClassroom = new Map(localGroup.map(item => [item.classroomId, item] as const));
+
+    const localOnly = localGroup.filter(item => !cloudByClassroom.has(item.classroomId));
+    const cloudOnly = cloudGroup.filter(item => !localByClassroom.has(item.classroomId));
+    const sharedCount = Math.min(localOnly.length, cloudOnly.length);
+
+    for (let index = 0; index < sharedCount; index += 1) {
+      rows.push({
+        operation: 'updated',
+        localItem: localOnly[index],
+        cloudItem: cloudOnly[index]
+      });
+    }
+
+    for (let index = sharedCount; index < localOnly.length; index += 1) {
+      rows.push({
+        operation: 'removed',
+        localItem: localOnly[index]
+      });
+    }
+
+    for (let index = sharedCount; index < cloudOnly.length; index += 1) {
+      rows.push({
+        operation: 'added',
+        cloudItem: cloudOnly[index]
+      });
+    }
+  });
+
+  return rows;
+};
+
 const compareAllocations = (localItems: CloudData['allocations'], cloudItems: CloudData['allocations']): DiffCount => {
-  const localMap = new Map(localItems.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
-  const cloudMap = new Map(cloudItems.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
   const diff = createDiffCount();
-
-  cloudMap.forEach((cloudItem, key) => {
-    if (!localMap.has(key)) {
-      diff.added += 1;
-      return;
-    }
-    const localItem = localMap.get(key);
-    if (stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-      diff.updated += 1;
-    }
+  buildAllocationDiffRows(localItems, cloudItems).forEach(row => {
+    diff[row.operation] += 1;
   });
-
-  localMap.forEach((_, key) => {
-    if (!cloudMap.has(key)) {
-      diff.removed += 1;
-    }
-  });
-
   return diff;
 };
 
@@ -107,15 +151,6 @@ const getSubjectLabel = (item: SubjectLike) => {
 
 const getClassroomLabel = (item: ClassroomLike) => getString(item.name) || getString(item.id);
 
-const getPresenceState = (operation: CloudDiffOperation, localExists: boolean, cloudExists: boolean) => {
-  if (operation === 'added') return { local: 'なし', cloud: 'なし→あり' };
-  if (operation === 'removed') return { local: 'あり→なし', cloud: 'あり' };
-  return {
-    local: localExists ? 'あり→あり' : 'なし',
-    cloud: cloudExists ? 'あり→あり' : 'なし'
-  };
-};
-
 export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData): CloudWriteWarningSummary => {
   const summary: CloudWriteWarningSummary = {
     allocations: compareAllocations(localData.allocations, cloudData.allocations),
@@ -126,7 +161,6 @@ export const compareCloudSnapshots = (localData: CloudData, cloudData: CloudData
 };
 
 export const buildCloudDiffEntries = (localData: CloudData, cloudData: CloudData): CloudDiffEntry[] => {
-  const entries: CloudDiffEntry[] = [];
   const localSubjectMap = new Map(localData.subjects.map(item => [item.id, item] as const));
   const cloudSubjectMap = new Map(cloudData.subjects.map(item => [item.id, item] as const));
   const localClassroomMap = new Map(localData.classrooms.map(item => [item.id, item] as const));
@@ -134,54 +168,34 @@ export const buildCloudDiffEntries = (localData: CloudData, cloudData: CloudData
 
   const mergedSubjectMap = new Map([...localSubjectMap, ...cloudSubjectMap]);
   const mergedClassroomMap = new Map([...localClassroomMap, ...cloudClassroomMap]);
+  return buildAllocationDiffRows(localData.allocations, cloudData.allocations).map(row => {
+    const sourceItem = row.localItem || row.cloudItem;
+    const subject = sourceItem ? mergedSubjectMap.get(sourceItem.subjectId) : undefined;
+    const localClassroom = row.localItem ? mergedClassroomMap.get(row.localItem.classroomId) : undefined;
+    const cloudClassroom = row.cloudItem ? mergedClassroomMap.get(row.cloudItem.classroomId) : undefined;
+    const subjectLabel = subject ? getSubjectLabel(subject) : getString(sourceItem?.subjectId);
+    const classroomLabel =
+      row.operation === 'updated'
+        ? `${getClassroomLabel(localClassroom || { id: row.localItem?.classroomId ?? '' })} → ${getClassroomLabel(cloudClassroom || { id: row.cloudItem?.classroomId ?? '' })}`
+        : getClassroomLabel(localClassroom || cloudClassroom || { id: sourceItem?.classroomId ?? '' });
 
-  const localMap = new Map(localData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
-  const cloudMap = new Map(cloudData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
-  const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
-
-  keys.forEach(key => {
-    const localItem = localMap.get(key);
-    const cloudItem = cloudMap.get(key);
-    const sourceItem = localItem || cloudItem;
-    if (!sourceItem) return;
-
-    const subject = mergedSubjectMap.get(sourceItem.subjectId);
-    const classroom = mergedClassroomMap.get(sourceItem.classroomId);
-    const subjectLabel = subject ? getSubjectLabel(subject) : getString(sourceItem.subjectId);
-    const classroomLabel = classroom ? getClassroomLabel(classroom) : getString(sourceItem.classroomId);
-    const label = `${subjectLabel} / ${classroomLabel}`.trim();
-
-    if (!localItem && cloudItem) {
-      entries.push({
-        operation: 'added',
-        label,
-        localValue: '',
-        cloudValue: stableSerialize(cloudItem)
-      });
-      return;
-    }
-
-    if (localItem && !cloudItem) {
-      entries.push({
-        operation: 'removed',
-        label,
-        localValue: stableSerialize(localItem),
-        cloudValue: ''
-      });
-      return;
-    }
-
-    if (localItem && cloudItem && stableSerialize(localItem) !== stableSerialize(cloudItem)) {
-      entries.push({
-        operation: 'updated',
-        label,
-        localValue: stableSerialize(localItem),
-        cloudValue: stableSerialize(cloudItem)
-      });
-    }
+    return {
+      operation: row.operation,
+      label: `${subjectLabel} / ${classroomLabel}`.trim(),
+      localValue:
+        row.operation === 'added'
+          ? 'なし'
+          : row.operation === 'removed'
+            ? getClassroomLabel(localClassroom || { id: row.localItem?.classroomId ?? '' })
+            : `${getClassroomLabel(localClassroom || { id: row.localItem?.classroomId ?? '' })} → なし`,
+      cloudValue:
+        row.operation === 'added'
+          ? getClassroomLabel(cloudClassroom || { id: row.cloudItem?.classroomId ?? '' })
+          : row.operation === 'removed'
+            ? 'なし'
+            : `なし → ${getClassroomLabel(cloudClassroom || { id: row.cloudItem?.classroomId ?? '' })}`
+    };
   });
-
-  return entries;
 };
 
 const buildSubjectMap = (cloudData: CloudData, localData: CloudData) =>
@@ -191,7 +205,6 @@ const buildClassroomMap = (cloudData: CloudData, localData: CloudData) =>
   new Map([...localData.classrooms, ...cloudData.classrooms].map(item => [item.id, item] as const));
 
 const buildDiffCsvRow = (
-  entry: CloudDiffEntry,
   operation: CloudDiffOperation,
   localItem: CloudData['allocations'][number] | undefined,
   cloudItem: CloudData['allocations'][number] | undefined,
@@ -200,48 +213,42 @@ const buildDiffCsvRow = (
 ): CloudDiffCsvRow => {
   const sourceItem = localItem || cloudItem;
   const subject = sourceItem ? subjectMap.get(sourceItem.subjectId) : undefined;
-  const classroom = sourceItem ? classroomMap.get(sourceItem.classroomId) : undefined;
+  const localClassroom = localItem ? classroomMap.get(localItem.classroomId) : undefined;
+  const cloudClassroom = cloudItem ? classroomMap.get(cloudItem.classroomId) : undefined;
   const subjectCode = getString(subject?.code);
   const subjectName = getString(subject?.name);
-  const classroomName = getString(classroom?.name) || getString(sourceItem?.classroomId);
+  const localClassroomName = getString(localClassroom?.name) || getString(localItem?.classroomId);
+  const cloudClassroomName = getString(cloudClassroom?.name) || getString(cloudItem?.classroomId);
   const day = subject ? getDayLabel(subject.day) : '';
   const period = subject ? getPeriodLabel(subject.period) : '';
-  const presence = getPresenceState(operation, !!localItem, !!cloudItem);
+  const presence =
+    operation === 'added'
+      ? { local: 'なし', cloud: 'なし→あり' }
+      : operation === 'removed'
+        ? { local: 'あり→なし', cloud: 'あり' }
+        : { local: 'あり→なし', cloud: 'なし→あり' };
 
   return {
     種別: '配当',
     操作: operation === 'added' ? '追加' : operation === 'removed' ? '削除' : '更新',
     ローカル: presence.local,
     クラウド: presence.cloud,
-    教室: classroomName || '',
+    教室:
+      operation === 'updated'
+        ? `${localClassroomName || ''} → ${cloudClassroomName || ''}`.trim()
+        : (localClassroomName || cloudClassroomName || ''),
     曜日: day || '',
     講時: period || '',
-    科目名: [subjectCode, subjectName].filter(Boolean).join('_') || entry.label
+    科目名: [subjectCode, subjectName].filter(Boolean).join('_') || sourceItem?.subjectId || ''
   };
 };
 
 export const buildCloudDiffCsv = (localData: CloudData, cloudData: CloudData): CloudDiffCsvRow[] => {
-  const localMap = new Map(localData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
-  const cloudMap = new Map(cloudData.allocations.map(item => [`${item.subjectId}__${item.classroomId}`, item] as const));
-  const keys = [...new Set([...localMap.keys(), ...cloudMap.keys()])].sort((a, b) => a.localeCompare(b, 'ja'));
+  const diffRows = buildAllocationDiffRows(localData.allocations, cloudData.allocations);
   const subjectMap = buildSubjectMap(cloudData, localData);
   const classroomMap = buildClassroomMap(cloudData, localData);
 
-  return keys.flatMap(key => {
-    const localItem = localMap.get(key);
-    const cloudItem = cloudMap.get(key);
-    if (!localItem && !cloudItem) return [];
-
-    const operation: CloudDiffOperation =
-      !localItem && cloudItem ? 'added' : localItem && !cloudItem ? 'removed' : 'updated';
-
-    const entry: CloudDiffEntry = {
-      operation,
-      label: '',
-      localValue: localItem ? stableSerialize(localItem) : '',
-      cloudValue: cloudItem ? stableSerialize(cloudItem) : ''
-    };
-
-    return [buildDiffCsvRow(entry, operation, localItem, cloudItem, subjectMap, classroomMap)];
-  });
+  return diffRows.map(row =>
+    buildDiffCsvRow(row.operation, row.localItem, row.cloudItem, subjectMap, classroomMap)
+  );
 };
