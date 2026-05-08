@@ -40,6 +40,27 @@ export const CLASSROOM_IMPORT_REQUIRED_COLUMNS: ClassroomImportColumnDef[] = [
 
 const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim();
 
+const CSV_TEXT_ENCODINGS = ['utf-8', 'shift_jis', 'windows-31j'] as const;
+
+const decodeCsvFile = async (file: File, headerHints: string[]) => {
+    const buffer = await file.arrayBuffer();
+    for (const encoding of CSV_TEXT_ENCODINGS) {
+        try {
+            const decoded = new TextDecoder(encoding).decode(buffer);
+            const firstLine = decoded.split(/\r?\n/, 1)[0] ?? '';
+            const headerLooksValid = headerHints.some(hint =>
+                normalizeCsvHeader(firstLine).includes(normalizeCsvHeader(hint))
+            );
+            if (encoding === 'utf-8' || headerLooksValid) {
+                return decoded;
+            }
+        } catch {
+            // 次の候補へフォールバックする
+        }
+    }
+    return new TextDecoder('utf-8').decode(buffer);
+};
+
 const getCsvValue = (row: Record<string, string>, aliases: string[]) => {
     const key = Object.keys(row).find((header) =>
         aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias))
@@ -55,7 +76,8 @@ const hasCsvHeader = (headers: string[], aliases: string[]) => {
 
 export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
     return new Promise((resolve, reject) => {
-        Papa.parse(file, {
+        void decodeCsvFile(file, ['Name', 'Campus', 'Building', 'Capacity']).then((text) => {
+        Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
@@ -126,14 +148,16 @@ export const parseClassroomCSV = (file: File): Promise<Classroom[]> => {
                 });
                 resolve(classrooms);
             },
-            error: (error) => reject(error),
+            error: (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
         });
+        }).catch(reject);
     });
 };
 
 export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
     return new Promise((resolve, reject) => {
-        Papa.parse(file, {
+        void decodeCsvFile(file, ['Code', 'Name', 'Period', 'RequiredRoomCount']).then((text) => {
+        Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
@@ -256,14 +280,16 @@ export const parseSubjectCSV = (file: File): Promise<Subject[]> => {
 
                 resolve(Array.from(grouped.values()));
             },
-            error: (error) => reject(error),
+            error: (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
         });
+        }).catch(reject);
     });
 };
 
 export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
     return new Promise((resolve, reject) => {
-        Papa.parse(file, {
+        void decodeCsvFile(file, ['Name', 'Campus', 'Building', 'Capacity']).then((text) => {
+        Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
@@ -348,8 +374,9 @@ export const parseClassroomCSVStrict = (file: File): Promise<Classroom[]> => {
                 });
                 resolve(classrooms);
             },
-            error: (error) => reject(error),
+            error: (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
         });
+        }).catch(reject);
     });
 };
 
