@@ -283,7 +283,10 @@ export const SubjectEditModal = ({
                 ))}
               </select>
 
-              <label>終了講時</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <label>終了講時</label>
+                <span style={{ fontSize: '0.75rem', color: '#8a8a8a' }}>※複数講時の場合のみ入力</span>
+              </div>
               <select
                 value={form.endPeriod || ''}
                 onChange={e => {
