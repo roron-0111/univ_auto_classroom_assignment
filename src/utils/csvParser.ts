@@ -55,21 +55,26 @@ const CSV_TEXT_ENCODINGS = ['utf-8', 'shift_jis', 'windows-31j'] as const;
 
 const decodeCsvFile = async (file: File, headerHints: string[]) => {
     const buffer = await file.arrayBuffer();
+    let fallbackDecoded = new TextDecoder('utf-8').decode(buffer);
+    let bestDecoded = fallbackDecoded;
+    let bestMatchCount = -1;
     for (const encoding of CSV_TEXT_ENCODINGS) {
         try {
             const decoded = new TextDecoder(encoding).decode(buffer);
             const firstLine = decoded.split(/\r?\n/, 1)[0] ?? '';
-            const headerLooksValid = headerHints.some(hint =>
-                normalizeCsvHeader(firstLine).includes(normalizeCsvHeader(hint))
-            );
-            if (encoding === 'utf-8' || headerLooksValid) {
-                return decoded;
+            const headers = firstLine.split(',').map(normalizeCsvHeader).filter(Boolean);
+            const matchCount = headerHints.filter(hint =>
+                headers.some(header => normalizeCsvHeader(header) === normalizeCsvHeader(hint))
+            ).length;
+            if (matchCount > bestMatchCount) {
+                bestMatchCount = matchCount;
+                bestDecoded = decoded;
             }
         } catch {
             // 次の候補へフォールバックする
         }
     }
-    return new TextDecoder('utf-8').decode(buffer);
+    return bestMatchCount > 0 ? bestDecoded : fallbackDecoded;
 };
 
 const getCsvValue = (row: Record<string, string>, aliases: string[]) => {

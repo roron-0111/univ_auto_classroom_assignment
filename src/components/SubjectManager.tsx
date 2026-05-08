@@ -42,21 +42,26 @@ const SUBJECT_IMPORT_TEXT_ENCODINGS = ['utf-8', 'shift_jis', 'windows-31j'] as c
 const decodeCsvFile = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const encoderNames = SUBJECT_IMPORT_TEXT_ENCODINGS as readonly string[];
+    let fallbackDecoded = new TextDecoder('utf-8').decode(buffer);
+    let bestDecoded = fallbackDecoded;
+    let bestMatchCount = -1;
     for (const encoding of encoderNames) {
         try {
             const decoded = new TextDecoder(encoding).decode(buffer);
             const headerLine = decoded.split(/\r?\n/, 1)[0] ?? '';
-            const headerLooksValid = SUBJECT_IMPORT_REQUIRED_COLUMNS.some(col =>
-                col.aliases.some(alias => normalizeCsvHeader(headerLine).includes(normalizeCsvHeader(alias)))
-            );
-            if (encoding === 'utf-8' || headerLooksValid) {
-                return decoded;
+            const headers = headerLine.split(',').map(normalizeCsvHeader).filter(Boolean);
+            const matchCount = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col =>
+                headers.some(header => col.aliases.some(alias => normalizeCsvHeader(header) === normalizeCsvHeader(alias)))
+            ).length;
+            if (matchCount > bestMatchCount) {
+                bestMatchCount = matchCount;
+                bestDecoded = decoded;
             }
         } catch {
             // 次の候補へフォールバックする
         }
     }
-    return new TextDecoder('utf-8').decode(buffer);
+    return bestMatchCount > 0 ? bestDecoded : fallbackDecoded;
 };
 
 const getCsvValue = (row: Record<string, string>, aliases: string[]) => {
