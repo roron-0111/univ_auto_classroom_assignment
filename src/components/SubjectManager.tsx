@@ -1064,7 +1064,7 @@ export const SubjectManager = ({
                                                 <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#333' }}>CSVインポート — 列情報</div>
                                                 <div style={{ marginBottom: '4px' }}>左から「教室ID」までの列を受け入れます</div>
                                                 <div style={{ marginBottom: '4px' }}>必須は本ページの赤字項目です</div>
-                                                <div style={{ marginBottom: '4px' }}>機材・設備は ◎=必須、○=希望 です</div>
+                                                <div style={{ marginBottom: '4px' }}>機材・設備は ◎=必須、○=希望 です（◎にできるのは PJ(中)・PJ(横)・可動のみ）</div>
                                                 <div style={{ marginBottom: '4px' }}>教室IDがある行は配当を復元できます</div>
                                                 <div style={{ marginBottom: '4px' }}>教室名 / 建物 / 教室定員 / 教室試験定員 / 教室タイプ / 教室設備 があっても再インポート可能です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
