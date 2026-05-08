@@ -2,10 +2,11 @@
 import type { Classroom } from './src/types';
 import { ROOM_TYPE_LABELS, BUILDINGS, EQUIPMENT_LIST, normalizeCampusLabel } from './src/types';
 import { Settings, Plus, Edit2, Trash2, X, Check, Upload, Download, ArrowUp, ArrowDown } from 'lucide-react';
-import { parseClassroomCSVStrict, exportToCSV } from './src/utils/csvParser';
+import { exportToCSV, parseClassroomCSVStrictWithIssues } from './src/utils/csvParser';
 import { getEquipmentStyle, getImportantEquipmentStyle } from './src/types';
 import { ClassroomEditModal } from './src/components/ClassroomEditModal';
 import { sortEquipmentByCanonicalOrder } from './src/utils/equipmentVisibility';
+import { ImportErrorCsvDialog } from './src/components/ImportErrorCsvDialog';
 
 const MultiSelectFilter = ({
     options, selected, onChange, placeholder = '全て'
@@ -137,6 +138,12 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [showCsvHint]);
+    const [classroomImportErrorCsv, setClassroomImportErrorCsv] = useState<{
+        title: string;
+        message: string;
+        filename: string;
+        rows: Record<string, unknown>[];
+    } | null>(null);
 
     const crDrag = (k: CRColKey) => (e: React.MouseEvent) => {
         e.preventDefault(); e.stopPropagation();
@@ -292,10 +299,42 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
         const input = e.currentTarget;
         if (input.files && input.files[0]) {
             try {
-                const data = await parseClassroomCSVStrict(input.files[0]);
+                const { classrooms: data, issues } = await parseClassroomCSVStrictWithIssues(input.files[0]);
                 const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
-                if (data.some(room => normalizeCampusLabel(room.campus || '') !== campusLabel)) {
-                    alert('キャンパスが異なるレコードがあります');
+                const campusIssues = data
+                    .map((room, index) => {
+                        if (!room.campus) return null;
+                        if (normalizeCampusLabel(room.campus || '') === campusLabel) return null;
+                        return {
+                            lineNumber: index + 2,
+                            classroomId: room.id,
+                            classroomName: room.name,
+                            campus: room.campus,
+                            errorType: 'キャンパス不一致',
+                            targetColumn: 'キャンパス',
+                            detail: `キャンパス「${room.campus}」が現在のキャンパス「${currentCampusLabel}」と一致しません。`,
+                            suggestion: `CSVのキャンパスを「${currentCampusLabel}」に揃えてください。`
+                        };
+                    })
+                    .filter((item): item is NonNullable<typeof item> => item !== null);
+                const allIssues = [...issues, ...campusIssues];
+                if (allIssues.length > 0) {
+                    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '_');
+                    setClassroomImportErrorCsv({
+                        title: '教室CSVインポートエラー',
+                        message: `${allIssues.length}件のエラーがあります。保存先を選んで詳細CSVを出力してください。`,
+                        filename: `classroom_import_errors_${timestamp}.csv`,
+                        rows: allIssues.map(issue => ({
+                            行番号: issue.lineNumber ? String(issue.lineNumber) : '',
+                            教室ID: issue.classroomId ?? '',
+                            教室名: issue.classroomName ?? '',
+                            キャンパス: issue.campus ?? '',
+                            エラー種別: issue.errorType,
+                            対象列: issue.targetColumn ?? '',
+                            詳細: issue.detail,
+                            修正案: issue.suggestion
+                        }))
+                    });
                     return;
                 }
                 if (confirm(`${data.length}件の教室データを読み込みます。同一IDは上書きし、それ以外は追加します。よろしいですか？`)) {
@@ -368,6 +407,8 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                                 <div style={{ marginBottom: '4px' }}><span style={{ color: '#555' }}>任意</span>: 試験時定員, 教室タイプ, 可動(○), 配当対象外(○), 各機材列</div>
                                                 <div style={{ marginBottom: '4px' }}>機材列: 列名がそのまま機材名、値が○なら有効</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                                <div style={{ marginBottom: '4px' }}>エラーがある場合は詳細CSVを保存先選択ダイアログ付きで出力します</div>
+                                                <div style={{ marginBottom: '4px' }}>UTF-8(BOMあり/なし)・Shift_JIS系のCSVに対応しています</div>
                                                 <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                             </div>
                                         )}
@@ -651,6 +692,16 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                     </table>
                 </div>
             </div>
+            {classroomImportErrorCsv && (
+                <ImportErrorCsvDialog
+                    open={true}
+                    title={classroomImportErrorCsv.title}
+                    message={classroomImportErrorCsv.message}
+                    filename={classroomImportErrorCsv.filename}
+                    rows={classroomImportErrorCsv.rows}
+                    onClose={() => setClassroomImportErrorCsv(null)}
+                />
+            )}
             {editingClassroom && (
                 <ClassroomEditModal
                     key={editingClassroom.id}

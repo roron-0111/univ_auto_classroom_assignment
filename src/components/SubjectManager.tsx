@@ -10,6 +10,7 @@ import { normalizeRequiredEquipmentName } from '../types';
 import { SUBJECT_EQUIPMENT_CHOICES, filterVisibleRoomEquipment, sortEquipmentByCanonicalOrder } from '../utils/equipmentVisibility';
 import type { SubjectTaxonomy } from '../utils/subjectTaxonomy';
 import { SubjectTaxonomyModal } from './SubjectTaxonomyModal';
+import { ImportErrorCsvDialog } from './ImportErrorCsvDialog';
 
 function equipValue(
     eq: string,
@@ -91,9 +92,144 @@ type ParsedSubjectCsvRow = {
     classroomId: string;
 };
 
+type SubjectImportIssue = {
+    lineNumber?: number;
+    errorType: string;
+    targetColumn?: string;
+    detail: string;
+    suggestion: string;
+    code?: string;
+    name?: string;
+    teacherCode?: string;
+    teacher?: string;
+    campus?: string;
+    classroomId?: string;
+};
+
 type ParsedSubjectCsv = {
     subjects: Subject[];
     rows: ParsedSubjectCsvRow[];
+    issues: SubjectImportIssue[];
+};
+
+type SubjectImportErrorCsvRow = {
+    行番号: string;
+    コード: string;
+    時間割名称: string;
+    教員コード: string;
+    教員名: string;
+    キャンパス: string;
+    教室ID: string;
+    エラー種別: string;
+    対象列: string;
+    詳細: string;
+    修正案: string;
+};
+
+const buildSubjectIssueContext = (row: Record<string, string>, lineNumber: number, classroomId = '') => ({
+    lineNumber,
+    code: getCsvValue(row, ['コード', '時間割コード', 'Code', 'ID']),
+    name: getCsvValue(row, ['時間割名称', '授業名称', 'Name']),
+    teacherCode: getCsvValue(row, ['教員コード', 'TeacherCode']),
+    teacher: getCsvValue(row, ['教員名', 'Teacher', '教員', '代表教員']),
+    campus: getCsvValue(row, ['キャンパス', 'Campus']),
+    classroomId
+});
+
+const toSubjectImportErrorRows = (issues: SubjectImportIssue[]): SubjectImportErrorCsvRow[] => issues.map(issue => ({
+    行番号: issue.lineNumber ? String(issue.lineNumber) : '',
+    コード: issue.code ?? '',
+    時間割名称: issue.name ?? '',
+    教員コード: issue.teacherCode ?? '',
+    教員名: issue.teacher ?? '',
+    キャンパス: issue.campus ?? '',
+    教室ID: issue.classroomId ?? '',
+    エラー種別: issue.errorType,
+    対象列: issue.targetColumn ?? '',
+    詳細: issue.detail,
+    修正案: issue.suggestion
+}));
+
+const buildSubjectImportIssues = (
+    data: ParsedSubjectCsv,
+    currentCampusLabel: string,
+    classrooms: Classroom[]
+): SubjectImportIssue[] => {
+    const issues = [...data.issues];
+    const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
+    const classroomIdSet = new Set(classrooms.map(room => room.id));
+
+    data.rows.forEach((row, index) => {
+        const lineNumber = index + 2;
+        const subject = row.subject;
+        const rowCampus = normalizeCampusLabel(subject.campus || '') || '';
+        const rowContext = buildSubjectIssueContext({
+            コード: subject.code || '',
+            時間割名称: subject.name || '',
+            教員コード: subject.teacherCode || '',
+            教員名: subject.teacher || '',
+            キャンパス: subject.campus || ''
+        }, lineNumber, row.classroomId);
+
+        if (subject.campus && rowCampus !== campusLabel) {
+            issues.push({
+                ...rowContext,
+                errorType: 'キャンパス不一致',
+                targetColumn: 'キャンパス',
+                detail: `キャンパス「${subject.campus || ''}」が現在のキャンパス「${currentCampusLabel}」と一致しません。`,
+                suggestion: `CSVのキャンパスを「${currentCampusLabel}」に揃えてください。`
+            });
+        }
+
+        if (row.classroomId && !classroomIdSet.has(row.classroomId)) {
+            issues.push({
+                ...rowContext,
+                errorType: '教室ID不一致',
+                targetColumn: '教室ID',
+                detail: `教室ID「${row.classroomId}」が現在の教室マスタに存在しません。`,
+                suggestion: '現在の教室マスタに存在する教室IDへ修正してください。'
+            });
+        }
+    });
+
+    const requiredRoomCountByCode = new Map<string, number>();
+    data.subjects.forEach(subject => {
+        const code = (subject.code || '').trim();
+        if (!code) return;
+        const count = subject.requiredRoomCount || 1;
+        requiredRoomCountByCode.set(code, Math.max(requiredRoomCountByCode.get(code) || 0, count));
+    });
+
+    const classroomRowsByCode = new Map<string, ParsedSubjectCsvRow[]>();
+    data.rows.forEach(row => {
+        const code = (row.subject.code || '').trim();
+        if (!code || !row.classroomId) return;
+        const list = classroomRowsByCode.get(code) ?? [];
+        list.push(row);
+        classroomRowsByCode.set(code, list);
+    });
+
+    classroomRowsByCode.forEach((rows, code) => {
+        const requiredCount = requiredRoomCountByCode.get(code) || 1;
+        if (rows.length <= requiredCount) return;
+        rows.slice(requiredCount).forEach((row) => {
+            issues.push({
+                lineNumber: data.rows.indexOf(row) + 2,
+                code: row.subject.code || '',
+                name: row.subject.name || '',
+                teacherCode: row.subject.teacherCode || '',
+                teacher: row.subject.teacher || '',
+                campus: row.subject.campus || '',
+                classroomId: row.classroomId,
+                errorType: '必要教室数超過',
+                targetColumn: '教室ID',
+                detail: `授業コード「${code}」は必要教室数${requiredCount}件ですが、${rows.length}件の教室配当があります。`,
+                suggestion: '不要な教室IDの行を削除するか、必要教室数を見直してください。'
+            });
+        });
+    });
+
+    return issues;
 };
 
 const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
@@ -107,30 +243,55 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                 const headers = (results.meta.fields || []).map(normalizeCsvHeader).filter(Boolean);
                 const missingHeaders = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !hasCsvHeader(headers, col.aliases));
                 if (missingHeaders.length > 0) {
-                    reject(new Error(`必須列が不足しています: ${missingHeaders.map(col => col.label).join('、')}`));
+                    resolve({
+                        subjects: [],
+                        rows: [],
+                        issues: missingHeaders.map(col => ({
+                            errorType: '必須列不足',
+                            targetColumn: col.label,
+                            detail: `必須列「${col.label}」が見つかりません。`,
+                            suggestion: `CSVのヘッダーに「${col.label}」列を追加してください。`
+                        }))
+                    });
                     return;
                 }
 
-                const rowIssues: string[] = [];
+                const issues: SubjectImportIssue[] = [];
                 rows.forEach((row, index) => {
+                    const lineNumber = index + 2;
+                    const context = buildSubjectIssueContext(row, lineNumber);
                     const missing = SUBJECT_IMPORT_REQUIRED_COLUMNS.filter(col => !getCsvValue(row, col.aliases));
+                    missing.forEach(col => {
+                        issues.push({
+                            ...context,
+                            errorType: '必須項目不足',
+                            targetColumn: col.label,
+                            detail: `「${col.label}」が空欄です。`,
+                            suggestion: `「${col.label}」を入力してください。`
+                        });
+                    });
                     const periodRaw = getCsvValue(row, ['講時', '開始講時', 'Period']);
                     const periodValue = parseInt(periodRaw, 10);
-                    if ((!missing.some(col => col.label === '講時')) && (!Number.isFinite(periodValue) || periodValue < 0)) {
-                        missing.push({ label: '講時', aliases: ['講時'] });
+                    if (getCsvValue(row, ['講時', '開始講時', 'Period']) && (!Number.isFinite(periodValue) || periodValue < 0)) {
+                        issues.push({
+                            ...context,
+                            errorType: '講時不正',
+                            targetColumn: '講時',
+                            detail: `講時の値「${periodRaw}」が不正です。`,
+                            suggestion: '開始講時を 0 以上の数値で入力してください。'
+                        });
                     }
                     const roomCountValue = parseInt(getCsvValue(row, ['必要教室数', 'RequiredRoomCount']), 10);
-                    if ((!missing.some(col => col.label === '必要教室数')) && (!Number.isFinite(roomCountValue) || roomCountValue <= 0)) {
-                        missing.push({ label: '必要教室数', aliases: ['必要教室数'] });
-                    }
-                    if (missing.length > 0) {
-                        rowIssues.push(`${index + 2}行目(${missing.map(col => col.label).join('・')})`);
+                    if (getCsvValue(row, ['必要教室数', 'RequiredRoomCount']) && (!Number.isFinite(roomCountValue) || roomCountValue <= 0)) {
+                        issues.push({
+                            ...context,
+                            errorType: '必要教室数不正',
+                            targetColumn: '必要教室数',
+                            detail: `必要教室数の値「${getCsvValue(row, ['必要教室数', 'RequiredRoomCount'])}」が不正です。`,
+                            suggestion: '必要教室数には 1 以上の数値を入力してください。'
+                        });
                     }
                 });
-                if (rowIssues.length > 0) {
-                    reject(new Error(`必須項目が不足している行があります ${rowIssues.slice(0, 10).join('、')}${rowIssues.length > 10 ? '…' : ''}`));
-                    return;
-                }
 
                 const rawRows = rows.map((row) => ({
                     id: row.ID || row['コード'] || row['時間割コード'] || `s-${Math.random().toString(36).substr(2, 9)}`,
@@ -213,7 +374,7 @@ const parseSubjectCSVWithTbd = (file: File): Promise<ParsedSubjectCsv> => {
                     }
                 });
 
-                resolve({ subjects: Array.from(grouped.values()), rows: classroomRows });
+                resolve({ subjects: Array.from(grouped.values()), rows: classroomRows, issues });
             },
             error: (error: unknown) => reject(error instanceof Error ? error : new Error(String(error)))
             });
@@ -498,6 +659,12 @@ export const SubjectManager = ({
     const [subjectViewportHeight, setSubjectViewportHeight] = useState(0);
     const [subjectScrollTop, setSubjectScrollTop] = useState(0);
     const [subjectListReady, setSubjectListReady] = useState(false);
+    const [subjectImportErrorCsv, setSubjectImportErrorCsv] = useState<{
+        title: string;
+        message: string;
+        filename: string;
+        rows: Record<string, unknown>[];
+    } | null>(null);
     useEffect(() => { localStorage.setItem('smColConfig', JSON.stringify(colConfig)); }, [colConfig]);
     useEffect(() => {
         if (!showColSettings) return;
@@ -780,44 +947,18 @@ export const SubjectManager = ({
         if (input.files && input.files[0]) {
             try {
                 const data = await parseSubjectCSVWithTbd(input.files[0]);
+                const issues = buildSubjectImportIssues(data, currentCampusLabel, classrooms);
+                if (issues.length > 0) {
+                    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '_');
+                    setSubjectImportErrorCsv({
+                        title: '授業CSVインポートエラー',
+                        message: `${issues.length}件のエラーがあります。保存先を選んで詳細CSVを出力してください。`,
+                        filename: `subject_import_errors_${timestamp}.csv`,
+                        rows: toSubjectImportErrorRows(issues)
+                    });
+                    return;
+                }
                 const campusLabel = normalizeCampusLabel(currentCampusLabel) || currentCampusLabel;
-                if (data.subjects.some(subject => normalizeCampusLabel(subject.campus || '') !== campusLabel)) {
-                    alert('キャンパスが異なるレコードがあります');
-                    return;
-                }
-                const classroomIdSet = new Set(classrooms.map(room => room.id));
-                const invalidRoomRows = data.rows
-                    .map((row, index) => {
-                        if (!row.classroomId) return '';
-                        return classroomIdSet.has(row.classroomId) ? '' : `${index + 2}行目(${row.classroomId})`;
-                    })
-                    .filter(Boolean);
-                if (invalidRoomRows.length > 0) {
-                    alert(`教室IDが現在の教室マスタに存在しないレコードがあります: ${invalidRoomRows.slice(0, 10).join('、')}${invalidRoomRows.length > 10 ? '…' : ''}`);
-                    return;
-                }
-                const requiredRoomCountByCode = new Map<string, number>();
-                data.subjects.forEach(subject => {
-                    const code = (subject.code || '').trim();
-                    if (!code) return;
-                    const count = subject.requiredRoomCount || 1;
-                    requiredRoomCountByCode.set(code, Math.max(requiredRoomCountByCode.get(code) || 0, count));
-                });
-                const classroomRowsByCode = new Map<string, string[]>();
-                data.rows.forEach((row, index) => {
-                    const code = (row.subject.code || '').trim();
-                    if (!code || !row.classroomId) return;
-                    const list = classroomRowsByCode.get(code) ?? [];
-                    list.push(`${index + 2}行目(${row.classroomId})`);
-                    classroomRowsByCode.set(code, list);
-                });
-                const roomOverflowIssues = Array.from(classroomRowsByCode.entries())
-                    .filter(([code, rows]) => rows.length > (requiredRoomCountByCode.get(code) || 1))
-                    .map(([code, rows]) => `${code}(${rows.length}行 / 必要教室数${requiredRoomCountByCode.get(code) || 1})`);
-                if (roomOverflowIssues.length > 0) {
-                    alert(`必要教室数を超える配当行があります: ${roomOverflowIssues.slice(0, 10).join('、')}${roomOverflowIssues.length > 10 ? '…' : ''}`);
-                    return;
-                }
                 const sanitized = data.subjects.map(subject => ({
                     ...subject,
                     campus: campusLabel,
@@ -922,6 +1063,7 @@ export const SubjectManager = ({
                                                 <div style={{ marginBottom: '4px' }}>教室IDがある行は配当を復元できます</div>
                                                 <div style={{ marginBottom: '4px' }}>教室名 / 建物 / 教室定員 / 教室試験定員 / 教室タイプ / 教室設備 があっても再インポート可能です</div>
                                                 <div style={{ marginBottom: '4px' }}>※エクスポートCSVをそのまま再インポート可</div>
+                                                <div style={{ marginBottom: '4px' }}>エラーがある場合は詳細CSVを保存先選択ダイアログ付きで出力します</div>
                                                 <div style={{ marginBottom: '4px' }}>UTF-8(BOMあり/なし)・Shift_JIS系のCSVに対応しています</div>
                                                 <div style={{ marginBottom: '4px', color: '#b45309', fontWeight: 'bold' }}>このCSVは現在のキャンパス専用です</div>
                                             </div>
@@ -1246,6 +1388,16 @@ export const SubjectManager = ({
                         setShowTaxonomyModal(false);
                     }}
                     onClose={() => setShowTaxonomyModal(false)}
+                />
+            )}
+            {subjectImportErrorCsv && (
+                <ImportErrorCsvDialog
+                    open={true}
+                    title={subjectImportErrorCsv.title}
+                    message={subjectImportErrorCsv.message}
+                    filename={subjectImportErrorCsv.filename}
+                    rows={subjectImportErrorCsv.rows}
+                    onClose={() => setSubjectImportErrorCsv(null)}
                 />
             )}
         </div>
