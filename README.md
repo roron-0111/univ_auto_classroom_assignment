@@ -1,3 +1,33 @@
+# 教室配当調整
+
+## テスト
+
+```bash
+npm run test:e2e:local
+```
+
+外部ネットワークなしで実行できる配当ロジック、同期マージ、差分検出の E2E です。
+
+```bash
+npm run test:e2e:cloud
+```
+
+Firebase Auth / Firestore への疎通を含む E2E です。`identitytoolkit.googleapis.com` などへの外部通信が許可された環境で実行してください。
+
+```bash
+npm run test:e2e
+```
+
+全 E2E を実行します。クラウド系テストを含むため、外部ネットワーク許可が必要です。
+
+## ビルド
+
+```bash
+npm run build
+```
+
+管理画面・各種モーダルは初回 bundle から分離するため、遅延読み込みにしています。
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

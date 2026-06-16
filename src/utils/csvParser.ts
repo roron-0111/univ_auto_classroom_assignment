@@ -55,7 +55,7 @@ const CSV_TEXT_ENCODINGS = ['utf-8', 'shift_jis', 'windows-31j'] as const;
 
 const decodeCsvFile = async (file: File, headerHints: string[]) => {
     const buffer = await file.arrayBuffer();
-    let fallbackDecoded = new TextDecoder('utf-8').decode(buffer);
+    const fallbackDecoded = new TextDecoder('utf-8').decode(buffer);
     let bestDecoded = fallbackDecoded;
     let bestMatchCount = -1;
     for (const encoding of CSV_TEXT_ENCODINGS) {

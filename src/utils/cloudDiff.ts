@@ -72,6 +72,14 @@ const getAllocationSubjectMap = (items: AllocationLike[]) => {
   return map;
 };
 
+const getAllocationSignature = (item: AllocationLike) =>
+  JSON.stringify({
+    classroomId: item.classroomId,
+    exceptions: item.exceptions ? [...item.exceptions].sort() : undefined,
+    exceptionApproved: item.exceptionApproved,
+    isLocked: item.isLocked
+  });
+
 const buildAllocationDiffRows = (localItems: AllocationLike[], cloudItems: AllocationLike[]): AllocationDiffRow[] => {
   const localGroups = getAllocationSubjectMap(localItems);
   const cloudGroups = getAllocationSubjectMap(cloudItems);
@@ -83,6 +91,21 @@ const buildAllocationDiffRows = (localItems: AllocationLike[], cloudItems: Alloc
     const cloudGroup = cloudGroups.get(subjectId) ?? [];
     const cloudByClassroom = new Map(cloudGroup.map(item => [item.classroomId, item] as const));
     const localByClassroom = new Map(localGroup.map(item => [item.classroomId, item] as const));
+
+    const sharedClassroomIds = [...localByClassroom.keys()]
+      .filter(classroomId => cloudByClassroom.has(classroomId))
+      .sort((a, b) => a.localeCompare(b, 'ja'));
+    sharedClassroomIds.forEach(classroomId => {
+      const localItem = localByClassroom.get(classroomId)!;
+      const cloudItem = cloudByClassroom.get(classroomId)!;
+      if (getAllocationSignature(localItem) !== getAllocationSignature(cloudItem)) {
+        rows.push({
+          operation: 'updated',
+          localItem,
+          cloudItem
+        });
+      }
+    });
 
     const localOnly = localGroup.filter(item => !cloudByClassroom.has(item.classroomId));
     const cloudOnly = cloudGroup.filter(item => !localByClassroom.has(item.classroomId));
@@ -221,12 +244,15 @@ const buildDiffCsvRow = (
   const cloudClassroomName = getString(cloudClassroom?.name) || getString(cloudItem?.classroomId);
   const day = subject ? getDayLabel(subject.day) : '';
   const period = subject ? getPeriodLabel(subject.period) : '';
+  const sameClassroomUpdate = operation === 'updated' && localItem?.classroomId === cloudItem?.classroomId;
   const presence =
     operation === 'added'
       ? { local: 'なし', cloud: 'なし→あり' }
       : operation === 'removed'
         ? { local: 'あり→なし', cloud: 'あり' }
-        : { local: 'あり→なし', cloud: 'なし→あり' };
+        : sameClassroomUpdate
+          ? { local: '変更前', cloud: '変更後' }
+          : { local: 'あり→なし', cloud: 'なし→あり' };
 
   return {
     種別: '配当',
@@ -235,7 +261,9 @@ const buildDiffCsvRow = (
     クラウド: presence.cloud,
     教室:
       operation === 'updated'
-        ? `${localClassroomName || ''} → ${cloudClassroomName || ''}`.trim()
+        ? sameClassroomUpdate
+          ? (localClassroomName || cloudClassroomName || '')
+          : `${localClassroomName || ''} → ${cloudClassroomName || ''}`.trim()
         : (localClassroomName || cloudClassroomName || ''),
     曜日: day || '',
     講時: period || '',

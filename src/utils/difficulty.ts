@@ -68,6 +68,7 @@ const getStrictCandidateCount = (subject: Subject, classrooms: Classroom[], equi
   classrooms.filter(room =>
     !room.isExcluded &&
     room.capacity >= subject.requiredCapacity &&
+    (!subject.preferredRoomType || subject.preferredRoomType === room.type) &&
     (subject.mandatoryEquipment || []).every(req => matchesEquipmentRequirement(room, req)) &&
     (!equipmentSettings?.strictLevel5 || getRequiredItems(subject).every(req => {
       const entries = getRelevantEquipmentSetting(req, equipmentSettings);

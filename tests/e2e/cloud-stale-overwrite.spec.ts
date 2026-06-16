@@ -168,23 +168,6 @@ async function waitForAllocationCell(page: Page, subjectCode: string, classroomN
   ).toBeVisible({ timeout: 10_000 });
 }
 
-async function readAllocationsFromStorage(page: Page) {
-  return page.evaluate(() => {
-    const key = Object.keys(localStorage).find(name => name.includes(':allocations'));
-    const raw = key ? localStorage.getItem(key) : null;
-    return { key, raw, parsed: raw ? JSON.parse(raw) : [] };
-  });
-}
-
-async function waitForAllocationsPersisted(page: Page, minLength: number) {
-  await expect
-    .poll(async () => {
-      const snapshot = await readAllocationsFromStorage(page);
-      return Array.isArray(snapshot.parsed) ? snapshot.parsed.length : 0;
-    }, { timeout: 10_000 })
-    .toBeGreaterThanOrEqual(minLength);
-}
-
 async function writeCurrentChanges(page: Page) {
   const dialogPromise = page.waitForEvent('dialog');
   await page.getByRole('button', { name: writeButtonLabel }).click();

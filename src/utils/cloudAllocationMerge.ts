@@ -11,8 +11,16 @@ const groupBySubject = (items: CloudData['allocations']) => {
   return map;
 };
 
-const getClassroomSignature = (items: CloudData['allocations']) =>
-  items.map(item => item.classroomId).sort((a, b) => a.localeCompare(b, 'ja')).join('\u0000');
+const getAllocationSignature = (item: CloudData['allocations'][number]) =>
+  JSON.stringify({
+    classroomId: item.classroomId,
+    exceptions: item.exceptions ? [...item.exceptions].sort() : undefined,
+    exceptionApproved: item.exceptionApproved,
+    isLocked: item.isLocked
+  });
+
+const getAllocationGroupSignature = (items: CloudData['allocations']) =>
+  items.map(getAllocationSignature).sort((a, b) => a.localeCompare(b, 'ja')).join('\u0000');
 
 export const mergeAllocationsBySubjectBaseline = (
   baselineAllocations: CloudData['allocations'],
@@ -27,7 +35,7 @@ export const mergeAllocationsBySubjectBaseline = (
   subjectIds.forEach(subjectId => {
     const baselineGroup = baselineGroups.get(subjectId) ?? [];
     const localGroup = localGroups.get(subjectId) ?? [];
-    if (getClassroomSignature(baselineGroup) !== getClassroomSignature(localGroup)) {
+    if (getAllocationGroupSignature(baselineGroup) !== getAllocationGroupSignature(localGroup)) {
       if (localGroup.length > 0) {
         cloudGroups.set(subjectId, localGroup);
       } else {

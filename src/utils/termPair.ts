@@ -11,12 +11,9 @@ export const subjectsShareTeacherIdentity = (a: Subject, b: Subject) => {
     const aCode = (a.teacherCode || '').trim();
     const bCode = (b.teacherCode || '').trim();
 
-    if (aCode && bCode) {
-        if (isProvisionalTeacherCode(aCode) || isProvisionalTeacherCode(bCode)) return false;
-        return aCode === bCode;
-    }
-    if (aCode || bCode) return false;
-    return a.teacher.trim() !== '' && a.teacher === b.teacher;
+    if (!aCode || !bCode) return false;
+    if (isProvisionalTeacherCode(aCode) || isProvisionalTeacherCode(bCode)) return false;
+    return aCode === bCode;
 };
 
 export const findTermPartner = (subject: Subject, subjects: Subject[]) => {

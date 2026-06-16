@@ -37,3 +37,19 @@ test('cloud write allocation merge supports removing all rooms for a changed sub
 
   expect(merged).toEqual([allocation('s2', 'c4')]);
 });
+
+test('cloud write allocation merge preserves metadata-only local allocation changes', () => {
+  const baseline: CloudData['allocations'] = [
+    { ...allocation('s1', 'c1'), exceptions: ['room_type_relaxed'], exceptionApproved: true }
+  ];
+  const local: CloudData['allocations'] = [
+    { ...allocation('s1', 'c1'), exceptions: ['room_type_relaxed'], exceptionApproved: false }
+  ];
+  const cloud: CloudData['allocations'] = [
+    { ...allocation('s1', 'c1'), exceptions: ['room_type_relaxed'], exceptionApproved: true }
+  ];
+
+  const merged = mergeAllocationsBySubjectBaseline(baseline, local, cloud);
+
+  expect(merged).toEqual(local);
+});

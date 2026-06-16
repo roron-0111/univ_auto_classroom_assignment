@@ -1,5 +1,4 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 // HINT: Replace these values with your project's config object
@@ -18,6 +17,9 @@ const firebaseConfig = {
 // いったんプレースホルダーで作成し、後ほど正確な値を埋めます。
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const getDb = async () => {
+    const { getFirestore } = await import('firebase/firestore');
+    return getFirestore(app);
+};
 

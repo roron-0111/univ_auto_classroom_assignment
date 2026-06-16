@@ -1,20 +1,11 @@
 ﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './App.css';
+import { lazy, Suspense } from 'react';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
 import { BUILDINGS, DAY_LABELS, sortBuildingsByCanonicalOrder } from './types';
 import { TimeTableGrid } from './components/TimeTableGrid';
 import { UnassignedList, type UnassignedListItem } from './components/UnassignedList';
-import { ClassroomManager } from './components/ClassroomManager';
-import { DisplaySettings } from './components/DisplaySettings';
 import { runAutoAllocation, relocateForUnassigned, resolveExceptions } from './utils/optimizer';
-import { SubjectManager } from './components/SubjectManager';
-import { SubjectEditModal } from './components/SubjectEditModal';
-import { ClassroomEditModal } from './components/ClassroomEditModal';
-import { AllocationRuleSettings } from './components/AllocationRuleSettings';
-import { AllocationResultModal } from './components/AllocationResultModal';
-import { ExceptionReviewModal } from './components/ExceptionReviewModal';
-import { RelocationPreviewModal } from './components/RelocationPreviewModal';
-import { CloudReadWarningModal } from './components/CloudReadWarningModal';
 import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
@@ -30,7 +21,6 @@ import { getDefaultSubjectTaxonomy, normalizeSubjectTaxonomy, type SubjectTaxono
 import { exportToCSV } from './utils/csvParser';
 
 // Cloud Sync
-import { CloudConnectionModal } from './components/CloudConnectionModal';
 import { useAuth } from './utils/useAuth';
 import { useCloudSync } from './utils/useCloudSync';
 import { auth } from './utils/firebase';
@@ -43,6 +33,18 @@ import {
   RefreshCw, Settings, BookOpen, Eye, Calendar,
   AlertTriangle, ListChecks, CloudUpload, CloudDownload, LogOut
 } from 'lucide-react';
+
+const ClassroomManager = lazy(() => import('./components/ClassroomManager').then(module => ({ default: module.ClassroomManager })));
+const DisplaySettings = lazy(() => import('./components/DisplaySettings').then(module => ({ default: module.DisplaySettings })));
+const SubjectManager = lazy(() => import('./components/SubjectManager').then(module => ({ default: module.SubjectManager })));
+const SubjectEditModal = lazy(() => import('./components/SubjectEditModal').then(module => ({ default: module.SubjectEditModal })));
+const ClassroomEditModal = lazy(() => import('./components/ClassroomEditModal').then(module => ({ default: module.ClassroomEditModal })));
+const AllocationRuleSettings = lazy(() => import('./components/AllocationRuleSettings').then(module => ({ default: module.AllocationRuleSettings })));
+const AllocationResultModal = lazy(() => import('./components/AllocationResultModal').then(module => ({ default: module.AllocationResultModal })));
+const ExceptionReviewModal = lazy(() => import('./components/ExceptionReviewModal').then(module => ({ default: module.ExceptionReviewModal })));
+const RelocationPreviewModal = lazy(() => import('./components/RelocationPreviewModal').then(module => ({ default: module.RelocationPreviewModal })));
+const CloudReadWarningModal = lazy(() => import('./components/CloudReadWarningModal').then(module => ({ default: module.CloudReadWarningModal })));
+const CloudConnectionModal = lazy(() => import('./components/CloudConnectionModal').then(module => ({ default: module.CloudConnectionModal })));
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
@@ -1024,7 +1026,10 @@ function App() {
     difficultyTop10: DifficultyEntry[] = []
   ) => {
     const rejectedKeys = new Set(rejectedPending.map(pendingExceptionKey));
-    const nextAllocations = result.allocations.filter(a => !rejectedKeys.has(`${a.subjectId}__${a.classroomId}`));
+    const nextAllocations = result.allocations.filter(a => {
+      if (!a.exceptions || a.exceptions.length === 0) return true;
+      return !rejectedKeys.has(buildApprovalKey(a.subjectId, a.classroomId, a.exceptions));
+    });
     const rejectedUnassigned = rejectedPending.map(item => ({
       subject: item.subject,
       reason: item.alternativeUnassignedReason,
@@ -1111,7 +1116,7 @@ function App() {
       preservedAllocations,
       rulesToUse,
       equipmentToUse,
-      { streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
+      { contextSubjects: subjects, streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
     );
     finalizeAutoAllocation(
       result,
@@ -1189,7 +1194,7 @@ function App() {
       preservedAllocations,
       rulesToUse,
       equipmentToUse,
-      { dryRunExceptions: confirmExceptions, streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
+      { contextSubjects: subjects, dryRunExceptions: confirmExceptions, streakMap, ignoreStreakOnce: options.ignoreStreakOnce, approvedExceptions }
     );
 
     if (confirmExceptions && result.pendingExceptions && result.pendingExceptions.length > 0) {
@@ -1494,7 +1499,7 @@ function App() {
         {/* Sidebar */}
         <div style={{ width: '250px', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#f8f9fa' }}>
           <UnassignedList
-            subjects={unassignedSubjectsAll}
+            subjects={unassignedWithReason}
             allocations={allocations}
             onReorder={handleReorderSubjects}
             onDragStart={setDraggingSubjectId}
@@ -1726,6 +1731,7 @@ function App() {
           )
         }
 
+        <Suspense fallback={null}>
         {/* Classroom Manager Overlay */}
         {
           showManager && (
@@ -1890,6 +1896,7 @@ function App() {
             />
           )
         }
+        </Suspense>
 
         {
           isCloudSyncing && (

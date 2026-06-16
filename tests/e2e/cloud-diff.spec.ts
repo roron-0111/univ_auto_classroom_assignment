@@ -140,7 +140,7 @@ test('allocations diff csv captures removed cases', () => {
   });
 });
 
-test('allocations diff ignores metadata-only changes', () => {
+test('allocations diff captures metadata-only changes', () => {
   const local = clone(baseData);
   const cloud = clone(baseData);
   local.allocations = [
@@ -164,8 +164,15 @@ test('allocations diff ignores metadata-only changes', () => {
   expect(summary.allocations).toEqual({
     added: 0,
     removed: 0,
-    updated: 0
+    updated: 1
   });
-  expect(summary.hasDiff).toBe(false);
-  expect(csv).toHaveLength(0);
+  expect(summary.hasDiff).toBe(true);
+  expect(csv).toHaveLength(1);
+  expect(csv[0]).toMatchObject({
+    操作: '更新',
+    種別: '配当',
+    ローカル: '変更前',
+    クラウド: '変更後',
+    教室: 'F-201'
+  });
 });

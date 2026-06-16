@@ -30,6 +30,10 @@ type Candidate = {
     surplusCapacity: number;
 };
 
+type HardEligibilityOptions = {
+    ignoreRoomType?: boolean;
+};
+
 const cloneAllocation = (allocation: Allocation): Allocation => ({
     ...allocation,
     exceptions: allocation.exceptions ? [...allocation.exceptions] : undefined
@@ -118,25 +122,17 @@ const getRequiredItems = (subject: Subject) => {
 
 const getMandatoryItems = (subject: Subject) => subject.mandatoryEquipment || [];
 
-const isHardCandidate = (
+const passesStaticHardRules = (
     room: Classroom,
     subject: Subject,
-    occupied: Set<string>,
-    newAllocations: Allocation[],
-    equipmentSettings?: EquipmentSettings
+    equipmentSettings?: EquipmentSettings,
+    options: HardEligibilityOptions = {}
 ) => {
     if (room.isExcluded) return false;
-
-    if (newAllocations.some(a => a.subjectId === subject.id && a.classroomId === room.id)) return false;
-
-    const roomKeys = getRoomOccupiedKeys(subject, room.id);
-    if (roomKeys.some(key => occupied.has(key))) return false;
-
     if (room.capacity < subject.requiredCapacity) return false;
-
     if (getMandatoryItems(subject).some(req => !matchesEquipmentRequirement(room, req))) return false;
 
-    if (subject.preferredRoomType && subject.preferredRoomType !== room.type) return false;
+    if (!options.ignoreRoomType && subject.preferredRoomType && subject.preferredRoomType !== room.type) return false;
 
     if (equipmentSettings?.strictLevel5) {
         for (const req of getRequiredItems(subject)) {
@@ -148,6 +144,22 @@ const isHardCandidate = (
     }
 
     return true;
+};
+
+const isHardCandidate = (
+    room: Classroom,
+    subject: Subject,
+    occupied: Set<string>,
+    newAllocations: Allocation[],
+    equipmentSettings?: EquipmentSettings,
+    options: HardEligibilityOptions = {}
+) => {
+    if (newAllocations.some(a => a.subjectId === subject.id && a.classroomId === room.id)) return false;
+
+    const roomKeys = getRoomOccupiedKeys(subject, room.id);
+    if (roomKeys.some(key => occupied.has(key))) return false;
+
+    return passesStaticHardRules(room, subject, equipmentSettings, options);
 };
 
 const scoreTeacherContinuity = (room: Classroom, subject: Subject, subjects: Subject[], allocations: Allocation[], classrooms: Classroom[]) => {
@@ -315,15 +327,37 @@ const pickBestCandidate = (
     return candidates[0];
 };
 
+const hasCandidateIfRoomTypeIgnored = (
+    subject: Subject,
+    classrooms: Classroom[],
+    allocations: Allocation[],
+    occupied: Set<string>,
+    equipmentSettings?: EquipmentSettings
+) => {
+    if (!subject.preferredRoomType) return false;
+    return classrooms.some(room =>
+        room.type !== subject.preferredRoomType &&
+        isHardCandidate(room, subject, occupied, allocations, equipmentSettings, { ignoreRoomType: true })
+    );
+};
+
 const classifyUnassigned = (
     subject: Subject,
     strictCandidatesCount: number,
-    requiredRoomCountShort: boolean
+    requiredRoomCountShort: boolean,
+    roomTypeBlocked: boolean
 ): { reason: UnassignedReason; detail?: string } => {
     if (requiredRoomCountShort) {
         return {
             reason: 'U4_room_count_short',
             detail: `必要教室数 ${subject.requiredRoomCount || 1} 室を満たせなかった`
+        };
+    }
+
+    if (roomTypeBlocked) {
+        return {
+            reason: 'U2_room_type_blocked',
+            detail: '教室タイプを満たす候補教室がない'
         };
     }
 
@@ -352,6 +386,7 @@ export const runAutoAllocation = (
     runOptions: AllocationRunOptions = {}
 ): OptimizerResult => {
     const ruleMap = getRuleMap(rules);
+    const contextSubjects = runOptions.contextSubjects || subjects;
 
     const occupied = new Set<string>();
     const newAllocations: Allocation[] = currentAllocations.map(cloneAllocation);
@@ -359,7 +394,7 @@ export const runAutoAllocation = (
     const streakMap = runOptions.ignoreStreakOnce ? new Map<string, number>() : (runOptions.streakMap || loadStreakMap());
 
     currentAllocations.forEach(alloc => {
-        const subj = subjects.find(s => s.id === alloc.subjectId);
+        const subj = contextSubjects.find(s => s.id === alloc.subjectId);
         if (!subj) return;
         markAllocation(subj, alloc, occupied);
     });
@@ -367,7 +402,7 @@ export const runAutoAllocation = (
     const sortedSubjects = [...subjects].map((subject, index) => ({
         subject,
         index,
-        difficulty: computeDifficulty(subject, subjects, classrooms, rules, equipmentSettings, streakMap)
+        difficulty: computeDifficulty(subject, contextSubjects, classrooms, rules, equipmentSettings, streakMap)
     })).sort((a, b) => {
         const priorityDiff = (b.subject.priority || 1) - (a.subject.priority || 1);
         if (priorityDiff !== 0) return priorityDiff;
@@ -395,7 +430,7 @@ export const runAutoAllocation = (
         while (remaining > 0) {
             const strictCandidate = pickBestCandidate(
                 subject,
-                subjects,
+                contextSubjects,
                 classrooms,
                 newAllocations,
                 occupied,
@@ -458,7 +493,8 @@ export const runAutoAllocation = (
             const reasonInfo = classifyUnassigned(
                 subject,
                 strictCandidatesCount,
-                remaining > 0 && addedThisRound.length > 0
+                remaining > 0 && addedThisRound.length > 0,
+                hasCandidateIfRoomTypeIgnored(subject, classrooms, newAllocations, occupied, equipmentSettings)
             );
 
             if (!unassigned.some(item => item.subject.id === subject.id)) {
@@ -552,20 +588,7 @@ const isHardRoomEligible = (
     subject: Subject,
     equipmentSettings?: EquipmentSettings
 ) => {
-    if (room.isExcluded) return false;
-    if (room.capacity < subject.requiredCapacity) return false;
-    if (getMandatoryItems(subject).some(req => !matchesEquipmentRequirement(room, req))) return false;
-
-    if (equipmentSettings?.strictLevel5) {
-        for (const req of getRequiredItems(subject)) {
-            const entries = getRelevantEquipmentSetting(req, equipmentSettings);
-            const hasLevel5 = entries.some(entry => entry.setting.enabled && entry.setting.importance === 5);
-            if (!hasLevel5) continue;
-            if (!matchesEquipmentRequirement(room, req)) return false;
-        }
-    }
-
-    return true;
+    return passesStaticHardRules(room, subject, equipmentSettings);
 };
 
 const buildRelocationCandidate = (

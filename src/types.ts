@@ -452,6 +452,7 @@ export interface PendingException {
 }
 
 export interface AllocationRunOptions {
+    contextSubjects?: Subject[];
     equipmentSettings?: {
         items: { [key: string]: { enabled: boolean; importance: number } };
         strictLevel5: boolean;
