@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test --config=playwright.local.config.ts tests/e2e/allocation-optimizer.spec.ts tests/e2e/cloud-allocation-merge.spec.ts tests/e2e/cloud-diff.spec.ts",
-    "test:e2e:cloud": "playwright test tests/e2e/check-import-special.spec.ts tests/e2e/cloud-login.spec.ts tests/e2e/cloud-stale-overwrite.spec.ts",
+    "test:e2e:cloud": "playwright test tests/e2e/check-import-special.spec.ts tests/e2e/cloud-login.spec.ts tests/e2e/cloud-stale-overwrite.spec.ts tests/e2e/guide-tour.spec.ts",
     "preview": "vite preview"
   },
   "dependencies": {

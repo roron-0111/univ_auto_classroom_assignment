@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { X, Cloud, LogIn, LogOut } from 'lucide-react';
+import { X, Cloud, LogIn, LogOut, HelpCircle } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import { CAMPUSES, getCampusLabelFromEmail } from '../types';
 
 interface CloudConnectionModalProps {
   onClose: () => void;
+  onGuide?: () => void;
   onLogin: (email: string, pass: string) => Promise<void>;
   onLogout: () => void;
   isConnecting: boolean;
@@ -13,6 +14,7 @@ interface CloudConnectionModalProps {
 
 export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
   onClose,
+  onGuide,
   onLogin,
   onLogout,
   isConnecting,
@@ -120,6 +122,23 @@ export const CloudConnectionModal: React.FC<CloudConnectionModalProps> = ({
             <p style={{ fontSize: '0.9rem', color: '#666', margin: 0 }}>
               接続するキャンパスを選んでください。
             </p>
+            {onGuide && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onGuide}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginTop: '16px'
+                }}
+              >
+                <HelpCircle size={18} />
+                ガイドを開く
+              </button>
+            )}
           </div>
 
           {error && <div className="error-message">{error}</div>}

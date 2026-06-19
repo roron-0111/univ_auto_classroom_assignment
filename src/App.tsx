@@ -27,11 +27,12 @@ import { auth } from './utils/firebase';
 import type { CloudData } from './types_cloud';
 import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocation } from './utils/unassignedStreak';
 import { buildCloudDiffCsv as buildCloudDiffCsvRows, compareCloudSnapshots, type CloudWriteWarningSummary } from './utils/cloudDiff';
+import type { GuideView } from './components/GuideTour';
 
 // Icons
 import {
   RefreshCw, Settings, BookOpen, Eye, Calendar,
-  AlertTriangle, ListChecks, CloudUpload, CloudDownload, LogOut
+  AlertTriangle, ListChecks, CloudUpload, CloudDownload, LogOut, HelpCircle
 } from 'lucide-react';
 
 const ClassroomManager = lazy(() => import('./components/ClassroomManager').then(module => ({ default: module.ClassroomManager })));
@@ -45,6 +46,7 @@ const ExceptionReviewModal = lazy(() => import('./components/ExceptionReviewModa
 const RelocationPreviewModal = lazy(() => import('./components/RelocationPreviewModal').then(module => ({ default: module.RelocationPreviewModal })));
 const CloudReadWarningModal = lazy(() => import('./components/CloudReadWarningModal').then(module => ({ default: module.CloudReadWarningModal })));
 const CloudConnectionModal = lazy(() => import('./components/CloudConnectionModal').then(module => ({ default: module.CloudConnectionModal })));
+const GuideTour = lazy(() => import('./components/GuideTour').then(module => ({ default: module.GuideTour })));
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
@@ -390,15 +392,16 @@ function App() {
   const currentCampusLabel = useMemo(() => getCampusLabelFromEmail(user?.email), [user?.email]);
 
   const [showCloudModal, setShowCloudModal] = useState(false);
+  const [showGuideTour, setShowGuideTour] = useState(false);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const localSnapshotBaselineRef = useRef<CloudData | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !user && !showGuideTour) {
       setShowCloudModal(true);
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, showGuideTour]);
 
   const applyCampusState = useCallback((campusLabel: string): CloudData => {
     const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
@@ -484,6 +487,18 @@ function App() {
   const [resolvingExceptions, setResolvingExceptions] = useState(false);
   const [relocating, setRelocating] = useState(false);
   const [streakRevision, setStreakRevision] = useState(0);
+
+  const handleGuideViewChange = useCallback((view: GuideView) => {
+    setShowCloudModal(false);
+    setShowRuleSettings(view === 'rules');
+    setShowManager(view === 'classrooms');
+    setShowSubjectManager(view === 'subjects');
+  }, []);
+
+  const handleGuideClose = useCallback(() => {
+    handleGuideViewChange('main');
+    setShowGuideTour(false);
+  }, [handleGuideViewChange]);
 
   const [allocationSettings, setAllocationSettings] = useState<AllocationRule[]>(() => {
     try {
@@ -1407,7 +1422,7 @@ function App() {
   return (
     <div className="app-layout">
       {/* Header */}
-      <header style={{
+      <header data-tour="app-header" style={{
         padding: '10px 20px', background: '#2d2d2d', color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexShrink: 0
@@ -1418,9 +1433,24 @@ function App() {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            data-tour="guide-button"
+            onClick={() => setShowGuideTour(true)}
+            style={{
+              display: 'flex', gap: '6px', alignItems: 'center',
+              background: '#f8fafc', color: '#1f2937',
+              border: '1px solid #cbd5e1',
+              padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+              fontSize: '0.9rem', fontWeight: '600'
+            }}
+          >
+            <HelpCircle size={16} />
+            ガイド
+          </button>
           {user && (
             <>
               <button
+                data-tour="cloud-write"
                 onClick={handleCloudWrite}
                 style={{
                   display: 'flex', gap: '6px', alignItems: 'center',
@@ -1437,6 +1467,7 @@ function App() {
                 書込
               </button>
               <button
+                data-tour="cloud-read"
                 onClick={handleCloudRead}
                 style={{
                   display: 'flex', gap: '6px', alignItems: 'center',
@@ -1457,6 +1488,7 @@ function App() {
 
           {user && (
             <button
+              data-tour="logout"
               onClick={authLogout}
               style={{
                 display: 'flex', gap: '6px', alignItems: 'center',
@@ -1473,17 +1505,17 @@ function App() {
           )}
 
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-          <button onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2563eb', color: '#fff', border: '1px solid #1d4ed8', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+          <button data-tour="allocation-rules" onClick={() => setShowRuleSettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#2563eb', color: '#fff', border: '1px solid #1d4ed8', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
             <ListChecks size={16} /> {"配当ルール設定"}
           </button>
-          <button onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#dc2626', color: '#fff', border: '1px solid #991b1b', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button data-tour="allocation-clear" onClick={handleReset} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#dc2626', color: '#fff', border: '1px solid #991b1b', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <RefreshCw size={16} /> {"配当クリア"}
           </button>
           <div style={{ width: '1px', background: '#666', height: '24px', margin: '0 4px' }}></div>
-          <button onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button data-tour="classroom-manager" onClick={() => setShowManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <Settings size={16} /> {"教室管理"}
           </button>
-          <button onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
+          <button data-tour="subject-manager" onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
             <BookOpen size={16} /> {"授業管理"}
           </button>
           {SHOW_DISPLAY_SETTINGS_BUTTON && (
@@ -1497,7 +1529,7 @@ function App() {
       {/* Main Content */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
         {/* Sidebar */}
-        <div style={{ width: '250px', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#f8f9fa' }}>
+        <div data-tour="unassigned-list" style={{ width: '250px', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#f8f9fa' }}>
           <UnassignedList
             subjects={unassignedWithReason}
             allocations={allocations}
@@ -1514,7 +1546,7 @@ function App() {
           {/* Grid Control Bar (Day & Building) */}
           <div style={{ background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
             {/* Day Tabs */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #c8cdd8', background: '#e4e8f0', paddingTop: '4px', paddingLeft: '4px', gap: '2px' }}>
+            <div data-tour="day-tabs" style={{ display: 'flex', borderBottom: '2px solid #c8cdd8', background: '#e4e8f0', paddingTop: '4px', paddingLeft: '4px', gap: '2px' }}>
               {
                 DAYS.map((d) => {
                   const isActive = currentDay === d;
@@ -1555,7 +1587,7 @@ function App() {
             </div>
 
             {/* Building / Type / Equipment Filters - single row */}
-            <div style={{ padding: '6px 20px', borderBottom: '1px solid #eee', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
+            <div data-tour="filters" style={{ padding: '6px 20px', borderBottom: '1px solid #eee', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.82em', background: '#fafafa' }}>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ color: '#666', fontWeight: 'bold', whiteSpace: 'nowrap' }}>建物：</span>
                 {buildings.map(b => (
@@ -1625,7 +1657,7 @@ function App() {
           </div>
 
           {/* Grid Area - Use full remaining height */}
-          < div style={{ flex: 1, overflow: 'hidden' }}>
+          < div data-tour="timetable-grid" style={{ flex: 1, overflow: 'hidden' }}>
             <TimeTableGrid
               day={currentDay}
               classrooms={filteredClassrooms}
@@ -1644,7 +1676,7 @@ function App() {
             />
 
             {/* Legend */}
-            <div style={{
+            <div data-tour="legend" style={{
               padding: '10px 20px', background: '#fff', borderTop: '1px solid #ddd',
               display: 'flex', gap: '30px', fontSize: '0.8rem', color: '#666', alignItems: 'center'
             }}>
@@ -1889,10 +1921,23 @@ function App() {
                 // ユーザーがログインしている場合のみ閉じることができる
                 if (user) setShowCloudModal(false);
               }}
+              onGuide={() => {
+                setShowCloudModal(false);
+                setShowGuideTour(true);
+              }}
               onLogin={(campusId) => handleCloudConnect(campusId)}
               onLogout={authLogout}
               isConnecting={isCloudLoading}
               user={user}
+            />
+          )
+        }
+        {
+          showGuideTour && (
+            <GuideTour
+              isOpen={showGuideTour}
+              onClose={handleGuideClose}
+              onViewChange={handleGuideViewChange}
             />
           )
         }

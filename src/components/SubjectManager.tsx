@@ -1022,11 +1022,11 @@ export const SubjectManager = ({
     const filterInputStyle = { width: '100%', padding: '4px', fontSize: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', boxSizing: 'border-box' as const };
 
     return (
-        <div className="manager-overlay" style={{
+        <div className="manager-overlay" data-tour="subject-manager-screen" style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column'
         }}>
-            <header style={{
+            <header data-tour="subject-manager-header" style={{
                 padding: '15px 30px', background: '#2d2d2d', color: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between'
             }}>
@@ -1045,14 +1045,14 @@ export const SubjectManager = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
                         <div>
                             <p style={{ color: '#666', margin: '0 0 10px 0' }}>授業情報の編集、削除、一括インポートが行えます。</p>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={startAdding} style={{
+                            <div data-tour="subject-actions" style={{ display: 'flex', gap: '10px' }}>
+                                <button data-tour="subject-add" onClick={startAdding} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#646cff', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
                                     <Plus size={18} /> 新規追加
                                 </button>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <button onClick={() => fileInputRef.current?.click()} style={{
+                                    <button data-tour="subject-import" onClick={() => fileInputRef.current?.click()} style={{
                                         display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                     }}>
                                         <Upload size={18} /> CSVインポート
@@ -1075,10 +1075,10 @@ export const SubjectManager = ({
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={openTaxonomyModal} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em' }}>
+                                <button data-tour="subject-taxonomy" onClick={openTaxonomyModal} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#2e7d32', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em' }}>
                                     開講学部・管轄
                                 </button>
-                                <button onClick={() => {
+                                <button data-tour="subject-export" onClick={() => {
                                     // エクスポート用にデータを整形（日本語キー、日本語値）
                                     // 複数教室配当がある場合は1教室につき1行で出力
                                     const exportData = subjects.flatMap(s => {
@@ -1175,6 +1175,7 @@ export const SubjectManager = ({
             {/* スクロールエリア（テーブルのみ） */}
             <div
                 ref={subjectScrollRef}
+                data-tour="subject-table"
                 onScroll={e => setSubjectScrollTop(e.currentTarget.scrollTop)}
                 style={{ flex: 1, overflow: 'auto' }}
             >

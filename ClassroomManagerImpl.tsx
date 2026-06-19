@@ -362,11 +362,11 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     };
 
     return (
-        <div className="manager-overlay" style={{
+        <div className="manager-overlay" data-tour="classroom-manager-screen" style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column'
         }}>
-            <header style={{
+            <header data-tour="classroom-manager-header" style={{
                 padding: '15px 30px', background: '#2d2d2d', color: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between'
             }}>
@@ -385,14 +385,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'flex-end' }}>
                         <div>
                             <p style={{ color: '#666', margin: '0 0 10px 0' }}>教室情報の編集、削除、一括インポートが行えます。</p>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={startAdding} style={{
+                            <div data-tour="classroom-actions" style={{ display: 'flex', gap: '10px' }}>
+                                <button data-tour="classroom-add" onClick={startAdding} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#646cff', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                 }}>
                                     <Plus size={18} /> 新規教室
                                 </button>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <button onClick={() => fileInputRef.current?.click()} style={{
+                                    <button data-tour="classroom-import" onClick={() => fileInputRef.current?.click()} style={{
                                         display: 'flex', gap: '8px', alignItems: 'center', background: '#555', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                     }}>
                                         <Upload size={18} /> CSVインポート
@@ -414,7 +414,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => {
+                                <button data-tour="classroom-export" onClick={() => {
                                     const exportData = classrooms.map(r => {
                                         const base: Record<string, unknown> = {
                                             'ID': r.id,
@@ -469,14 +469,14 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                         </div>
                     </div>
 
-                    <div style={{ padding: '8px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div data-tour="classroom-excluded-note" style={{ padding: '8px 12px', background: '#fff9c4', borderRadius: '6px', border: '1px solid #fbc02d', color: '#827717', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>⚠️</span>
                         <strong>※注意:</strong> 配当対象外の教室には自動配当時に科目が配当されません。
                     </div>
                 </div>
             </div>
             {/* スクロールエリア（テーブルのみ） */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div data-tour="classroom-table" style={{ flex: 1, overflow: 'auto' }}>
                 <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 30px 20px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', fontSize: '0.9em' }}>
                         <thead>

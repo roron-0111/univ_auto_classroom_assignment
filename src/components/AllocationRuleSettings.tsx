@@ -109,12 +109,12 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
     };
 
     return (
-        <div style={{
+        <div data-tour="allocation-settings-screen" style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
             background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column',
             animation: 'slideIn 0.3s ease-out'
         }}>
-            <header style={{
+            <header data-tour="allocation-settings-header" style={{
                 padding: '15px 30px', borderBottom: '1px solid #eee',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 background: '#fcfcfc'
@@ -132,6 +132,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                 </div>
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <button
+                        data-tour="allocation-run"
                         onClick={save}
                         style={{
                             padding: '6px 14px', borderRadius: '4px', border: 'none',
@@ -150,7 +151,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
             </header>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '30px 40px' }}>
-                <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e9ecef' }}>
+                <div data-tour="allocation-basic-settings" style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e9ecef' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '15px', fontSize: '0.95rem', color: '#333', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         🛠️ 配当基本設定
                     </div>
@@ -173,7 +174,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <div data-tour="allocation-mode" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>曜日:</span>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const).map(d => (
@@ -299,7 +300,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-                    <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
+                    <section data-tour="allocation-hard-rules" style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 'bold', color: '#37474f' }}>
                             <Lock size={16} /> 必須
                         </div>
@@ -317,7 +318,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                         </div>
                     </section>
 
-                    <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
+                    <section data-tour="allocation-preference-rules" style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                         <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                             <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#555', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 希望条件の順序
@@ -359,7 +360,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                     </section>
                 </div>
 
-                <section style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
+                <section data-tour="allocation-equipment-rules" style={{ background: '#fff', border: '1px solid #eceff1', borderRadius: '10px', padding: '16px' }}>
                     <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                         <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#555', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             対象機材の個別設定 <span style={{ fontWeight: 'normal', fontSize: '0.75rem', color: '#888' }}>(重要度 1:低 〜 5:高)</span>
