@@ -28,6 +28,12 @@ async function expectStableGuideStep(page: Page) {
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
 }
 
+async function expectGuideTargetText(page: Page, selector: string, text: string) {
+  const target = page.locator(selector);
+  await expect(target).toBeVisible();
+  await expect(target).toContainText(text);
+}
+
 test('guide tour switches screens and returns to the guide menu', async ({ page }) => {
   await page.goto('/');
 
@@ -72,6 +78,10 @@ test('guide tour switches screens and returns to the guide menu', async ({ page 
   await expectStableGuideStep(page);
   await page.getByRole('button', { name: /次へ/ }).click();
   await expect(page.getByRole('heading', { name: '対象を選ぶ' })).toBeVisible();
+  await expectStableGuideStep(page);
+  await page.getByRole('button', { name: /次へ/ }).click();
+  await expect(page.getByRole('heading', { name: '配当方法を選ぶ' })).toBeVisible();
+  await expectGuideTargetText(page, '[data-tour="allocation-mode"]', '配当モード');
   await expectStableGuideStep(page);
   await backToGuideMenu(page);
   await expect(page.getByRole('heading', { name: '自動配当の準備' })).toHaveCount(0);

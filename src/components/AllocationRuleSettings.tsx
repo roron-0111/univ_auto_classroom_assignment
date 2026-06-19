@@ -174,7 +174,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                             </div>
                         </div>
 
-                        <div data-tour="allocation-mode" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>曜日:</span>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const).map(d => (
@@ -251,7 +251,7 @@ export const AllocationRuleSettings = ({ settings, equipmentSettings: initialEqu
                             </button>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <div data-tour="allocation-mode" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <span style={{ fontSize: '0.85rem', color: '#666', minWidth: '80px' }}>配当モード:</span>
                             <div style={{ display: 'flex', gap: '15px', alignItems: 'center', background: '#e3f2fd', padding: '5px 12px', borderRadius: '20px' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: allocationMode === 'incremental' ? 'bold' : 'normal', color: allocationMode === 'incremental' ? '#1565c0' : '#666' }}>
