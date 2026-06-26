@@ -5,6 +5,10 @@ const cloudWriteResults = [
   '変更はありませんでした。',
   '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。'
 ] as const;
+const cloudReadResults = [
+  'クラウドから取得しました。',
+  'クラウドに保存済みデータが見つかりません。ローカルの内容は変更していません。'
+] as const;
 
 const campusName = '八景';
 
@@ -56,7 +60,7 @@ test('read without local changes loads cloud data directly', async ({ page }) =>
   await page.getByRole('button', { name: '取得' }).click();
   const dialog = await dialogPromise;
 
-  expect(['Cloud data loaded.', 'No cloud data found.']).toContain(dialog.message());
+  expect(cloudReadResults).toContain(dialog.message());
   await dialog.accept();
 });
 
@@ -73,8 +77,7 @@ test('write read write roundtrip stays stable', async ({ page }) => {
       'Cloud write complete.',
       '変更はありませんでした。',
       '現在、別のユーザーが書き込み中です。しばらく待ってから再度お試しください。',
-      'Cloud data loaded.',
-      'No cloud data found.'
+      ...cloudReadResults
     ]).toContain(dialog.message());
     await dialog.accept();
   }

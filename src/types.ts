@@ -16,16 +16,16 @@ export const getTermLabel = (term: string | null | undefined) => {
 };
 
 
-/** 配当時、このtermのスロットが占有されたとき、競合キーとしてマークするterm一覧 */
+/** 配当時、このtermが実際に占有する期間キー一覧 */
 export const getTermsToMark = (term: Term): Term[] => {
     switch (term) {
-        case 'spring':       return ['spring', 'spring_first', 'spring_second', 'full_year'];
-        case 'spring_first': return ['spring_first', 'spring', 'full_year'];
-        case 'spring_second': return ['spring_second', 'spring', 'full_year'];
-        case 'autumn':       return ['autumn', 'autumn_first', 'autumn_second', 'full_year'];
-        case 'autumn_first': return ['autumn_first', 'autumn', 'full_year'];
-        case 'autumn_second': return ['autumn_second', 'autumn', 'full_year'];
-        case 'full_year':    return ['full_year', 'spring', 'spring_first', 'spring_second', 'autumn', 'autumn_first', 'autumn_second'];
+        case 'spring': return ['spring_first', 'spring_second'];
+        case 'spring_first': return ['spring_first'];
+        case 'spring_second': return ['spring_second'];
+        case 'autumn': return ['autumn_first', 'autumn_second'];
+        case 'autumn_first': return ['autumn_first'];
+        case 'autumn_second': return ['autumn_second'];
+        case 'full_year': return ['spring_first', 'spring_second', 'autumn_first', 'autumn_second'];
     }
 };
 

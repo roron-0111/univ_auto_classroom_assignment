@@ -9,6 +9,7 @@ import { runAutoAllocation, relocateForUnassigned, resolveExceptions } from './u
 import { DEFAULT_ALLOCATION_RULES, DEFAULT_EQUIPMENT_SETTINGS, EQUIPMENT_LIST, migrateAllocationRules, normalizeEquipmentName, normalizeCampusLabel, getCampusLabelFromEmail } from './types';
 import type { AllocationOptions } from './types';
 import { buildDifficultyRanking, computeDifficulty, formatDifficultySummary, type DifficultyEntry } from './utils/difficulty';
+import { buildAllocationCountBySubjectId, getSubjectAllocationCount, isSubjectUnfilled, shouldIncludeSubjectForAllocation } from './utils/allocationStatus';
 import { buildApprovalKey } from './utils/approvalKey';
 import { stableSerialize } from './utils/cloudDiff';
 import {
@@ -65,6 +66,9 @@ const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
 };
 const SHOW_DISPLAY_SETTINGS_BUTTON = false;
 const DEFAULT_CAMPUS_LABEL = '八景';
+const CLOUD_READ_SUCCESS_MESSAGE = 'クラウドから取得しました。';
+const CLOUD_READ_EMPTY_MESSAGE = 'クラウドに保存済みデータが見つかりません。ローカルの内容は変更していません。';
+const CLOUD_READ_FAILED_MESSAGE = 'クラウドから取得できませんでした。\n通信状態、ログイン状態、またはクラウド側の一時的な問題を確認してから、もう一度「取得」を押してください。\nローカルの内容は変更していません。';
 
 const isTerm = (value: unknown): value is Term =>
   value === 'spring' || value === 'spring_first' || value === 'spring_second' ||
@@ -77,6 +81,20 @@ const isDayOfWeek = (value: unknown): value is DayOfWeek =>
 
 const isPeriod = (value: unknown): value is Period =>
   value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7;
+
+const getCloudReadErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  if (/WRITE_LOCKED/i.test(message)) {
+    return '別のユーザーが書き込み中のため、クラウドから取得できませんでした。\nしばらく待ってから、もう一度「取得」を押してください。\nローカルの内容は変更していません。';
+  }
+  if (/permission-denied/i.test(message)) {
+    return 'クラウドから取得する権限がありません。\nログインしているキャンパスを確認してください。\nローカルの内容は変更していません。';
+  }
+  if (/整合性|CLOUD_SNAPSHOT_INVALID/i.test(message)) {
+    return 'クラウドデータの整合性を確認できませんでした。\n時間をおいて「取得」をやり直してください。改善しない場合は、書込を止めて管理者へ連絡してください。\nローカルの内容は変更していません。';
+  }
+  return CLOUD_READ_FAILED_MESSAGE;
+};
 
 const normalizeDisplayConfig = (value: unknown): DisplayConfig => {
   if (!value || typeof value !== 'object') return DEFAULT_DISPLAY_CONFIG;
@@ -717,13 +735,13 @@ function App() {
           return;
         }
         applyCloudData(cloudData, currentCampusLabel);
-        alert('Cloud data loaded.');
+        alert(CLOUD_READ_SUCCESS_MESSAGE);
       } else {
-        alert('No cloud data found.');
+        alert(CLOUD_READ_EMPTY_MESSAGE);
       }
     } catch (error) {
       console.error(error);
-      alert('Cloud fetch failed.');
+      alert(getCloudReadErrorMessage(error));
     } finally {
       setIsCloudLoading(false);
     }
@@ -735,7 +753,7 @@ function App() {
     setShowCloudReadWarningModal(false);
     setCloudReadWarningSummary(null);
     setPendingCloudReadData(null);
-    alert('Cloud data loaded.');
+    alert(CLOUD_READ_SUCCESS_MESSAGE);
   }, [pendingCloudReadData, applyCloudData, currentCampusLabel]);
 
   const handleCloudReadWarningExport = useCallback(() => {
@@ -779,7 +797,7 @@ function App() {
       return true;
     } catch (error) {
       console.error(error);
-      alert('クラウドの最新状態を確認できなかったため、自動配当を中止しました。先に通信状態を確認し、「書込」または「取得」を行ってください。');
+      alert(`${getCloudReadErrorMessage(error)}\n自動配当は実行していません。`);
       return false;
     } finally {
       setIsAutoAllocationGuardBusy(false);
@@ -803,7 +821,7 @@ function App() {
     applyCloudData(autoAllocationGuardCloudData, currentCampusLabel);
     clearAutoAllocationCloudGuardState();
     setShowRuleSettings(false);
-    alert('Cloud data loaded. 自動配当は実行していません。必要な場合は、条件を確認してもう一度実行してください。');
+    alert(`${CLOUD_READ_SUCCESS_MESSAGE}\n自動配当は実行していません。必要な場合は、条件を確認してもう一度実行してください。`);
   }, [autoAllocationGuardCloudData, applyCloudData, currentCampusLabel, clearAutoAllocationCloudGuardState]);
 
   const handleAutoAllocationGuardExport = useCallback(() => {
@@ -977,8 +995,9 @@ function App() {
   };
 
   const unassignedSubjectsAll = useMemo(() => {
+    const allocationCounts = buildAllocationCountBySubjectId(allocations);
     return subjects.flatMap(s => {
-      const currentCount = allocations.filter(a => a.subjectId === s.id).length;
+      const currentCount = getSubjectAllocationCount(s, allocationCounts);
       const countNeeded = (s.requiredRoomCount || 1);
       const remaining = Math.max(0, countNeeded - currentCount);
 
@@ -1028,16 +1047,8 @@ function App() {
   };
 
   const getUnassignedSubjects = (subjectList: Subject[], allocationList: Allocation[]) => {
-    const allocationCounts = new Map<string, number>();
-    allocationList.forEach(allocation => {
-      allocationCounts.set(allocation.subjectId, (allocationCounts.get(allocation.subjectId) || 0) + 1);
-    });
-
-    return subjectList.filter(subject => {
-      const currentCount = allocationCounts.get(subject.id) || 0;
-      const requiredCount = subject.requiredRoomCount || 1;
-      return currentCount < requiredCount;
-    });
+    const allocationCounts = buildAllocationCountBySubjectId(allocationList);
+    return subjectList.filter(subject => isSubjectUnfilled(subject, allocationCounts));
   };
 
   const reorderSubjectsByUnassignedOrder = (subjectList: Subject[], orderedUnassigned: Subject[]) => {
@@ -1188,7 +1199,7 @@ function App() {
     }
 
     // 対象科目をフィルタリング
-    const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
+    const allocationCounts = buildAllocationCountBySubjectId(allocations);
     const targetSubjects = subjects.filter(s => {
       // 優先度フィルタ
       if (!priorities.includes(s.priority || 1)) return false;
@@ -1208,10 +1219,7 @@ function App() {
       }
 
       // 配当状況フィルタ
-      const isAllocated = allocatedSubjectIds.has(s.id);
-      if (isAllocated && !includeAllocated) return false;
-      if (!isAllocated && !includeUnassigned) return false;
-      return true;
+      return shouldIncludeSubjectForAllocation(s, allocationCounts, { includeAllocated, includeUnassigned });
     });
 
     if (targetSubjects.length === 0) {
@@ -1225,12 +1233,12 @@ function App() {
 
     // 配当済みを含む場合は確認
     if (includeAllocated) {
-      const allocatedCount = targetSubjects.filter(s => allocatedSubjectIds.has(s.id)).length;
+      const allocatedCount = targetSubjects.filter(s => getSubjectAllocationCount(s, allocationCounts) > 0).length;
       if (allocatedCount > 0 && !confirm(`配当済み${allocatedCount}件を含む${targetSubjects.length}件を再配当します。\n既存の配当はリセットされます。よろしいですか？`)) return;
     }
 
-    // 既存配当から対象科目を除外
-    const preservedAllocations = allocations.filter(a => !targetSubjects.some(s => s.id === a.subjectId));
+    const resetSubjectIds = new Set(includeAllocated ? targetSubjects.map(s => s.id) : []);
+    const preservedAllocations = allocations.filter(a => !resetSubjectIds.has(a.subjectId));
     const streakMap = loadStreakMap();
     const approvedExceptions = buildApprovedExceptionSet(allocations);
     const difficultyTop10 = buildDifficultyRanking(targetSubjects, classrooms, rulesToUse, equipmentToUse, streakMap);
@@ -1275,7 +1283,7 @@ function App() {
       return;
     }
 
-    const allocatedSubjectIds = new Set(allocations.map(a => a.subjectId));
+    const allocationCounts = buildAllocationCountBySubjectId(allocations);
     const targetSubjects = subjects.filter(s => {
       if (!priorities.includes(s.priority || 1)) return false;
       if (!options.terms.includes(s.term)) return false;
@@ -1287,10 +1295,7 @@ function App() {
         if (!options.periods.includes(p as Period)) return false;
       }
 
-      const isAllocated = allocatedSubjectIds.has(s.id);
-      if (isAllocated && !includeAllocated) return false;
-      if (!isAllocated && !includeUnassigned) return false;
-      return true;
+      return shouldIncludeSubjectForAllocation(s, allocationCounts, { includeAllocated, includeUnassigned });
     });
 
     if (targetSubjects.length === 0) {
@@ -1303,13 +1308,14 @@ function App() {
     }
 
     if (includeAllocated) {
-      const allocatedCount = targetSubjects.filter(s => allocatedSubjectIds.has(s.id)).length;
+      const allocatedCount = targetSubjects.filter(s => getSubjectAllocationCount(s, allocationCounts) > 0).length;
       if (allocatedCount > 0 && !confirm(`既存配当を含む ${allocatedCount} 科目を再配当します。よろしいですか？`)) {
         return;
       }
     }
 
-    const preservedAllocations = allocations.filter(a => !targetSubjects.some(s => s.id === a.subjectId));
+    const resetSubjectIds = new Set(includeAllocated ? targetSubjects.map(s => s.id) : []);
+    const preservedAllocations = allocations.filter(a => !resetSubjectIds.has(a.subjectId));
     const streakMap = loadStreakMap();
     const approvedExceptions = buildApprovedExceptionSet(allocations);
     const difficultyTop10 = buildDifficultyRanking(targetSubjects, classrooms, rulesToUse, equipmentToUse, streakMap);

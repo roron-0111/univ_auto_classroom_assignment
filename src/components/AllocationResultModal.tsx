@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { X, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
-import type { UnassignedInfo, UnassignedReason } from '../types';
+import { getDayLabel, getPeriodLabel, getTermLabel } from '../types';
+import type { Subject, UnassignedInfo, UnassignedReason } from '../types';
 import type { DifficultyBreakdown, DifficultyEntry } from '../utils/difficulty';
 
 interface AllocationResultSummary {
@@ -37,21 +38,59 @@ const formatDifficulty = (breakdown: DifficultyBreakdown) => {
   return parts.join(' / ');
 };
 
-const REASON_META: Record<UnassignedReason, { label: string; color: string; bg: string; border: string }> = {
-  U1_no_hard_candidate: { label: '必須条件を満たす候補なし', color: '#b71c1c', bg: '#ffebee', border: '#ef9a9a' },
-  U2_room_type_blocked: { label: '教室タイプ不一致', color: '#e65100', bg: '#fff3e0', border: '#ffb74d' },
-  U3_term_split_blocked: { label: '春秋同一教室不可', color: '#9e7d00', bg: '#fff8e1', border: '#ffe082' },
-  U4_room_count_short: { label: '必要教室数不足', color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' },
-  U5_swap_failed: { label: '玉突き再配置失敗', color: '#6a1b9a', bg: '#f3e5f5', border: '#ce93d8' }
+const REASON_META: Record<UnassignedReason, { label: string; description: string; color: string; bg: string; border: string }> = {
+  U1_no_hard_candidate: {
+    label: '条件に合う教室なし',
+    description: '定員、必須機材、配当対象外の設定を確認してください。',
+    color: '#b71c1c',
+    bg: '#ffebee',
+    border: '#ef9a9a'
+  },
+  U2_room_type_blocked: {
+    label: '教室タイプが合わない',
+    description: 'PC室、ゼミ室などの希望タイプと教室マスタを確認してください。',
+    color: '#e65100',
+    bg: '#fff3e0',
+    border: '#ffb74d'
+  },
+  U3_term_split_blocked: {
+    label: '春秋で同じ教室にできない',
+    description: '春秋ペアの科目が同じ教室に入れられるか確認してください。',
+    color: '#9e7d00',
+    bg: '#fff8e1',
+    border: '#ffe082'
+  },
+  U4_room_count_short: {
+    label: '必要な教室数が足りない',
+    description: '複数教室が必要な科目で、同じ時間に空いている教室数を確認してください。',
+    color: '#1565c0',
+    bg: '#e3f2fd',
+    border: '#90caf9'
+  },
+  U5_swap_failed: {
+    label: '再配置でも入らない',
+    description: 'ほかの科目を動かしても空きが作れません。条件を見直してください。',
+    color: '#6a1b9a',
+    bg: '#f3e5f5',
+    border: '#ce93d8'
+  }
 };
 
 const getReasonMeta = (reason?: UnassignedReason) =>
   (reason && REASON_META[reason]) || {
     label: '未分類',
+    description: '未配当一覧の補足を確認してください。',
     color: '#475569',
     bg: '#f8fafc',
     border: '#cbd5e1'
   };
+
+const formatSubjectSchedule = (subject: Subject) => {
+  const endPeriod = subject.endPeriod && subject.endPeriod > subject.period
+    ? `-${getPeriodLabel(subject.endPeriod)}`
+    : '';
+  return `${getTermLabel(subject.term)} / ${getDayLabel(subject.day)}曜 / ${getPeriodLabel(subject.period)}${endPeriod}講時`;
+};
 
 export const AllocationResultModal = ({
   isOpen,
@@ -82,6 +121,12 @@ export const AllocationResultModal = ({
     'U2_room_type_blocked',
     'U5_swap_failed'
   ];
+  const unassignedCount = summary.unassigned.length;
+  const hasUnassigned = unassignedCount > 0;
+  const statusTitle = hasUnassigned ? '未配当があります' : 'すべて配当できました';
+  const statusDescription = hasUnassigned
+    ? '未配当一覧で原因を確認し、必要なら「未配当を再配置」または条件の見直しを行ってください。'
+    : '対象科目はすべて教室に入りました。内容を確認し、問題なければクラウドへ書込してください。';
 
   return (
     <div
@@ -120,10 +165,10 @@ export const AllocationResultModal = ({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <CheckCircle2 size={18} color="#2563eb" />
-              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>自動配当結果</h2>
+              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>教室自動配当結果</h2>
             </div>
             <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-              対象 {summary.targetCount} 件 / 既存維持 {summary.preservedCount} 件 / 新規配当 {summary.newlyAllocatedCount} 件 / 未配当 {summary.unassigned.length} 件
+              対象科目 {summary.targetCount} 件 / 今回配当 {summary.newlyAllocatedCount} 件 / 未配当 {unassignedCount} 件 / 保持した配当 {summary.preservedCount} 件
             </div>
           </div>
           <button
@@ -135,15 +180,34 @@ export const AllocationResultModal = ({
         </div>
 
         <div style={{ padding: '20px', display: 'grid', gap: '16px' }}>
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
-            <StatCard label="対象" value={summary.targetCount} />
-            <StatCard label="既存維持" value={summary.preservedCount} />
-            <StatCard label="新規配当" value={summary.newlyAllocatedCount} />
+          <section
+            style={{
+              border: `1px solid ${hasUnassigned ? '#fecaca' : '#bbf7d0'}`,
+              borderRadius: '12px',
+              padding: '14px 16px',
+              background: hasUnassigned ? '#fff7ed' : '#f0fdf4'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              {hasUnassigned ? <AlertTriangle size={18} color="#c2410c" /> : <CheckCircle2 size={18} color="#15803d" />}
+              <h3 style={{ margin: 0, fontSize: '1rem', color: hasUnassigned ? '#9a3412' : '#166534' }}>
+                {statusTitle}
+              </h3>
+            </div>
+            <div style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.6 }}>
+              {statusDescription}
+            </div>
+          </section>
+
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+            <StatCard label="対象科目" value={summary.targetCount} />
+            <StatCard label="今回配当" value={summary.newlyAllocatedCount} />
             <StatCard
               label="未配当"
-              value={summary.unassigned.length}
-              accent={summary.unassigned.length > 0 ? '#dc2626' : '#16a34a'}
+              value={unassignedCount}
+              accent={hasUnassigned ? '#dc2626' : '#16a34a'}
             />
+            <StatCard label="保持した配当" value={summary.preservedCount} />
           </section>
 
           <section
@@ -156,9 +220,9 @@ export const AllocationResultModal = ({
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
               <AlertTriangle size={16} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontSize: '0.95rem' }}>未配当の内訳</h3>
+              <h3 style={{ margin: 0, fontSize: '0.95rem' }}>未配当の理由</h3>
             </div>
-            {summary.unassigned.length === 0 ? (
+            {!hasUnassigned ? (
               <div style={{ color: '#16a34a', fontSize: '0.9rem' }}>未配当はありません。</div>
             ) : (
               <div style={{ display: 'grid', gap: '8px' }}>
@@ -181,7 +245,12 @@ export const AllocationResultModal = ({
                           color: meta.color
                         }}
                       >
-                        <div style={{ fontWeight: 'bold' }}>{meta.label}</div>
+                        <div>
+                          <div style={{ fontWeight: 'bold' }}>{meta.label}</div>
+                          <div style={{ fontSize: '0.78rem', lineHeight: 1.5, color: '#475569', marginTop: '2px' }}>
+                            {meta.description}
+                          </div>
+                        </div>
                         <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{count} 件</div>
                       </div>
                     );
@@ -190,7 +259,7 @@ export const AllocationResultModal = ({
             )}
           </section>
 
-          {summary.unassigned.length > 0 && (
+          {hasUnassigned && (
             <section
               style={{
                 border: '1px solid #e5e7eb',
@@ -216,9 +285,7 @@ export const AllocationResultModal = ({
                         <div>
                           <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>{item.subject.name}</div>
                           <div style={{ fontSize: '0.82rem', color: '#475569' }}>
-                            {item.subject.teacher} / {item.subject.department} / {item.subject.day} {item.subject.period}
-                            {item.subject.endPeriod && item.subject.endPeriod > item.subject.period ? `-${item.subject.endPeriod}` : ''}
-                            講時
+                            {item.subject.teacher} / {item.subject.department} / {formatSubjectSchedule(item.subject)}
                           </div>
                         </div>
                         <div
@@ -238,7 +305,7 @@ export const AllocationResultModal = ({
                       </div>
                       {item.detail && (
                         <div style={{ marginTop: '6px', fontSize: '0.82rem', color: '#334155' }}>
-                          {item.detail}
+                          補足: {item.detail}
                         </div>
                       )}
                     </div>
@@ -258,7 +325,7 @@ export const AllocationResultModal = ({
               }}
             >
               <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#334155' }}>
-                困難度トップ10
+                配当が難しい科目（上位10件）
               </summary>
               <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
                 {summary.difficultyTop10.map((entry, index) => (
