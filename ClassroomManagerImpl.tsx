@@ -261,7 +261,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
     };
 
     const handleDelete = (id: string) => {
-        if (confirm('本当にこの教室を削除しますか？割り当てられていた授業も解除されます。')) {
+        if (confirm('本当にこの教室を削除しますか？割り当てられていた科目も解除されます。')) {
             onUpdate(classrooms.filter(r => r.id !== id));
         }
     };
@@ -445,7 +445,7 @@ export const ClassroomManager = ({ classrooms, onUpdate, currentCampusLabel, onC
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
                                 <div ref={crColSettingsRef} style={{ position: 'relative' }}>
-                                    <button onClick={() => setShowColSettings(s => !s)} style={{
+                                    <button data-tour="classroom-column-settings" onClick={() => setShowColSettings(s => !s)} style={{
                                         display: 'flex', gap: '6px', alignItems: 'center', background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                     }}>列設定</button>
                                     {showColSettings && (

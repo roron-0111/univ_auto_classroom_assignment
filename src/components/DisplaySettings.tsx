@@ -76,7 +76,7 @@ export const DisplaySettings = ({ config, availableEquipment, onUpdate, onClose 
 
                     <section>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '2px solid #f0f0f0', paddingBottom: '8px', marginBottom: '12px', color: '#333' }}>
-                            授業カード詳細
+                            科目カード詳細
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>

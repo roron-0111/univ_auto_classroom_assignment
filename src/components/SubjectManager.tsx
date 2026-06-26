@@ -228,7 +228,7 @@ const buildSubjectImportIssues = (
                 classroomId: row.classroomId,
                 errorType: '必要教室数超過',
                 targetColumn: '教室ID',
-                detail: `授業コード「${code}」は必要教室数${requiredCount}件ですが、${rows.length}件の教室配当があります。`,
+                detail: `科目コード「${code}」は必要教室数${requiredCount}件ですが、${rows.length}件の教室配当があります。`,
                 suggestion: '不要な教室IDの行を削除するか、必要教室数を見直してください。'
             });
         });
@@ -931,13 +931,13 @@ export const SubjectManager = ({
     };
 
     const handleDelete = (id: string) => {
-        if (confirm('本当にこの授業を削除しますか？割り当ても解除されます。')) {
+        if (confirm('本当にこの科目を削除しますか？割り当ても解除されます。')) {
             onUpdate(subjects.filter(s => s.id !== id));
         }
     };
 
     const handleDeleteAll = () => {
-        if (confirm('全ての授業データを削除しますか？この操作は取り消せません。')) {
+        if (confirm('全ての科目データを削除しますか？この操作は取り消せません。')) {
             onUpdate([]);
         }
     };
@@ -956,7 +956,7 @@ export const SubjectManager = ({
                 if (issues.length > 0) {
                     const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '_');
                     setSubjectImportErrorCsv({
-                        title: '授業CSVインポートエラー',
+                        title: '科目CSVインポートエラー',
                         message: `${issues.length}件のエラーがあります。保存先を選んで詳細CSVを出力してください。`,
                         filename: `subject_import_errors_${timestamp}.csv`,
                         rows: toSubjectImportErrorRows(issues)
@@ -970,7 +970,7 @@ export const SubjectManager = ({
                     requiredEquipment: (subject.requiredEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq)),
                     mandatoryEquipment: (subject.mandatoryEquipment || []).filter(eq => SUBJECT_EQUIPMENT_CHOICES.includes(eq))
                 }));
-                if (confirm(`${data.subjects.length}件の授業データを読み込みます。コードが一致する授業は上書きし、一致しないものは追加します。教室IDがある行は配当も復元します。よろしいですか？`)) {
+                if (confirm(`${data.subjects.length}件の科目データを読み込みます。コードが一致する科目は上書きし、一致しないものは追加します。教室IDがある行は配当も復元します。よろしいですか？`)) {
                     const mergedSubjects = mergeSubjectsByCode(subjects, sortSubjectsByCode(sanitized));
                     const importedCodes = new Set(sanitized.map(subject => (subject.code || '').trim()).filter(Boolean));
                     const codeToSubjectId = new Map(
@@ -1032,7 +1032,7 @@ export const SubjectManager = ({
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <BookOpen size={22} />
-                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>授業管理</h2>
+                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>科目管理</h2>
                 </div>
                 <button onClick={onClose} style={{
                     background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.5rem'
@@ -1044,7 +1044,7 @@ export const SubjectManager = ({
                 <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
                         <div>
-                            <p style={{ color: '#666', margin: '0 0 10px 0' }}>授業情報の編集、削除、一括インポートが行えます。</p>
+                            <p style={{ color: '#666', margin: '0 0 10px 0' }}>科目情報の編集、削除、一括インポートが行えます。</p>
                             <div data-tour="subject-actions" style={{ display: 'flex', gap: '10px' }}>
                                 <button data-tour="subject-add" onClick={startAdding} style={{
                                     display: 'flex', gap: '8px', alignItems: 'center', background: '#646cff', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
@@ -1140,7 +1140,7 @@ export const SubjectManager = ({
                                 </button>
                                 <input type="file" ref={fileInputRef} onChange={handleImportCSV} accept=".csv" style={{ display: 'none' }} />
                                 <div ref={smColSettingsRef} style={{ position: 'relative' }}>
-                                    <button onClick={() => setShowColSettings(s => !s)} style={{
+                                    <button data-tour="subject-column-settings" onClick={() => setShowColSettings(s => !s)} style={{
                                         display: 'flex', gap: '6px', alignItems: 'center', background: '#eee', color: '#333', border: '1px solid #ccc', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9em'
                                     }}>列設定</button>
                                     {showColSettings && (
@@ -1183,7 +1183,7 @@ export const SubjectManager = ({
                     <div style={{ border: '1px solid #ddd', borderRadius: '4px', background: '#fff' }}>
                         {!subjectListReady ? (
                             <div style={{ minHeight: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#777', fontSize: '0.95rem' }}>
-                                授業一覧を読み込み中...
+                                科目一覧を読み込み中...
                             </div>
                         ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse', borderSpacing: 0, background: '#fff', fontSize: '0.85em', minWidth: '1400px' }}>
@@ -1342,7 +1342,7 @@ export const SubjectManager = ({
                                         <td colSpan={visibleSubjectColumns} style={{ textAlign: 'center', padding: '150px 0', color: '#999', background: '#fafafa' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                                 <Search size={40} strokeWidth={1} />
-                                                <span>該当する授業が見つかりません</span>
+                                                <span>該当する科目が見つかりません</span>
                                                 <button
                                                     onClick={() => setFilters({
                                                         code: '', name: '', teacherCode: '', teacher: '', faculty: [], department: [], term: [], day: [], period: [], campus: '', requiredCapacity: '', requiredCapacityMax: '', priority: [], requiredRoomCount: [], buildingPreference: [], preferredRoomType: [], requiredEquipment: '', previousRooms: '', allocatedRoom: ''
@@ -1369,7 +1369,7 @@ export const SubjectManager = ({
                     currentCampusLabel={currentCampusLabel}
                     facultyOptions={facultyOptions}
                     departmentOptions={departmentOptions}
-                    title={subjectModalMode === 'add' ? '新規授業情報の作成' : '授業情報の編集'}
+                    title={subjectModalMode === 'add' ? '新規科目情報の作成' : '科目情報の編集'}
                     onSave={(updated) => {
                         if (subjectModalMode === 'add') {
                             onUpdate([...subjects, updated]);

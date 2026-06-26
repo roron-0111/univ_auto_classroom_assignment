@@ -67,7 +67,7 @@ export const SubjectEditModal = ({
   currentCampusLabel,
   facultyOptions,
   departmentOptions,
-  title = '授業情報の編集',
+  title = '科目情報の編集',
   onSave,
   onClose
 }: Props) => {

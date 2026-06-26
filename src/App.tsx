@@ -27,7 +27,7 @@ import { auth } from './utils/firebase';
 import type { CloudData } from './types_cloud';
 import { clearStreakMap, loadStreakMap, pruneStreakMap, updateStreakAfterAllocation } from './utils/unassignedStreak';
 import { buildCloudDiffCsv as buildCloudDiffCsvRows, compareCloudSnapshots, type CloudWriteWarningSummary } from './utils/cloudDiff';
-import type { GuideView } from './components/GuideTour';
+import type { GuideView } from './components/guideTourData';
 
 // Icons
 import {
@@ -47,6 +47,7 @@ const RelocationPreviewModal = lazy(() => import('./components/RelocationPreview
 const CloudReadWarningModal = lazy(() => import('./components/CloudReadWarningModal').then(module => ({ default: module.CloudReadWarningModal })));
 const CloudConnectionModal = lazy(() => import('./components/CloudConnectionModal').then(module => ({ default: module.CloudConnectionModal })));
 const GuideTour = lazy(() => import('./components/GuideTour').then(module => ({ default: module.GuideTour })));
+const AutoAllocationCloudGuardModal = lazy(() => import('./components/AutoAllocationCloudGuardModal').then(module => ({ default: module.AutoAllocationCloudGuardModal })));
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_DISPLAY_CONFIG: DisplayConfig = {
@@ -385,6 +386,32 @@ const normalizeAllocationsForPhase6 = (allocations: unknown) =>
     ? allocations.map(normalizeAllocationForPhase6).filter((item): item is Allocation => item !== null)
     : [];
 
+const normalizeCloudDataForCampus = (cloudData: CloudData, campusLabel: string): CloudData => ({
+  classrooms: normalizeClassrooms(cloudData.classrooms, campusLabel),
+  subjects: normalizeSubjectsForCampus(cloudData.subjects, campusLabel),
+  allocations: normalizeAllocationsForPhase6(cloudData.allocations),
+  settings: migrateAllocationRules(cloudData.settings),
+  equipmentSettings: normalizeEquipmentSettings(cloudData.equipmentSettings),
+  subjectTaxonomy: normalizeSubjectTaxonomyForCampus(cloudData.subjectTaxonomy, campusLabel)
+});
+
+const createEmptyCloudData = (campusLabel: string): CloudData => ({
+  classrooms: [],
+  subjects: [],
+  allocations: [],
+  settings: DEFAULT_ALLOCATION_RULES,
+  equipmentSettings: DEFAULT_EQUIPMENT_SETTINGS,
+  subjectTaxonomy: getDefaultSubjectTaxonomy(campusLabel)
+});
+
+const withoutAllocations = (cloudData: CloudData) => ({
+  classrooms: cloudData.classrooms,
+  subjects: cloudData.subjects,
+  settings: cloudData.settings,
+  equipmentSettings: cloudData.equipmentSettings,
+  subjectTaxonomy: cloudData.subjectTaxonomy
+});
+
 function App() {
   // Auth & Cloud Sync
   const { user, loginByCampus, logout: authLogout, loading: authLoading } = useAuth();
@@ -398,10 +425,11 @@ function App() {
   const localSnapshotBaselineRef = useRef<CloudData | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user && !showGuideTour) {
+    if (!authLoading && !user) {
+      setShowGuideTour(false);
       setShowCloudModal(true);
     }
-  }, [authLoading, user, showGuideTour]);
+  }, [authLoading, user]);
 
   const applyCampusState = useCallback((campusLabel: string): CloudData => {
     const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
@@ -481,6 +509,12 @@ function App() {
   const [cloudReadWarningSummary, setCloudReadWarningSummary] = useState<CloudWriteWarningSummary | null>(null);
   const [pendingCloudReadData, setPendingCloudReadData] = useState<CloudData | null>(null);
   const [showCloudReadWarningModal, setShowCloudReadWarningModal] = useState(false);
+  const [autoAllocationCloudGuardSummary, setAutoAllocationCloudGuardSummary] = useState<CloudWriteWarningSummary | null>(null);
+  const [autoAllocationGuardCloudData, setAutoAllocationGuardCloudData] = useState<CloudData | null>(null);
+  const [autoAllocationGuardCompareData, setAutoAllocationGuardCompareData] = useState<CloudData | null>(null);
+  const [autoAllocationGuardHasOtherDiff, setAutoAllocationGuardHasOtherDiff] = useState(false);
+  const [showAutoAllocationCloudGuard, setShowAutoAllocationCloudGuard] = useState(false);
+  const [isAutoAllocationGuardBusy, setIsAutoAllocationGuardBusy] = useState(false);
   const [showExceptionReviewModal, setShowExceptionReviewModal] = useState(false);
   const [pendingExceptionApprovedKeys, setPendingExceptionApprovedKeys] = useState<string[]>([]);
   const [showRelocationPreviewModal, setShowRelocationPreviewModal] = useState(false);
@@ -629,8 +663,16 @@ function App() {
     setPendingCloudReadData(null);
   }, []);
 
-  const performCloudWrite = useCallback(async () => {
-    if (!user) return;
+  const clearAutoAllocationCloudGuardState = useCallback(() => {
+    setShowAutoAllocationCloudGuard(false);
+    setAutoAllocationCloudGuardSummary(null);
+    setAutoAllocationGuardCloudData(null);
+    setAutoAllocationGuardCompareData(null);
+    setAutoAllocationGuardHasOtherDiff(false);
+  }, []);
+
+  const performCloudWrite = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
     try {
       setIsCloudLoading(true);
       await new Promise<void>(resolve => {
@@ -644,9 +686,11 @@ function App() {
       const wrote = await saveData(currentSnapshot);
       alert(wrote ? 'Cloud write complete.' : '変更はありませんでした。');
       localSnapshotBaselineRef.current = currentSnapshot;
+      return true;
     } catch (error) {
       console.error(error);
       alert(getCloudWriteErrorMessage(error));
+      return false;
     } finally {
       setIsCloudLoading(false);
     }
@@ -705,6 +749,72 @@ function App() {
     setCloudReadWarningSummary(null);
     setPendingCloudReadData(null);
   }, []);
+
+  const ensureAutoAllocationCloudReady = useCallback(async () => {
+    if (!user) return true;
+    const localSnapshot = buildCloudSnapshot();
+    try {
+      setIsAutoAllocationGuardBusy(true);
+      const rawCloudData = await refreshData();
+      const compareCloudData = rawCloudData
+        ? normalizeCloudDataForCampus(rawCloudData, currentCampusLabel)
+        : createEmptyCloudData(currentCampusLabel);
+      const summary = compareCloudSnapshots(localSnapshot, compareCloudData);
+      const hasOtherDiff = stableSerialize(withoutAllocations(localSnapshot)) !== stableSerialize(withoutAllocations(compareCloudData));
+      const hasAnyDiff = summary.hasDiff || hasOtherDiff;
+
+      if (hasAnyDiff) {
+        setAutoAllocationCloudGuardSummary(summary);
+        setAutoAllocationGuardCloudData(rawCloudData ? compareCloudData : null);
+        setAutoAllocationGuardCompareData(compareCloudData);
+        setAutoAllocationGuardHasOtherDiff(hasOtherDiff);
+        setShowAutoAllocationCloudGuard(true);
+        return false;
+      }
+
+      if (rawCloudData) {
+        localSnapshotBaselineRef.current = compareCloudData;
+        markLocalBaseline(compareCloudData);
+      }
+      return true;
+    } catch (error) {
+      console.error(error);
+      alert('クラウドの最新状態を確認できなかったため、自動配当を中止しました。先に通信状態を確認し、「書込」または「取得」を行ってください。');
+      return false;
+    } finally {
+      setIsAutoAllocationGuardBusy(false);
+    }
+  }, [user, buildCloudSnapshot, refreshData, currentCampusLabel, markLocalBaseline]);
+
+  const handleAutoAllocationGuardWriteLocal = useCallback(async () => {
+    setIsAutoAllocationGuardBusy(true);
+    try {
+      const success = await performCloudWrite();
+      if (success) {
+        clearAutoAllocationCloudGuardState();
+      }
+    } finally {
+      setIsAutoAllocationGuardBusy(false);
+    }
+  }, [performCloudWrite, clearAutoAllocationCloudGuardState]);
+
+  const handleAutoAllocationGuardReadCloud = useCallback(() => {
+    if (!autoAllocationGuardCloudData) return;
+    applyCloudData(autoAllocationGuardCloudData, currentCampusLabel);
+    clearAutoAllocationCloudGuardState();
+    setShowRuleSettings(false);
+    alert('Cloud data loaded. 自動配当は実行していません。必要な場合は、条件を確認してもう一度実行してください。');
+  }, [autoAllocationGuardCloudData, applyCloudData, currentCampusLabel, clearAutoAllocationCloudGuardState]);
+
+  const handleAutoAllocationGuardExport = useCallback(() => {
+    if (!autoAllocationGuardCompareData) return;
+    const diffRows = buildCloudDiffCsv(buildCloudSnapshot(), autoAllocationGuardCompareData);
+    if (diffRows.length === 0) {
+      alert('配当差分のCSVはありません。科目・教室・設定など、配当以外の差分があります。');
+      return;
+    }
+    exportToCSV(diffRows, 'auto_allocation_cloud_diff_export.csv');
+  }, [autoAllocationGuardCompareData, buildCloudSnapshot, buildCloudDiffCsv]);
 
 
   const handleCloudConnect = async (email: string) => {
@@ -971,7 +1081,7 @@ function App() {
     const subjectSeason = springTerms.includes(subject.term) ? 'spring' : (autumnTerms.includes(subject.term) ? 'autumn' : null);
     if (subjectSeason !== null && subjectSeason !== term) {
       const termLabel = springTerms.includes(subject.term) ? '春学期' : '秋学期';
-      alert(`${termLabel}の授業です。${term === 'spring' ? '春' : '秋'}行には配置できません。`);
+      alert(`${termLabel}の科目です。${term === 'spring' ? '春' : '秋'}行には配置できません。`);
       return;
     }
 
@@ -1242,6 +1352,15 @@ function App() {
     setShowRuleSettings(false);
   };
 
+  const handleAutoAllocationRequest = async (options: AllocationOptions) => {
+    const canProceed = await ensureAutoAllocationCloudReady();
+    if (!canProceed) return;
+    setAllocationSettings(options.rules);
+    setEquipmentSettings(options.equipmentSettings);
+    localStorage.setItem('equipmentSettings', JSON.stringify(options.equipmentSettings));
+    handleAutoAllocatePhase3(options);
+  };
+
   const handleConfirmExceptionReview = (approvedKeys: string[]) => {
     if (!pendingAllocationBatch) return;
     if (pendingAllocationBatch.campusLabel !== currentCampusLabel) {
@@ -1433,20 +1552,22 @@ function App() {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            data-tour="guide-button"
-            onClick={() => setShowGuideTour(true)}
-            style={{
-              display: 'flex', gap: '6px', alignItems: 'center',
-              background: '#f8fafc', color: '#1f2937',
-              border: '1px solid #cbd5e1',
-              padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-              fontSize: '0.9rem', fontWeight: '600'
-            }}
-          >
-            <HelpCircle size={16} />
-            ガイド
-          </button>
+          {user && (
+            <button
+              data-tour="guide-button"
+              onClick={() => setShowGuideTour(true)}
+              style={{
+                display: 'flex', gap: '6px', alignItems: 'center',
+                background: '#f8fafc', color: '#1f2937',
+                border: '1px solid #cbd5e1',
+                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                fontSize: '0.9rem', fontWeight: '600'
+              }}
+            >
+              <HelpCircle size={16} />
+              ガイド
+            </button>
+          )}
           {user && (
             <>
               <button
@@ -1516,7 +1637,7 @@ function App() {
             <Settings size={16} /> {"教室管理"}
           </button>
           <button data-tour="subject-manager" onClick={() => setShowSubjectManager(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
-            <BookOpen size={16} /> {"授業管理"}
+            <BookOpen size={16} /> {"科目管理"}
           </button>
           {SHOW_DISPLAY_SETTINGS_BUTTON && (
             <button onClick={() => setShowDisplaySettings(true)} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: '#475569', color: '#fff', border: '1px solid #334155', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>
@@ -1713,7 +1834,7 @@ function App() {
             <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
               <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', maxWidth: '500px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3 style={{ margin: 0 }}>授業を選択</h3>
+                  <h3 style={{ margin: 0 }}>科目を選択</h3>
                   <button onClick={() => setPickingCell(null)} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>✕</button>
                 </div>
                 <div style={{ marginBottom: '10px', color: '#666', fontSize: '0.9em' }}>
@@ -1725,7 +1846,7 @@ function App() {
                     const matchGroup = pickingCell.term === 'spring' ? springGroup : autumnGroup;
                     return matchGroup.includes(s.term) || s.term === 'full_year';
                   }).length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未配当授業はありません。</p>
+                  <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>該当する未配当科目はありません。</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {displayedUnassigned.filter(s => {
@@ -1846,12 +1967,7 @@ function App() {
             <AllocationRuleSettings
               settings={allocationSettings}
               equipmentSettings={equipmentSettings}
-              onSave={(options) => {
-                setAllocationSettings(options.rules);
-                setEquipmentSettings(options.equipmentSettings);
-                localStorage.setItem('equipmentSettings', JSON.stringify(options.equipmentSettings)); // 念のため即時保存
-                handleAutoAllocatePhase3(options);
-              }}
+              onSave={handleAutoAllocationRequest}
               onClose={() => setShowRuleSettings(false)}
               onResetUnassignedStreak={handleResetUnassignedStreak}
               onResetApprovedExceptions={handleResetApprovedExceptions}
@@ -1915,15 +2031,27 @@ function App() {
         }
 
         {
+          showAutoAllocationCloudGuard && (
+            <AutoAllocationCloudGuardModal
+              isOpen={showAutoAllocationCloudGuard}
+              summary={autoAllocationCloudGuardSummary}
+              hasOtherDiff={autoAllocationGuardHasOtherDiff}
+              hasCloudData={!!autoAllocationGuardCloudData}
+              isBusy={isAutoAllocationGuardBusy || isCloudLoading}
+              onExportCsv={handleAutoAllocationGuardExport}
+              onWriteLocal={handleAutoAllocationGuardWriteLocal}
+              onReadCloud={handleAutoAllocationGuardReadCloud}
+              onCancel={clearAutoAllocationCloudGuardState}
+            />
+          )
+        }
+
+        {
           showCloudModal && (
             <CloudConnectionModal
               onClose={() => {
                 // ユーザーがログインしている場合のみ閉じることができる
                 if (user) setShowCloudModal(false);
-              }}
-              onGuide={() => {
-                setShowCloudModal(false);
-                setShowGuideTour(true);
               }}
               onLogin={(campusId) => handleCloudConnect(campusId)}
               onLogout={authLogout}

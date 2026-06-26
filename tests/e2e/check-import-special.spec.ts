@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const campusName = '\u516b\u666f';
-const subjectManagerLabel = '\u6388\u696d\u7ba1\u7406';
+const subjectManagerLabel = '\u79d1\u76ee\u7ba1\u7406';
 const writeButtonLabel = '\u66f8\u8fbc';
 const csvImportLabel = 'CSV\u30a4\u30f3\u30dd\u30fc\u30c8';
 const importedCode = 'TEST001';

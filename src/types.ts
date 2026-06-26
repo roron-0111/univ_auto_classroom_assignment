@@ -210,7 +210,7 @@ export interface DisplayConfig {
     showCapacity: boolean;
     showExamCapacity: boolean;
     showRoomType: boolean;
-    // 授業カード表示
+    // 科目カード表示
     subjectMainDisplay: 'name' | 'teacher' | 'department';
     showSubInfo: boolean;            // 教員(部局) などのサブ情報
     showPreviousRooms: boolean;      // 過年度教室
@@ -321,7 +321,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     {
         id: 'period_continuity',
         name: '連続講時同室',
-        description: '連続する講時の授業を同じ教室に配当',
+        description: '連続する講時の科目を同じ教室に配当',
         tier: 'hard',
         enabled: true,
         order: 0
@@ -368,7 +368,7 @@ export const DEFAULT_ALLOCATION_RULES: AllocationRule[] = [
     },
     {
         id: 'teacher_continuity',
-        name: '同一教員連続授業',
+        name: '同一教員連続科目',
         description: '同じ教員の連続講時を同じ教室に',
         tier: 'pref',
         enabled: true,

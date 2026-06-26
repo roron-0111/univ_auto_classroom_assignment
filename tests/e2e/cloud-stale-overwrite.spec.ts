@@ -3,7 +3,7 @@ import Papa from 'papaparse';
 import fs from 'node:fs/promises';
 
 const campusName = '\u516b\u666f';
-const subjectManagerLabel = '\u6388\u696d\u7ba1\u7406';
+const subjectManagerLabel = '\u79d1\u76ee\u7ba1\u7406';
 const classroomManagerLabel = '\u6559\u5ba4\u7ba1\u7406';
 const writeButtonLabel = '\u66f8\u8fbc';
 const readButtonLabel = '\u53d6\u5f97';
