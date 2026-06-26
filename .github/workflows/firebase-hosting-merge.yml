@@ -12,9 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm ci && npm run build
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - uses: google-github-actions/auth@v2
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SUBJECT_ROOMS_DEV_001 }}
-          channelId: live
-          projectId: subject-rooms-dev-001
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SUBJECT_ROOMS_DEV_001 }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Deploy to Firebase Hosting
+        shell: bash
+        run: |
+          set +e
+          npx firebase-tools@15.22.3 deploy --only hosting --project subject-rooms-dev-001 --json 2>&1 | tee firebase-deploy.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+
+          if grep -Fq "is the current active version" firebase-deploy.log; then
+            echo "Firebase Hosting reports this version is already active. Treating as success."
+            exit 0
+          fi
+
+          exit "$status"
