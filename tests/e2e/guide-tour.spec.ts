@@ -145,6 +145,24 @@ async function loginToCampus(page: Page) {
   await expect(page.locator(guideButtonSelector)).toBeVisible({ timeout: 60_000 });
 }
 
+async function openGuideChooser(page: Page) {
+  await page.locator(guideButtonSelector).click();
+  await expect(page.getByRole('menu', { name: 'ガイドの種類' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'ガイドツアー' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'マニュアル' })).toBeVisible();
+}
+
+async function openGuideTour(page: Page) {
+  await openGuideChooser(page);
+  await page.getByRole('menuitem', { name: 'ガイドツアー' }).click();
+  await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
+}
+
+async function openManualFromGuideChooser(page: Page) {
+  await openGuideChooser(page);
+  await page.getByRole('menuitem', { name: 'マニュアル' }).click();
+}
+
 async function backToGuideMenu(page: Page) {
   await page.getByRole('button', { name: '項目選択へ' }).click();
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
@@ -274,7 +292,9 @@ test('guide tour switches screens and returns to the guide menu', async ({ page 
   await expect(page.locator(guideButtonSelector)).toHaveCount(0);
   await loginToCampus(page);
 
-  await page.locator(guideButtonSelector).click();
+  await openGuideChooser(page);
+  await expect(page.getByRole('heading', { name: guideLabel })).toHaveCount(0);
+  await page.getByRole('menuitem', { name: 'ガイドツアー' }).click();
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
   await expect(page.getByText('項目を選択すると、ガイドツアーを開始します。')).toBeVisible();
   await expect(page.getByRole('button', { name: '終了', exact: true })).toHaveCount(0);
@@ -330,16 +350,60 @@ test('guide tour switches screens and returns to the guide menu', async ({ page 
   await expect(page.getByRole('heading', { name: guideLabel })).toHaveCount(0);
 });
 
+test('manual opens as a sidebar and keeps the app operable', async ({ page }) => {
+  await page.goto('/');
+  await loginToCampus(page);
+
+  await openManualFromGuideChooser(page);
+  await expect(page.getByRole('heading', { name: guideLabel })).toHaveCount(0);
+  const manualPanel = page.getByRole('complementary', { name: 'マニュアル' });
+  await expect(manualPanel).toBeVisible();
+  await expect(manualPanel.getByRole('heading', { name: '教室配当マニュアル', exact: true })).toBeVisible();
+  await expect(manualPanel.getByLabel('マニュアルを検索')).toBeVisible();
+  await expect(manualPanel.getByRole('button', { name: /画面の見方/ })).toBeVisible();
+  await expect(manualPanel.getByLabel('関連する場所')).toBeVisible();
+  await expect(manualPanel.getByRole('button', { name: '編集', exact: true })).toBeVisible();
+
+  const widthBefore = await manualPanel.boundingBox();
+  const resizeHandle = page.locator('.guide-manual-resize-handle');
+  const handleBox = await resizeHandle.boundingBox();
+  expect(widthBefore).not.toBeNull();
+  expect(handleBox).not.toBeNull();
+  if (widthBefore && handleBox) {
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox.x - 90, handleBox.y + handleBox.height / 2);
+    await page.mouse.up();
+    await expect.poll(async () => (await manualPanel.boundingBox())?.width ?? 0).toBeGreaterThan(widthBefore.width + 50);
+  }
+
+  await manualPanel.getByRole('button', { name: '編集', exact: true }).click();
+  await expect(manualPanel.locator('input').first()).toHaveValue('教室配当マニュアル');
+  await expect(manualPanel.locator('.guide-manual-edit-list')).toBeVisible();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル', exact: true }).click();
+  await expect(manualPanel.locator('.guide-manual-edit-list')).toHaveCount(0);
+
+  await manualPanel.getByRole('button', { name: /科目を1件追加・編集する/ }).click();
+  await manualPanel.getByRole('button', { name: '新規追加' }).click();
+  await expect(page.locator('[data-tour="subject-manager-screen"]').getByRole('heading', { name: '科目管理' })).toBeVisible();
+  await expect(page.locator('[data-tour="subject-add"]')).toHaveClass(/manual-target-flash/);
+  await expect(manualPanel).toBeVisible();
+
+  await page.getByRole('button', { name: 'マニュアルを閉じる' }).click();
+  await expect(page.getByRole('complementary', { name: 'マニュアル' })).toHaveCount(0);
+});
+
 test('guide closes with Escape from menu and step views', async ({ page }) => {
   await page.goto('/');
   await loginToCampus(page);
 
-  await page.locator(guideButtonSelector).click();
+  await openGuideTour(page);
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('heading', { name: guideLabel })).toHaveCount(0);
 
-  await page.locator(guideButtonSelector).click();
+  await openGuideTour(page);
   await page.getByRole('button', { name: /科目の追加・削除/ }).click();
   await expect(page.getByRole('heading', { name: '科目管理を開く' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -352,7 +416,7 @@ test('guide remains usable on narrow and zoomed layouts', async ({ page }) => {
   await page.goto('/');
   await loginToCampus(page);
 
-  await page.locator(guideButtonSelector).click();
+  await openGuideTour(page);
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
   await page.getByRole('button', { name: /科目の追加・削除/ }).click();
   await expectCurrentGuideTarget(page, guideTargetExpectations[1].steps[0]);
@@ -367,7 +431,7 @@ test('guide remains usable on narrow and zoomed layouts', async ({ page }) => {
   await page.evaluate(() => {
     document.documentElement.style.setProperty('zoom', '1.25');
   });
-  await page.locator(guideButtonSelector).click();
+  await openGuideTour(page);
   await page.getByRole('button', { name: /科目の教室自動配当/ }).click();
   await expectCurrentGuideTarget(page, guideTargetExpectations[3].steps[0]);
   await page.getByRole('button', { name: /次へ/ }).click();
@@ -378,7 +442,7 @@ test('guide target highlights match the guided controls', async ({ page }) => {
   await page.goto('/');
   await loginToCampus(page);
 
-  await page.locator(guideButtonSelector).click();
+  await openGuideTour(page);
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
 
   for (const topic of guideTargetExpectations) {
@@ -393,7 +457,7 @@ test('cloud guide target highlights match logged-in controls', async ({ page }) 
   await page.goto('/');
   await loginToCampus(page);
 
-  await page.getByRole('button', { name: guideLabel }).click();
+  await openGuideTour(page);
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
   await runGuideTopicTargetChecks(page, cloudGuideTargetExpectation);
 
