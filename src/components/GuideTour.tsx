@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, ArrowRight, HelpCircle, X } from 'lucide-react';
 import { GUIDE_TOPICS } from './guideTourData';
@@ -18,8 +18,11 @@ const SCROLL_MEASURE_DELAY_MS = 180;
 const STEP_CARD_MARGIN = 16;
 const STEP_CARD_GAP = 14;
 const STEP_CARD_MIN_WIDTH = 220;
-const STEP_CARD_MAX_WIDTH = 420;
-const STEP_CARD_ESTIMATED_HEIGHT = 260;
+const STEP_CARD_MAX_WIDTH = 460;
+const STEP_CARD_COMPACT_HEIGHT_MAX_WIDTH = 560;
+const STEP_CARD_COMPACT_HEIGHT_BREAKPOINT = 560;
+const STEP_CARD_COMPACT_HEIGHT_MIN_VIEWPORT_WIDTH = 760;
+const STEP_CARD_ESTIMATED_HEIGHT = 250;
 
 type Props = {
   isOpen: boolean;
@@ -29,8 +32,15 @@ type Props = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+const getStepCardMaxWidth = () => (
+  window.innerHeight <= STEP_CARD_COMPACT_HEIGHT_BREAKPOINT
+  && window.innerWidth >= STEP_CARD_COMPACT_HEIGHT_MIN_VIEWPORT_WIDTH
+    ? STEP_CARD_COMPACT_HEIGHT_MAX_WIDTH
+    : STEP_CARD_MAX_WIDTH
+);
+
 const getStepCardWidth = (availableWidth = window.innerWidth - STEP_CARD_MARGIN * 2) => Math.min(
-  STEP_CARD_MAX_WIDTH,
+  getStepCardMaxWidth(),
   Math.max(STEP_CARD_MIN_WIDTH, availableWidth)
 );
 
@@ -49,7 +59,12 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
   const [isTargetMissing, setIsTargetMissing] = useState(false);
   const measureRequestRef = useRef(0);
   const menuCardRef = useRef<HTMLDivElement | null>(null);
+  const stepCardRef = useRef<HTMLDivElement | null>(null);
   const pendingTimersRef = useRef<number[]>([]);
+  const [stepCardSize, setStepCardSize] = useState({
+    width: STEP_CARD_MAX_WIDTH,
+    height: STEP_CARD_ESTIMATED_HEIGHT
+  });
 
   const activeTopic = useMemo(
     () => GUIDE_TOPICS.find(topic => topic.id === activeTopicId) ?? null,
@@ -194,6 +209,33 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleClose, isOpen]);
 
+  const stepBody = activeStep ? targetRect ? activeStep.body : activeStep.fallbackBody ?? 'この場所は今の画面では表示されていません。必要な画面を開いてから、もう一度確認してください。' : '';
+
+  useLayoutEffect(() => {
+    if (!isOpen || !activeStep || !isStepReady) return undefined;
+    const card = stepCardRef.current;
+    if (!card) return undefined;
+
+    const measureStepCard = () => {
+      const rect = card.getBoundingClientRect();
+      setStepCardSize(prev => {
+        if (Math.abs(prev.width - rect.width) < 1 && Math.abs(prev.height - rect.height) < 1) {
+          return prev;
+        }
+        return { width: rect.width, height: rect.height };
+      });
+    };
+
+    measureStepCard();
+    const observer = new ResizeObserver(measureStepCard);
+    observer.observe(card);
+    window.addEventListener('resize', measureStepCard);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measureStepCard);
+    };
+  }, [activeStep, isOpen, isStepReady, stepBody]);
+
   const tooltipStyle = useMemo<CSSProperties>(() => {
     if (!targetRect) {
       return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
@@ -202,7 +244,11 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
     const viewportHeight = window.innerHeight;
     const zoom = targetRect.zoom || 1;
     const idealWidth = getStepCardWidth();
-    const maxTop = Math.max(STEP_CARD_MARGIN, viewportHeight - STEP_CARD_ESTIMATED_HEIGHT - STEP_CARD_MARGIN);
+    const cardHeight = Math.min(
+      Math.max(stepCardSize.height, STEP_CARD_ESTIMATED_HEIGHT),
+      viewportHeight - STEP_CARD_MARGIN * 2
+    );
+    const maxTop = Math.max(STEP_CARD_MARGIN, viewportHeight - cardHeight - STEP_CARD_MARGIN);
     const clampTop = (top: number) => clamp(top, STEP_CARD_MARGIN, maxTop);
     const clampLeft = (left: number, width: number) => clamp(
       left,
@@ -218,7 +264,7 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
 
     const centeredLeft = targetRect.left + targetRect.width / 2 - idealWidth / 2;
     const belowTop = targetRect.top + targetRect.height + STEP_CARD_GAP;
-    if (belowTop + STEP_CARD_ESTIMATED_HEIGHT <= viewportHeight - STEP_CARD_MARGIN) {
+    if (belowTop + cardHeight <= viewportHeight - STEP_CARD_MARGIN) {
       return toLayerStyle({
         top: belowTop,
         left: clampLeft(centeredLeft, idealWidth),
@@ -246,7 +292,7 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
       });
     }
 
-    const aboveTop = targetRect.top - STEP_CARD_ESTIMATED_HEIGHT - STEP_CARD_GAP;
+    const aboveTop = targetRect.top - cardHeight - STEP_CARD_GAP;
     if (aboveTop >= STEP_CARD_MARGIN) {
       return toLayerStyle({
         top: aboveTop,
@@ -260,7 +306,7 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
       left: clampLeft(centeredLeft, idealWidth),
       width: idealWidth
     });
-  }, [targetRect]);
+  }, [stepCardSize.height, targetRect]);
 
   if (!isOpen) return null;
 
@@ -324,7 +370,6 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
         };
       })()
     : undefined;
-  const stepBody = targetRect ? activeStep.body : activeStep.fallbackBody ?? 'この場所は今の画面では表示されていません。必要な画面を開いてから、もう一度確認してください。';
 
   if (!isStepReady) {
     return (
@@ -338,7 +383,7 @@ export const GuideTour = ({ isOpen, onClose, onViewChange }: Props) => {
     <div className="guide-tour-layer" role="dialog" aria-modal="true" aria-labelledby="guide-step-title">
       <div className="guide-tour-dim" />
       {highlightStyle && <div className="guide-highlight" style={highlightStyle} />}
-      <div className="guide-step-card" style={tooltipStyle}>
+      <div className="guide-step-card" ref={stepCardRef} style={tooltipStyle}>
         <span className="guide-step-count" aria-label={`ステップ ${stepIndex + 1} / ${activeTopic.steps.length}`}>
           <span className="guide-step-count-label" aria-hidden="true">STEP</span>
           <span className="guide-step-count-current" aria-hidden="true">{stepIndex + 1}</span>

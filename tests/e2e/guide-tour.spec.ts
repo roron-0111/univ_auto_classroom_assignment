@@ -150,6 +150,10 @@ async function backToGuideMenu(page: Page) {
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
 }
 
+async function expectNoInternalScroll(locator: ReturnType<Page['locator']>) {
+  await expect.poll(async () => locator.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+}
+
 async function expectStableGuideStep(page: Page) {
   const card = page.locator('.guide-step-card');
   await expect(card).toHaveCount(1);
@@ -170,6 +174,9 @@ async function expectStableGuideStep(page: Page) {
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+  if (viewport.height > 560 || viewport.width >= 760) {
+    await expectNoInternalScroll(card);
+  }
 }
 
 async function expectGuideTargetText(page: Page, selector: string, text: string) {
@@ -276,6 +283,7 @@ test('guide tour switches screens and returns to the guide menu', async ({ page 
 
   await page.locator(guideButtonSelector).click();
   await expect(page.getByRole('heading', { name: guideLabel })).toBeVisible();
+  await expectNoInternalScroll(page.locator('.guide-menu-card'));
   await expect(page.getByText('項目を選択すると、ガイドツアーを開始します。')).toBeVisible();
   await expect(page.getByRole('button', { name: '終了', exact: true })).toHaveCount(0);
   await expect(page.locator('.guide-topic-icon-overview')).toHaveCount(1);
@@ -372,6 +380,15 @@ test('guide remains usable on narrow and zoomed layouts', async ({ page }) => {
   await expectCurrentGuideTarget(page, guideTargetExpectations[3].steps[0]);
   await page.getByRole('button', { name: /次へ/ }).click();
   await expectCurrentGuideTarget(page, guideTargetExpectations[3].steps[1]);
+
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('zoom');
+  });
+  await page.setViewportSize({ width: 1100, height: 520 });
+  await page.locator(guideButtonSelector).click();
+  await page.getByRole('button', { name: /科目の教室自動配当/ }).click();
+  await expectCurrentGuideTarget(page, guideTargetExpectations[3].steps[0]);
 });
 
 test('guide target highlights match the guided controls', async ({ page }) => {
