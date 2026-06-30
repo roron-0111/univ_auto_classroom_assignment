@@ -1,6 +1,5 @@
 ﻿import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './App.css';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { lazy, Suspense } from 'react';
 import type { Classroom, Subject, Allocation, Term, DayOfWeek, Period, DisplayConfig, AllocationRule, Building, UnassignedInfo, OptimizerResult, PendingException, RelocationResult, EquipmentSettings } from './types';
 import { BUILDINGS, DAY_LABELS, sortBuildingsByCanonicalOrder } from './types';
@@ -49,7 +48,6 @@ const RelocationPreviewModal = lazy(() => import('./components/RelocationPreview
 const CloudReadWarningModal = lazy(() => import('./components/CloudReadWarningModal').then(module => ({ default: module.CloudReadWarningModal })));
 const CloudConnectionModal = lazy(() => import('./components/CloudConnectionModal').then(module => ({ default: module.CloudConnectionModal })));
 const GuideTour = lazy(() => import('./components/GuideTour').then(module => ({ default: module.GuideTour })));
-const ManualPanel = lazy(() => import('./components/ManualPanel').then(module => ({ default: module.ManualPanel })));
 const AutoAllocationCloudGuardModal = lazy(() => import('./components/AutoAllocationCloudGuardModal').then(module => ({ default: module.AutoAllocationCloudGuardModal })));
 
 const DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -71,10 +69,6 @@ const DEFAULT_CAMPUS_LABEL = '八景';
 const CLOUD_READ_SUCCESS_MESSAGE = 'クラウドから取得しました。';
 const CLOUD_READ_EMPTY_MESSAGE = 'クラウドに保存済みデータが見つかりません。ローカルの内容は変更していません。';
 const CLOUD_READ_FAILED_MESSAGE = 'クラウドから取得できませんでした。\n通信状態、ログイン状態、またはクラウド側の一時的な問題を確認してから、もう一度「取得」を押してください。\nローカルの内容は変更していません。';
-const MANUAL_PANEL_WIDTH_STORAGE_KEY = 'manualPanelWidth';
-const MANUAL_PANEL_DEFAULT_WIDTH = 440;
-const MANUAL_PANEL_MIN_WIDTH = 320;
-const MANUAL_PANEL_MAX_WIDTH = 680;
 
 const isTerm = (value: unknown): value is Term =>
   value === 'spring' || value === 'spring_first' || value === 'spring_second' ||
@@ -224,19 +218,6 @@ const readScopedStorage = (campusLabel: string, key: string) => {
 
 const writeScopedStorage = (campusLabel: string, key: string, value: string) => {
   localStorage.setItem(getScopedStorageKey(campusLabel, key), value);
-};
-
-const clampManualPanelWidth = (width: number) =>
-  Math.min(MANUAL_PANEL_MAX_WIDTH, Math.max(MANUAL_PANEL_MIN_WIDTH, width));
-
-const readManualPanelWidth = () => {
-  try {
-    const raw = localStorage.getItem(MANUAL_PANEL_WIDTH_STORAGE_KEY);
-    const parsed = raw ? Number(raw) : Number.NaN;
-    return Number.isFinite(parsed) ? clampManualPanelWidth(parsed) : MANUAL_PANEL_DEFAULT_WIDTH;
-  } catch {
-    return MANUAL_PANEL_DEFAULT_WIDTH;
-  }
 };
 
 const parseJsonOrNull = <T,>(raw: string | null): T | null => {
@@ -457,9 +438,6 @@ function App() {
 
   const [showCloudModal, setShowCloudModal] = useState(false);
   const [showGuideTour, setShowGuideTour] = useState(false);
-  const [showManualPanel, setShowManualPanel] = useState(false);
-  const [showGuideChooser, setShowGuideChooser] = useState(false);
-  const [manualPanelWidth, setManualPanelWidth] = useState(readManualPanelWidth);
   const [isCloudLoading, setIsCloudLoading] = useState(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const localSnapshotBaselineRef = useRef<CloudData | null>(null);
@@ -467,36 +445,9 @@ function App() {
   useEffect(() => {
     if (!authLoading && !user) {
       setShowGuideTour(false);
-      setShowManualPanel(false);
-      setShowGuideChooser(false);
       setShowCloudModal(true);
     }
   }, [authLoading, user]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(MANUAL_PANEL_WIDTH_STORAGE_KEY, String(manualPanelWidth));
-    } catch {
-      // 幅保存に失敗しても操作自体は継続する。
-    }
-  }, [manualPanelWidth]);
-
-  const handleManualResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = manualPanelWidth;
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      setManualPanelWidth(clampManualPanelWidth(startWidth + startX - moveEvent.clientX));
-    };
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      document.body.classList.remove('manual-resizing');
-    };
-    document.body.classList.add('manual-resizing');
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-  }, [manualPanelWidth]);
 
   const applyCampusState = useCallback((campusLabel: string): CloudData => {
     const normalizedCampus = normalizeCampusLabel(campusLabel) || DEFAULT_CAMPUS_LABEL;
@@ -599,19 +550,6 @@ function App() {
   const handleGuideClose = useCallback(() => {
     handleGuideViewChange('main');
     setShowGuideTour(false);
-  }, [handleGuideViewChange]);
-
-  const handleOpenGuideTourFromChooser = useCallback(() => {
-    setShowManualPanel(false);
-    setShowGuideChooser(false);
-    setShowGuideTour(true);
-  }, []);
-
-  const handleOpenManualFromChooser = useCallback(() => {
-    handleGuideViewChange('main');
-    setShowGuideTour(false);
-    setShowGuideChooser(false);
-    setShowManualPanel(true);
   }, [handleGuideViewChange]);
 
   const [allocationSettings, setAllocationSettings] = useState<AllocationRule[]>(() => {
@@ -1596,10 +1534,6 @@ function App() {
     setSubjects(prev => reorderSubjectsByUnassignedOrder(prev, normalizedOrder));
   };
 
-  const manualPanelLayoutStyle = showManualPanel
-    ? ({ '--manual-sidebar-width': `${manualPanelWidth}px` } as CSSProperties)
-    : undefined;
-
   // Auth初期化中はローディング表示
   if (authLoading) {
     return (
@@ -1611,7 +1545,7 @@ function App() {
   }
 
   return (
-    <div className={showManualPanel ? 'app-layout app-layout-with-manual' : 'app-layout'} style={manualPanelLayoutStyle}>
+    <div className="app-layout">
       {/* Header */}
       <header data-tour="app-header" style={{
         padding: '10px 20px', background: '#2d2d2d', color: '#fff',
@@ -1625,39 +1559,20 @@ function App() {
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {user && (
-            <div className="guide-header-menu">
-              <button
-                data-tour="guide-button"
-                onClick={() => {
-                  setShowGuideChooser(prev => !prev);
-                  setShowGuideTour(false);
-                }}
-                aria-haspopup="menu"
-                aria-expanded={showGuideChooser}
-                style={{
-                  display: 'flex', gap: '6px', alignItems: 'center',
-                  background: '#f8fafc', color: '#1f2937',
-                  border: '1px solid #cbd5e1',
-                  padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
-                  fontSize: '0.9rem', fontWeight: '600'
-                }}
-              >
-                <HelpCircle size={16} />
-                ガイド
-              </button>
-              {showGuideChooser && (
-                <div className="guide-header-chooser" role="menu" aria-label="ガイドの種類">
-                  <button type="button" role="menuitem" onClick={handleOpenGuideTourFromChooser}>
-                    <ListChecks size={16} />
-                    <span>ガイドツアー</span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={handleOpenManualFromChooser}>
-                    <BookOpen size={16} />
-                    <span>マニュアル</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              data-tour="guide-button"
+              onClick={() => setShowGuideTour(true)}
+              style={{
+                display: 'flex', gap: '6px', alignItems: 'center',
+                background: '#f8fafc', color: '#1f2937',
+                border: '1px solid #cbd5e1',
+                padding: '6px 14px', borderRadius: '12px', cursor: 'pointer',
+                fontSize: '0.9rem', fontWeight: '600'
+              }}
+            >
+              <HelpCircle size={16} />
+              ガイド
+            </button>
           )}
           {user && (
             <>
@@ -2158,21 +2073,6 @@ function App() {
               onClose={handleGuideClose}
               onViewChange={handleGuideViewChange}
             />
-          )
-        }
-        {
-          user && showManualPanel && (
-            <aside className="guide-manual-sidebar" role="complementary" aria-label="マニュアル">
-              <button
-                type="button"
-                className="guide-manual-resize-handle"
-                aria-label="マニュアルの幅を変更"
-                onPointerDown={handleManualResizeStart}
-              >
-                <span aria-hidden="true" />
-              </button>
-              <ManualPanel onClose={() => setShowManualPanel(false)} onViewChange={handleGuideViewChange} />
-            </aside>
           )
         }
         </Suspense>
